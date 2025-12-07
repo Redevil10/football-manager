@@ -12,6 +12,7 @@ from db import (
     get_match_info,
     update_player_attrs,
     update_player_name,
+    swap_players,
 )
 from logic import import_players, allocate_teams, calculate_player_overall
 from render import (
@@ -249,6 +250,13 @@ def route_reset():
         players, key=lambda x: calculate_player_overall(x), reverse=True
     )[:24]
     return render_teams(sorted_players)
+
+
+@rt("/confirm_swap/{player1_id}/{player2_id}")
+def confirm_swap_page(player1_id: int, player2_id: int):
+    """Confirm swap"""
+    swap_players(player1_id, player2_id)
+    return RedirectResponse("/", status_code=303)
 
 
 if __name__ == "__main__":
