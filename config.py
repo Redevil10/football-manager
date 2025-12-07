@@ -47,3 +47,13 @@ GK_ATTRS = {
     "diving": "Diving",
     "rushing_out": "Rushing Out",
 }
+
+# Scoring ranges
+SCORE_RANGES = {
+    "overall": (1, 200),  # 综合总分
+    "technical": (1, 60),  # 进攻和防守
+    "mental": (1, 40),  # 精神
+    "physical": (1, 60),  # 身体
+    "gk": (1, 40),  # 守门
+    "attribute": (1, 20),  # 单个属性
+}

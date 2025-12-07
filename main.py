@@ -14,7 +14,20 @@ from db import (
     update_player_name,
     swap_players,
 )
-from logic import import_players, allocate_teams, calculate_player_overall
+from logic import (
+    import_players,
+    allocate_teams,
+    calculate_player_overall,
+    calculate_technical_score,
+    calculate_mental_score,
+    calculate_physical_score,
+    calculate_gk_score,
+    set_technical_score,
+    set_mental_score,
+    set_physical_score,
+    set_gk_score,
+    set_overall_score,
+)
 from render import (
     render_navbar,
     render_match_info,
@@ -189,13 +202,140 @@ def route_update_player_name(player_id: int, name: str):
     return RedirectResponse(f"/player/{player_id}", status_code=303)
 
 
+@rt("/update_player_scores/{player_id}", methods=["POST"])
+def route_update_player_scores(player_id: int, **kwargs):
+    """Update player category scores or overall score"""
+    players = {p["id"]: p for p in get_all_players()}
+    player = players.get(player_id)
+
+    if not player:
+        return RedirectResponse(f"/player/{player_id}", status_code=303)
+
+    try:
+        # Check which form was submitted
+        if "score_overall" in kwargs and kwargs["score_overall"]:
+            # Overall score form
+            overall_score = int(kwargs["score_overall"])
+            scores = set_overall_score(overall_score)
+            update_player_attrs(
+                player_id,
+                scores["technical"],
+                scores["mental"],
+                scores["physical"],
+                scores["gk"],
+            )
+        elif any(k.startswith("score_") for k in kwargs.keys()):
+            # Category scores form
+            tech_score = int(
+                kwargs.get("score_technical", calculate_technical_score(player))
+            )
+            mental_score = int(
+                kwargs.get("score_mental", calculate_mental_score(player))
+            )
+            phys_score = int(
+                kwargs.get("score_physical", calculate_physical_score(player))
+            )
+            gk_score = int(kwargs.get("score_gk", calculate_gk_score(player)))
+
+            tech_attrs = set_technical_score(tech_score)
+            mental_attrs = set_mental_score(mental_score)
+            phys_attrs = set_physical_score(phys_score)
+            gk_attrs = set_gk_score(gk_score)
+
+            update_player_attrs(
+                player_id, tech_attrs, mental_attrs, phys_attrs, gk_attrs
+            )
+    except (ValueError, TypeError, KeyError) as e:
+        print(f"Error updating player scores: {e}")
+
+    return RedirectResponse(f"/player/{player_id}", status_code=303)
+
+
 @rt("/update_player/{player_id}", methods=["POST"])
-def route_update_player(player_id: int, **kwargs):
+async def route_update_player(player_id: int, req: Request):
     """Update player attributes"""
-    tech_attrs = {k: int(kwargs.get(f"tech_{k}", 10)) for k in TECHNICAL_ATTRS.keys()}
-    mental_attrs = {k: int(kwargs.get(f"mental_{k}", 10)) for k in MENTAL_ATTRS.keys()}
-    phys_attrs = {k: int(kwargs.get(f"phys_{k}", 10)) for k in PHYSICAL_ATTRS.keys()}
-    gk_attrs = {k: int(kwargs.get(f"gk_{k}", 10)) for k in GK_ATTRS.keys()}
+    # Get current player data as fallback
+    players = {p["id"]: p for p in get_all_players()}
+    player = players.get(player_id)
+    
+    if not player:
+        return RedirectResponse(f"/player/{player_id}", status_code=303)
+    
+    # Get form data from multipart/form-data request
+    form_data = {}
+    try:
+        form = await req.form()
+        form_data = dict(form)
+    except Exception as e:
+        print(f"Error parsing form data: {e}")
+        import traceback
+        traceback.print_exc()
+        return RedirectResponse(f"/player/{player_id}", status_code=303)
+    
+    # Extract attributes from form data, using current values as fallback
+    tech_attrs = {}
+    for k in TECHNICAL_ATTRS.keys():
+        field_name = f"tech_{k}"
+        value = form_data.get(field_name)
+        if value is not None:
+            value_str = str(value).strip()
+            if value_str != "":
+                try:
+                    tech_attrs[k] = int(value_str)
+                except (ValueError, TypeError):
+                    tech_attrs[k] = player["technical_attrs"].get(k, 10)
+            else:
+                tech_attrs[k] = player["technical_attrs"].get(k, 10)
+        else:
+            tech_attrs[k] = player["technical_attrs"].get(k, 10)
+    
+    mental_attrs = {}
+    for k in MENTAL_ATTRS.keys():
+        field_name = f"mental_{k}"
+        value = form_data.get(field_name)
+        if value is not None:
+            value_str = str(value).strip()
+            if value_str != "":
+                try:
+                    mental_attrs[k] = int(value_str)
+                except (ValueError, TypeError):
+                    mental_attrs[k] = player["mental_attrs"].get(k, 10)
+            else:
+                mental_attrs[k] = player["mental_attrs"].get(k, 10)
+        else:
+            mental_attrs[k] = player["mental_attrs"].get(k, 10)
+    
+    phys_attrs = {}
+    for k in PHYSICAL_ATTRS.keys():
+        field_name = f"phys_{k}"
+        value = form_data.get(field_name)
+        if value is not None:
+            value_str = str(value).strip()
+            if value_str != "":
+                try:
+                    phys_attrs[k] = int(value_str)
+                except (ValueError, TypeError):
+                    phys_attrs[k] = player["physical_attrs"].get(k, 10)
+            else:
+                phys_attrs[k] = player["physical_attrs"].get(k, 10)
+        else:
+            phys_attrs[k] = player["physical_attrs"].get(k, 10)
+    
+    gk_attrs = {}
+    for k in GK_ATTRS.keys():
+        field_name = f"gk_{k}"
+        value = form_data.get(field_name)
+        if value is not None:
+            value_str = str(value).strip()
+            if value_str != "":
+                try:
+                    gk_attrs[k] = int(value_str)
+                except (ValueError, TypeError):
+                    gk_attrs[k] = player["gk_attrs"].get(k, 10)
+            else:
+                gk_attrs[k] = player["gk_attrs"].get(k, 10)
+        else:
+            gk_attrs[k] = player["gk_attrs"].get(k, 10)
 
     all_attrs = (
         list(tech_attrs.values())
