@@ -11,6 +11,7 @@ from db import (
     reset_teams,
     get_match_info,
     update_player_attrs,
+    update_player_name,
 )
 from logic import import_players, allocate_teams, calculate_player_overall
 from render import (
@@ -178,6 +179,13 @@ def route_add_player(name: str):
     """Add single player"""
     add_player(name)
     return RedirectResponse("/players", status_code=303)
+
+
+@rt("/update_player_name/{player_id}", methods=["POST"])
+def route_update_player_name(player_id: int, name: str):
+    """Update player name"""
+    update_player_name(player_id, name)
+    return RedirectResponse(f"/player/{player_id}", status_code=303)
 
 
 @rt("/update_player/{player_id}", methods=["POST"])
