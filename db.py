@@ -158,6 +158,34 @@ def update_player_name(player_id, name):
     conn.close()
 
 
+def swap_players(player1_id, player2_id):
+    """Swap two players' teams and positions"""
+    conn = get_db()
+    c = conn.cursor()
+
+    # Get both players
+    p1 = c.execute(
+        "SELECT team, position FROM players WHERE id = ?", (player1_id,)
+    ).fetchone()
+    p2 = c.execute(
+        "SELECT team, position FROM players WHERE id = ?", (player2_id,)
+    ).fetchone()
+
+    if p1 and p2:
+        # Swap their team and position
+        c.execute(
+            "UPDATE players SET team = ?, position = ? WHERE id = ?",
+            (p2[0], p2[1], player1_id),
+        )
+        c.execute(
+            "UPDATE players SET team = ?, position = ? WHERE id = ?",
+            (p1[0], p1[1], player2_id),
+        )
+        conn.commit()
+
+    conn.close()
+
+
 def reset_teams():
     """Reset all team assignments"""
     conn = get_db()

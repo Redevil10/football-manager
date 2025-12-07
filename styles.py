@@ -275,9 +275,21 @@ button:hover { background: #0052a3; }
     margin-bottom: 5px;
     border-radius: 3px;
     border-left: 3px solid #0066cc;
+    cursor: move;
+    user-select: none;
 }
 
 .player-item.team2 { border-left-color: #dc3545; }
+
+.player-item.dragging {
+    opacity: 0.5;
+    background: #f0f0f0;
+}
+
+.player-item.drag-over {
+    background: #e7f3ff;
+    border: 2px dashed #0066cc;
+}
 
 @media (max-width: 900px) {
     .navbar {

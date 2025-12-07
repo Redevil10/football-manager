@@ -110,13 +110,25 @@ def render_teams(players):
         position_groups = []
         for pos in positions_order:
             if grouped[pos]:
+                players_in_pos = grouped[pos]
+                player_items = []
+                for player in players_in_pos:
+                    player_items.append(
+                        Div(
+                            cls=f"player-item {team_color}",
+                            draggable="true",
+                            data_player_id=str(player["id"]),
+                            ondragstart="event.dataTransfer.effectAllowed='move'; event.dataTransfer.setData('text/plain', event.target.dataset.playerId)",
+                            ondragover="event.preventDefault(); event.currentTarget.classList.add('drag-over');",
+                            ondragleave="event.currentTarget.classList.remove('drag-over');",
+                            ondrop="handleDrop(event, this)",
+                        )(player["name"])
+                    )
+
                 position_groups.append(
                     Div(cls="position-group")(
-                        Div(f"{pos} ({len(grouped[pos])})", cls="position-name"),
-                        *[
-                            Div(p["name"], cls=f"player-item {team_color}")
-                            for p in grouped[pos]
-                        ],
+                        Div(f"{pos} ({len(players_in_pos)})", cls="position-name"),
+                        *player_items,
                     )
                 )
 
@@ -128,7 +140,22 @@ def render_teams(players):
         Div(cls="teams-grid")(
             render_team(team1, 1),
             render_team(team2, 2),
-        )
+        ),
+        Script(
+            """
+        function handleDrop(event, dropTarget) {
+            event.preventDefault();
+            dropTarget.classList.remove('drag-over');
+
+            const draggedPlayerId = event.dataTransfer.getData('text/plain');
+            const targetPlayerId = dropTarget.dataset.playerId;
+
+            if (draggedPlayerId && targetPlayerId && draggedPlayerId !== targetPlayerId) {
+                window.location.href = `/confirm_swap/${draggedPlayerId}/${targetPlayerId}`;
+            }
+        }
+        """
+        ),
     )
 
 
