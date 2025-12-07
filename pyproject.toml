@@ -1,0 +1,10 @@
+[project]
+name = "football-manager"
+version = "0.1.0"
+description = "Football Team Assignment App"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "python-fasthtml",
+    "uvicorn>=0.38.0",
+]
