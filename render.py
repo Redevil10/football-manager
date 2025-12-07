@@ -11,8 +11,8 @@ def render_navbar():
     return Div(cls="navbar")(
         H1("⚽ Football Manager"),
         A("Home", href="/"),
-        A("Players", href="/players"),
         A("Import", href="/import"),
+        A("Players", href="/players"),
     )
 
 
@@ -199,5 +199,26 @@ def render_player_detail_form(player):
             ),
             method="post",
             action=f"/update_player/{player['id']}",
+        ),
+    )
+
+
+def render_add_player_form():
+    """Render add player form"""
+    return Div(cls="container-white")(
+        H3("Add New Player"),
+        Form(
+            Div(cls="input-group")(
+                Input(
+                    type="text",
+                    name="name",
+                    placeholder="Player name",
+                    required=True,
+                    style="flex: 1;",
+                ),
+                Button("Add Player", type="submit", cls="btn-success"),
+            ),
+            method="post",
+            action="/add_player",
         ),
     )
