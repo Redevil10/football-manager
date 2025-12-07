@@ -1,4 +1,4 @@
-# main.py - Main application
+# main.py - Football Manager Application
 
 from fasthtml.common import *
 
@@ -6,6 +6,7 @@ from config import *
 from db import (
     init_db,
     get_all_players,
+    add_player,
     delete_player,
     reset_teams,
     get_match_info,
@@ -13,15 +14,16 @@ from db import (
 )
 from logic import import_players, allocate_teams, calculate_player_overall
 from render import (
+    render_navbar,
     render_match_info,
     render_player_table,
     render_teams,
-    render_attr_input,
+    render_player_detail_form,
+    render_add_player_form,
 )
 from styles import STYLE
 
 init_db()
-
 
 # ============ ROUTES ============
 
@@ -30,11 +32,9 @@ app, rt = fast_app()
 
 @rt("/")
 def home():
-    """Home page - show recent match setup"""
+    """Home page"""
     players = get_all_players()
     match = get_match_info()
-
-    # Get top 24 players by overall rating
     sorted_players = sorted(
         players, key=lambda x: calculate_player_overall(x), reverse=True
     )[:24]
@@ -46,12 +46,7 @@ def home():
             Script(src="https://unpkg.com/htmx.org@1.9.10"),
         ),
         Body(
-            Div(cls="navbar")(
-                H1("⚽ Football Manager"),
-                A("Home", href="/"),
-                A("Players", href="/players"),
-                A("Import", href="/import"),
-            ),
+            render_navbar(),
             Div(cls="container")(
                 render_match_info(match),
                 H2("Match Setup"),
@@ -100,14 +95,10 @@ def players_page():
             Script(src="https://unpkg.com/htmx.org@1.9.10"),
         ),
         Body(
-            Div(cls="navbar")(
-                H1("⚽ Football Manager"),
-                A("Home", href="/"),
-                A("Players", href="/players"),
-                A("Import", href="/import"),
-            ),
+            render_navbar(),
             Div(cls="container")(
                 H2(f"All Players ({len(players)})"),
+                render_add_player_form(),
                 Div(cls="container-white")(render_player_table(sorted_players)),
             ),
         ),
@@ -123,12 +114,7 @@ def import_page():
             Style(STYLE),
         ),
         Body(
-            Div(cls="navbar")(
-                H1("⚽ Football Manager"),
-                A("Home", href="/"),
-                A("Players", href="/players"),
-                A("Import", href="/import"),
-            ),
+            render_navbar(),
             Div(cls="container")(
                 H2("Import Players"),
                 Div(cls="container-white")(
@@ -153,14 +139,12 @@ def import_page():
 
 @rt("/player/{player_id}")
 def player_detail(player_id: int):
-    """Player detail page with attributes"""
+    """Player detail page"""
     players = {p["id"]: p for p in get_all_players()}
     player = players.get(player_id)
 
     if not player:
         return Html(Body(P("Player not found")))
-
-    overall = round(calculate_player_overall(player), 1)
 
     return Html(
         Head(
@@ -168,12 +152,7 @@ def player_detail(player_id: int):
             Style(STYLE),
         ),
         Body(
-            Div(cls="navbar")(
-                H1("⚽ Football Manager"),
-                A("Home", href="/"),
-                A("Players", href="/players"),
-                A("Import", href="/import"),
-            ),
+            render_navbar(),
             Div(cls="container")(
                 A(
                     "← Back to Players",
@@ -181,73 +160,7 @@ def player_detail(player_id: int):
                     style="text-decoration: none; color: #0066cc;",
                 ),
                 H2(player["name"]),
-                Div(cls="container-white")(
-                    Div(cls="player-overall")(f"Overall: {overall}"),
-                    Form(
-                        Div(cls="attr-grid")(
-                            # Technical
-                            Div(cls="attr-section")(
-                                Div("Technical Attributes", cls="attr-section-title"),
-                                *[
-                                    render_attr_input(
-                                        TECHNICAL_ATTRS[k],
-                                        f"tech_{k}",
-                                        player["technical_attrs"].get(k, 10),
-                                    )
-                                    for k in TECHNICAL_ATTRS.keys()
-                                ],
-                            ),
-                            # Mental
-                            Div(cls="attr-section")(
-                                Div("Mental Attributes", cls="attr-section-title"),
-                                *[
-                                    render_attr_input(
-                                        MENTAL_ATTRS[k],
-                                        f"mental_{k}",
-                                        player["mental_attrs"].get(k, 10),
-                                    )
-                                    for k in MENTAL_ATTRS.keys()
-                                ],
-                            ),
-                            # Physical
-                            Div(cls="attr-section")(
-                                Div("Physical Attributes", cls="attr-section-title"),
-                                *[
-                                    render_attr_input(
-                                        PHYSICAL_ATTRS[k],
-                                        f"phys_{k}",
-                                        player["physical_attrs"].get(k, 10),
-                                    )
-                                    for k in PHYSICAL_ATTRS.keys()
-                                ],
-                            ),
-                            # Goalkeeper
-                            Div(cls="attr-section")(
-                                Div("Goalkeeper Attributes", cls="attr-section-title"),
-                                *[
-                                    render_attr_input(
-                                        GK_ATTRS[k],
-                                        f"gk_{k}",
-                                        player["gk_attrs"].get(k, 10),
-                                    )
-                                    for k in GK_ATTRS.keys()
-                                ],
-                            ),
-                        ),
-                        Div(cls="btn-group", style="margin-top: 20px;")(
-                            Button("Save", type="submit", cls="btn-success"),
-                            A(
-                                "Delete",
-                                href=f"/delete_player/{player['id']}",
-                                cls="btn-danger",
-                                onclick="return confirm('Confirm delete?');",
-                                style="text-decoration: none;",
-                            ),
-                        ),
-                        method="post",
-                        action=f"/update_player/{player['id']}",
-                    ),
-                ),
+                render_player_detail_form(player),
             ),
         ),
     )
@@ -260,19 +173,21 @@ def route_import_players(signup_text: str):
     return RedirectResponse("/", status_code=303)
 
 
+@rt("/add_player", methods=["POST"])
+def route_add_player(name: str):
+    """Add single player"""
+    add_player(name)
+    return RedirectResponse("/players", status_code=303)
+
+
 @rt("/update_player/{player_id}", methods=["POST"])
 def route_update_player(player_id: int, **kwargs):
     """Update player attributes"""
-    # Parse technical attributes
     tech_attrs = {k: int(kwargs.get(f"tech_{k}", 10)) for k in TECHNICAL_ATTRS.keys()}
-    # Parse mental attributes
     mental_attrs = {k: int(kwargs.get(f"mental_{k}", 10)) for k in MENTAL_ATTRS.keys()}
-    # Parse physical attributes
     phys_attrs = {k: int(kwargs.get(f"phys_{k}", 10)) for k in PHYSICAL_ATTRS.keys()}
-    # Parse gk attributes
     gk_attrs = {k: int(kwargs.get(f"gk_{k}", 10)) for k in GK_ATTRS.keys()}
 
-    # Validate all attributes are 1-20
     all_attrs = (
         list(tech_attrs.values())
         + list(mental_attrs.values())
@@ -298,7 +213,6 @@ def route_allocate():
     """Allocate teams"""
     try:
         success, message = allocate_teams()
-
         if not success:
             return Div(cls="container-white")(
                 P(
@@ -306,12 +220,10 @@ def route_allocate():
                     style="text-align: center; color: #dc3545; font-weight: bold;",
                 )
             )
-
         players = get_all_players()
         sorted_players = sorted(
             players, key=lambda x: calculate_player_overall(x), reverse=True
         )[:24]
-
         return render_teams(sorted_players)
     except Exception as e:
         print(f"Error in allocate: {e}")
@@ -324,12 +236,10 @@ def route_allocate():
 def route_reset():
     """Reset teams"""
     reset_teams()
-
     players = get_all_players()
     sorted_players = sorted(
         players, key=lambda x: calculate_player_overall(x), reverse=True
     )[:24]
-
     return render_teams(sorted_players)
 
 
