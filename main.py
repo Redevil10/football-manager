@@ -1,16 +1,18 @@
 from fasthtml.common import *
 import sqlite3
 import random
+import os
 
 # ============ CONFIG ============
 
-DB_PATH = 'football_manager.db'
+DB_PATH = '/tmp/data/football_manager.db'
 
 
 # ============ DATABASE ============
 
 def init_db():
     """Initialize database"""
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
