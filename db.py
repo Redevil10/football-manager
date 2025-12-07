@@ -1,9 +1,10 @@
 # db.py - Database operations
 
-import sqlite3
 import json
 import os
 import random
+import sqlite3
+
 from config import DB_PATH, TECHNICAL_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, GK_ATTRS
 
 
@@ -143,6 +144,17 @@ def update_player_attrs(player_id, tech_attrs, mental_attrs, phys_attrs, gk_attr
         ),
     )
     conn.commit()
+    conn.close()
+
+
+def update_player_name(player_id, name):
+    """Update player name"""
+    conn = get_db()
+    try:
+        conn.execute("UPDATE players SET name = ? WHERE id = ?", (name, player_id))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        pass  # Name already exists
     conn.close()
 
 

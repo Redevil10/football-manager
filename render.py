@@ -137,7 +137,23 @@ def render_player_detail_form(player):
     overall = round(calculate_player_overall(player), 1)
 
     return Div(cls="container-white")(
+        # Name edit form
+        Form(
+            Div(cls="input-group", style="margin-bottom: 20px;")(
+                Input(
+                    type="text",
+                    name="name",
+                    value=player["name"],
+                    required=True,
+                    style="flex: 1;",
+                ),
+                Button("Update Name", type="submit", cls="btn-success"),
+            ),
+            method="post",
+            action=f"/update_player_name/{player['id']}",
+        ),
         Div(cls="player-overall")(f"Overall: {overall}"),
+        # Attributes edit form
         Form(
             Div(cls="attr-grid")(
                 # Technical
@@ -188,9 +204,9 @@ def render_player_detail_form(player):
                 ),
             ),
             Div(cls="btn-group", style="margin-top: 20px;")(
-                Button("Save", type="submit", cls="btn-success"),
+                Button("Save Attributes", type="submit", cls="btn-success"),
                 A(
-                    "Delete",
+                    "Delete Player",
                     href=f"/delete_player/{player['id']}",
                     cls="btn-danger",
                     onclick="return confirm('Confirm delete?');",
