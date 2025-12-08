@@ -407,33 +407,90 @@ def adjust_category_attributes_by_single_attr(category_attrs, changed_key, new_v
 
 
 def allocate_teams():
-    """Allocate players into two balanced teams"""
+    """Allocate players into two balanced teams with minimal score difference"""
     players = get_all_players()
 
     if len(players) < 2:
         return False, "Need at least 2 players"
 
-    # Sort by overall rating
+    # Sort by overall rating (descending)
     sorted_players = sorted(
-        players, key=lambda x: calculate_player_overall(x), reverse=True
+        players, key=lambda x: calculate_overall_score(x), reverse=True
     )
 
-    # Balance teams
+    # Initialize teams
     team1, team2 = [], []
     team1_score, team2_score = 0, 0
     max_per_team = (len(players) + 1) // 2
 
+    # Greedy allocation: always add to the team with lower total score
     for player in sorted_players:
-        score = calculate_player_overall(player)
+        score = calculate_overall_score(player)
 
-        if len(team1) < max_per_team and (
-            len(team2) >= max_per_team or team1_score <= team2_score
-        ):
+        # Check if we can add to team1 (size constraint)
+        can_add_to_team1 = len(team1) < max_per_team
+        # Check if we can add to team2 (size constraint)
+        can_add_to_team2 = len(team2) < max_per_team
+
+        if not can_add_to_team1:
+            # Must add to team2
+            team2.append(player)
+            team2_score += score
+        elif not can_add_to_team2:
+            # Must add to team1
             team1.append(player)
             team1_score += score
         else:
-            team2.append(player)
-            team2_score += score
+            # Both teams can accept more players
+            # Add to the team with lower total score
+            if team1_score <= team2_score:
+                team1.append(player)
+                team1_score += score
+            else:
+                team2.append(player)
+                team2_score += score
+
+    # Try to optimize by swapping players to minimize score difference
+    # Calculate current difference
+    current_diff = abs(team1_score - team2_score)
+    
+    # Try swapping players to improve balance
+    improved = True
+    max_iterations = 100  # Prevent infinite loops
+    iteration = 0
+    
+    while improved and iteration < max_iterations:
+        improved = False
+        iteration += 1
+        
+        # Try swapping each player from team1 with each player from team2
+        for p1 in team1:
+            for p2 in team2:
+                # Calculate new scores if we swap
+                p1_score = calculate_overall_score(p1)
+                p2_score = calculate_overall_score(p2)
+                
+                new_team1_score = team1_score - p1_score + p2_score
+                new_team2_score = team2_score - p2_score + p1_score
+                new_diff = abs(new_team1_score - new_team2_score)
+                
+                # If swapping reduces the difference, do it
+                if new_diff < current_diff:
+                    # Swap the players
+                    team1.remove(p1)
+                    team2.remove(p2)
+                    team1.append(p2)
+                    team2.append(p1)
+                    
+                    # Update scores
+                    team1_score = new_team1_score
+                    team2_score = new_team2_score
+                    current_diff = new_diff
+                    improved = True
+                    break  # Break inner loop, restart from beginning
+            
+            if improved:
+                break  # Break outer loop, restart from beginning
 
     assign_positions(team1, 1)
     assign_positions(team2, 2)
