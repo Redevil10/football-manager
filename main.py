@@ -1,6 +1,7 @@
 # main.py - Football Manager Application
 
 from fasthtml.common import *
+from fasthtml_hf import setup_hf_backup
 
 from config import *
 from db import (
@@ -73,6 +74,9 @@ init_db()
 # ============ ROUTES ============
 
 app, rt = fast_app()
+
+# Setup Hugging Face backup for persistent storage
+setup_hf_backup(app)
 
 
 @rt("/")
