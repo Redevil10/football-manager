@@ -9,6 +9,7 @@ from logic import (
     calculate_mental_score,
     calculate_physical_score,
     calculate_gk_score,
+    calculate_overall_score,
 )
 
 
@@ -302,8 +303,11 @@ def render_teams(players):
                 if player["position"] in grouped:
                     grouped[player["position"]].append(player)
 
+        # Calculate team total overall score
+        team_total = sum(calculate_overall_score(p) for p in team)
+        
         team_color = "team2" if team_num == 2 else ""
-        team_name = f"Team {team_num}"
+        team_name = f"Team {team_num} (Total: {team_total})"
 
         position_groups = []
         for pos in positions_order:
@@ -311,6 +315,7 @@ def render_teams(players):
                 players_in_pos = grouped[pos]
                 player_items = []
                 for player in players_in_pos:
+                    player_overall = calculate_overall_score(player)
                     player_items.append(
                         Div(
                             cls=f"player-item {team_color}",
@@ -320,7 +325,7 @@ def render_teams(players):
                             ondragover="event.preventDefault(); event.currentTarget.classList.add('drag-over');",
                             ondragleave="event.currentTarget.classList.remove('drag-over');",
                             ondrop="handleDrop(event, this)",
-                        )(player["name"])
+                        )(f"{player['name']} ({player_overall})")
                     )
 
                 position_groups.append(
