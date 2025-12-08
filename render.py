@@ -161,7 +161,7 @@ def render_next_match(match, teams, match_players_dict):
             content.append(
                 Div(cls="container-white", style="margin-top: 20px;")(
                     H3("Team Allocation"),
-                    render_match_teams(match['id'], teams, match_players_dict, is_completed=True),
+                    render_match_teams(match['id'], teams, match_players_dict, is_completed=True, show_scores=False),
                 )
             )
         else:
@@ -764,7 +764,7 @@ def render_all_matches(matches):
     return Div(*content)
 
 
-def render_match_teams(match_id, teams, match_players_dict, is_completed=False):
+def render_match_teams(match_id, teams, match_players_dict, is_completed=False, show_scores=True):
     """Render match teams similar to home page render_teams"""
     from logic import calculate_overall_score
     
@@ -792,12 +792,15 @@ def render_match_teams(match_id, teams, match_players_dict, is_completed=False):
             if pos and pos in starters_grouped:
                 starters_grouped[pos].append(player)
         
-        # Calculate team total overall score
-        team_total = sum(calculate_overall_score(p) for p in team_players)
+        # Calculate team total overall score (only if show_scores is True)
+        team_total = sum(calculate_overall_score(p) for p in team_players) if show_scores else 0
         
         team_color = "team2" if team_num == 2 else ""
         team_name = team.get('team_name', f'Team {team_num}') if team else f'Team {team_num}'
-        team_name_display = f"{team_name} (Total: {team_total})"
+        if show_scores:
+            team_name_display = f"{team_name} (Total: {team_total})"
+        else:
+            team_name_display = team_name
         
         position_groups = []
         
@@ -810,13 +813,19 @@ def render_match_teams(match_id, teams, match_players_dict, is_completed=False):
                     player_overall = calculate_overall_score(player)
                     match_player_id = player.get("id")  # This is the match_players.id, not players.id
                     
+                    # Format player name with or without score
+                    if show_scores:
+                        player_display = f"{player['name']} ({player_overall})"
+                    else:
+                        player_display = player['name']
+                    
                     # Only add drag-and-drop attributes if match is not completed
                     if is_completed:
                         player_items.append(
                             Div(
                                 cls=f"player-item {team_color}",
                                 # No draggable attributes - drag-and-drop disabled for completed matches
-                            )(f"{player['name']} ({player_overall})")
+                            )(player_display)
                         )
                     else:
                         player_items.append(
@@ -828,7 +837,7 @@ def render_match_teams(match_id, teams, match_players_dict, is_completed=False):
                                 ondragover="event.preventDefault(); event.currentTarget.classList.add('drag-over');",
                                 ondragleave="event.currentTarget.classList.remove('drag-over');",
                                 ondrop="handleMatchDrop(event, this)",
-                            )(f"{player['name']} ({player_overall})")
+                            )(player_display)
                         )
                 
                 position_groups.append(
@@ -845,13 +854,19 @@ def render_match_teams(match_id, teams, match_players_dict, is_completed=False):
                 player_overall = calculate_overall_score(player)
                 match_player_id = player.get("id")  # This is the match_players.id, not players.id
                 
+                # Format player name with or without score
+                if show_scores:
+                    player_display = f"{player['name']} ({player_overall})"
+                else:
+                    player_display = player['name']
+                
                 # Only add drag-and-drop attributes if match is not completed
                 if is_completed:
                     sub_items.append(
                         Div(
                             cls=f"player-item {team_color}",
                             # No draggable attributes - drag-and-drop disabled for completed matches
-                        )(f"{player['name']} ({player_overall})")
+                        )(player_display)
                     )
                 else:
                     sub_items.append(
@@ -863,7 +878,7 @@ def render_match_teams(match_id, teams, match_players_dict, is_completed=False):
                             ondragover="event.preventDefault(); event.currentTarget.classList.add('drag-over');",
                             ondragleave="event.currentTarget.classList.remove('drag-over');",
                             ondrop="handleMatchDrop(event, this)",
-                        )(f"{player['name']} ({player_overall})")
+                        )(player_display)
                     )
             
             position_groups.append(
