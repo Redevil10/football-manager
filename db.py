@@ -667,8 +667,16 @@ def add_match_player(match_id, player_id, team_id=None, position=None, is_starte
         match_player_id = cursor.lastrowid
         conn.commit()
         conn.close()
+        print(f"Successfully added player {player_id} to match {match_id}, match_player_id={match_player_id}", flush=True)
         return match_player_id
-    except sqlite3.IntegrityError:
+    except sqlite3.IntegrityError as e:
+        print(f"IntegrityError adding player {player_id} to match {match_id}: {e}", flush=True)
+        conn.close()
+        return None
+    except Exception as e:
+        print(f"Error adding player {player_id} to match {match_id}: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         conn.close()
         return None
 
