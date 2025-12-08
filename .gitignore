@@ -17,3 +17,4 @@ dist/
 build/
 *.egg-info/
 .idea/
+deploy_hf.sh
