@@ -442,6 +442,32 @@ def render_player_detail_form(player):
             method="post",
             action=f"/update_player_name/{player['id']}",
         ),
+        # Height and Weight form
+        Form(
+            Div(cls="input-group", style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;")(
+                Label("Height (cm): ", style="font-weight: bold;"),
+                Input(
+                    type="number",
+                    name="height",
+                    value=str(player.get("height", "") or ""),
+                    min="100",
+                    max="250",
+                    style="width: 100px;",
+                ),
+                Label("Weight (kg): ", style="font-weight: bold; margin-left: 15px;"),
+                Input(
+                    type="number",
+                    name="weight",
+                    value=str(player.get("weight", "") or ""),
+                    min="30",
+                    max="200",
+                    style="width: 100px;",
+                ),
+                Button("Update Height/Weight", type="submit", cls="btn-success"),
+            ),
+            method="post",
+            action=f"/update_player_height_weight/{player['id']}",
+        ),
         # Overall Score form
         Form(
             Div(cls="input-group", style="margin-bottom: 20px;")(

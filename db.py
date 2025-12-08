@@ -35,6 +35,17 @@ def init_db():
         c.execute("ALTER TABLE players ADD COLUMN league_id INTEGER")
     except sqlite3.OperationalError:
         pass  # Column already exists
+    
+    # Add height and weight columns if they don't exist (for existing databases)
+    try:
+        c.execute("ALTER TABLE players ADD COLUMN height INTEGER")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
+    try:
+        c.execute("ALTER TABLE players ADD COLUMN weight INTEGER")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     # Leagues table
     c.execute(
@@ -235,6 +246,20 @@ def update_player_name(player_id, name):
     except sqlite3.IntegrityError:
         print(f"Player {name} already exists")
         pass  # Name already exists
+    conn.close()
+
+
+def update_player_height_weight(player_id, height=None, weight=None):
+    """Update player height and weight"""
+    conn = get_db()
+    # Convert empty strings to None
+    height = int(height) if height and str(height).strip() else None
+    weight = int(weight) if weight and str(weight).strip() else None
+    conn.execute(
+        "UPDATE players SET height = ?, weight = ? WHERE id = ?",
+        (height, weight, player_id)
+    )
+    conn.commit()
     conn.close()
 
 

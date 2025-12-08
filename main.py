@@ -14,6 +14,7 @@ from db import (
     reset_teams,
     update_player_attrs,
     update_player_name,
+    update_player_height_weight,
     swap_players,
     get_all_leagues,
     get_league,
@@ -69,6 +70,7 @@ from render import (
     render_recent_matches,
 )
 from styles import STYLE
+from migrate_attributes import migrate_attributes
 
 init_db()
 
@@ -78,8 +80,16 @@ app, rt = fast_app()
 
 # Setup Hugging Face backup for persistent storage (only on Hugging Face Spaces)
 # Note: /data directory is already created by config.py and init_db()
+# This will restore the database from Hugging Face Dataset if available
 if os.environ.get("HF_SPACE_ID"):
     setup_hf_backup(app)
+
+# Run attribute migration on startup (after database restore)
+# This ensures migrated data is not overwritten by restore
+try:
+    migrate_attributes()
+except Exception as e:
+    print(f"Warning: Migration failed: {e}", flush=True)
 
 
 @rt("/")
@@ -229,6 +239,21 @@ def route_add_player(name: str):
 def route_update_player_name(player_id: int, name: str):
     """Update player name"""
     update_player_name(player_id, name)
+    return RedirectResponse(f"/player/{player_id}", status_code=303)
+
+
+@rt("/update_player_height_weight/{player_id}", methods=["POST"])
+async def route_update_player_height_weight(player_id: int, req: Request):
+    """Update player height and weight"""
+    try:
+        form = await req.form()
+        height = form.get("height", "").strip()
+        weight = form.get("weight", "").strip()
+        update_player_height_weight(player_id, height if height else None, weight if weight else None)
+    except Exception as e:
+        print(f"Error updating height/weight: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
     return RedirectResponse(f"/player/{player_id}", status_code=303)
 
 
