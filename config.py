@@ -3,10 +3,15 @@
 import os
 
 # Use /data for persistent storage on Hugging Face Spaces
-# Fall back to /tmp/data for local development
-if os.path.exists("/data"):
+# Hugging Face Spaces automatically mounts /data as persistent storage
+# Check for HF_SPACE_ID environment variable to detect Hugging Face Spaces
+if os.environ.get("HF_SPACE_ID") or os.path.exists("/data"):
+    # Ensure /data directory exists
+    os.makedirs("/data", exist_ok=True)
     DB_PATH = "/data/football_manager.db"
 else:
+    # Fall back to /tmp/data for local development
+    os.makedirs("/tmp/data", exist_ok=True)
     DB_PATH = "/tmp/data/football_manager.db"
 
 # Technical Attributes
