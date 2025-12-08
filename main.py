@@ -749,14 +749,14 @@ def create_match_page():
                                 "Number of Teams:",
                                 style="display: block; margin-bottom: 5px;",
                             ),
-                            Input(
-                                type="number",
+                            Select(
+                                Option("1", value="1"),
+                                Option("2", value="2", selected=True),
                                 name="num_teams",
-                                value="2",
-                                min="2",
-                                max="4",
+                                id="num_teams",
                                 required=True,
                                 style="width: 100%; padding: 8px;",
+                                **{"onchange": "toggleTeam2Fields()"},
                             ),
                         ),
                         Div(style="margin-bottom: 15px;")(
@@ -801,31 +801,33 @@ def create_match_page():
                             ),
                         ),
                         Hr(),
-                        H3("Team 2"),
-                        Div(style="margin-bottom: 15px;")(
-                            Label(
-                                "Team Name:",
-                                style="display: block; margin-bottom: 5px;",
+                        Div(id="team2_section")(
+                            H3("Team 2"),
+                            Div(style="margin-bottom: 15px;")(
+                                Label(
+                                    "Team Name:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="text",
+                                    name="team2_name",
+                                    id="team2_name",
+                                    placeholder="Team 2",
+                                    style="width: 100%; padding: 8px;",
+                                ),
                             ),
-                            Input(
-                                type="text",
-                                name="team2_name",
-                                id="team2_name",
-                                placeholder="Team 2",
-                                style="width: 100%; padding: 8px;",
-                            ),
-                        ),
-                        Div(style="margin-bottom: 15px;")(
-                            Label(
-                                "Jersey Color:",
-                                style="display: block; margin-bottom: 5px;",
-                            ),
-                            Input(
-                                type="text",
-                                name="team2_color",
-                                id="team2_color",
-                                placeholder="e.g., Blue, Red, White",
-                                style="width: 100%; padding: 8px;",
+                            Div(style="margin-bottom: 15px;")(
+                                Label(
+                                    "Jersey Color:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="text",
+                                    name="team2_color",
+                                    id="team2_color",
+                                    placeholder="e.g., Blue, Red, White",
+                                    style="width: 100%; padding: 8px;",
+                                ),
                             ),
                         ),
                         Div(cls="btn-group")(
@@ -847,6 +849,21 @@ def create_match_page():
                 ),
                 Script(
                     """
+                    function toggleTeam2Fields() {
+                        const numTeams = document.getElementById('num_teams').value;
+                        const team2Section = document.getElementById('team2_section');
+                        if (numTeams === '1') {
+                            team2Section.style.display = 'none';
+                        } else {
+                            team2Section.style.display = 'block';
+                        }
+                    }
+                    
+                    // Initialize on page load
+                    document.addEventListener('DOMContentLoaded', function() {
+                        toggleTeam2Fields();
+                    });
+                    
                     async function prefillMatchInfo() {
                         const leagueId = document.getElementById('league_select').value;
                         // Don't call API if no league is selected or if it's the placeholder option
@@ -1100,12 +1117,16 @@ async def route_create_match(req: Request):
             form.get("team1_name", "Team 1").strip() or "Team 1",
             form.get("team1_color", "Blue").strip() or "Blue",
         )
-        team2_id = create_match_team(
-            match_id,
-            2,
-            form.get("team2_name", "Team 2").strip() or "Team 2",
-            form.get("team2_color", "Red").strip() or "Red",
-        )
+        
+        # Only create team 2 if num_teams >= 2
+        team2_id = None
+        if num_teams >= 2:
+            team2_id = create_match_team(
+                match_id,
+                2,
+                form.get("team2_name", "Team 2").strip() or "Team 2",
+                form.get("team2_color", "Red").strip() or "Red",
+            )
 
         if not team1_id or not team2_id:
             print(
@@ -1438,14 +1459,14 @@ def edit_match_page(match_id: int):
                                 "Number of Teams:",
                                 style="display: block; margin-bottom: 5px;",
                             ),
-                            Input(
-                                type="number",
+                            Select(
+                                Option("1", value="1", selected=(match.get("num_teams", 2) == 1)),
+                                Option("2", value="2", selected=(match.get("num_teams", 2) == 2)),
                                 name="num_teams",
-                                value=match.get("num_teams", 2),
-                                min="2",
-                                max="4",
+                                id="num_teams_edit",
                                 required=True,
                                 style="width: 100%; padding: 8px;",
+                                **{"onchange": "toggleTeam2FieldsEdit()"},
                             ),
                         ),
                         Div(style="margin-bottom: 15px;")(
@@ -1462,7 +1483,14 @@ def edit_match_page(match_id: int):
                         ),
                         Hr(),
                         *[
-                            Div(style="margin-bottom: 15px;")(
+                            (
+                                Div(
+                                    id="team2_section_edit",
+                                    style="margin-bottom: 15px;",
+                                ) if team['team_number'] == 2 else Div(
+                                    style="margin-bottom: 15px;",
+                                )
+                            )(
                                 H4(f"Team {team['team_number']}"),
                                 Input(
                                     type="hidden",
@@ -1497,7 +1525,7 @@ def edit_match_page(match_id: int):
                                 Input(
                                     type="number",
                                     name=f"team{team['team_number']}_score",
-                                    value=team.get("score", 0),
+                                    value=str(team.get("score", 0)),
                                     min="0",
                                     style="width: 100%; padding: 8px;",
                                 ),
@@ -1515,6 +1543,26 @@ def edit_match_page(match_id: int):
                         action=f"/update_match/{match_id}",
                     ),
                 ),
+            ),
+            Script(
+                """
+                function toggleTeam2FieldsEdit() {
+                    const numTeams = document.getElementById('num_teams_edit').value;
+                    const team2Section = document.getElementById('team2_section_edit');
+                    if (team2Section) {
+                        if (numTeams === '1') {
+                            team2Section.style.display = 'none';
+                        } else {
+                            team2Section.style.display = 'block';
+                        }
+                    }
+                }
+                
+                // Initialize on page load
+                document.addEventListener('DOMContentLoaded', function() {
+                    toggleTeam2FieldsEdit();
+                });
+                """
             ),
         ),
     )
@@ -1557,9 +1605,29 @@ async def route_update_match(match_id: int, req: Request):
         if team_id:
             team_name = form.get(f"team{team_num}_name", "").strip()
             jersey_color = form.get(f"team{team_num}_color", "").strip()
-            score_str = form.get(f"team{team_num}_score", "0").strip()
-            score = int(score_str) if score_str else 0
+            score_str = form.get(f"team{team_num}_score", "").strip()
+            # Handle empty string or "0" - both should be treated as 0
+            try:
+                score = int(score_str) if score_str else 0
+            except ValueError:
+                score = 0
             update_match_team(int(team_id), team_name, jersey_color, score)
+    
+    # If num_teams was reduced from 2 to 1, we should still update team2 if it exists
+    # But only if team2_id is in the form (meaning it wasn't hidden)
+    if num_teams == 1:
+        team2_id = form.get("team2_id", "").strip()
+        if team2_id:
+            # Team 2 exists but should be hidden, update it anyway if score was provided
+            team2_score_str = form.get("team2_score", "").strip()
+            try:
+                team2_score = int(team2_score_str) if team2_score_str else 0
+            except ValueError:
+                team2_score = 0
+            # Only update if we have the team_id in form (it might be hidden but still in form)
+            team2_name = form.get("team2_name", "").strip() or "Team 2"
+            team2_color = form.get("team2_color", "").strip() or "Red"
+            update_match_team(int(team2_id), team2_name, team2_color, team2_score)
 
     return RedirectResponse(f"/match/{match_id}", status_code=303)
 
