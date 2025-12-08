@@ -1,6 +1,13 @@
 # config.py - Configuration and attribute definitions
 
-DB_PATH = "/tmp/data/football_manager.db"
+import os
+
+# Use /data for persistent storage on Hugging Face Spaces
+# Fall back to /tmp/data for local development
+if os.path.exists("/data"):
+    DB_PATH = "/data/football_manager.db"
+else:
+    DB_PATH = "/tmp/data/football_manager.db"
 
 # Technical Attributes
 TECHNICAL_ATTRS = {
