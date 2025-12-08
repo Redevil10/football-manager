@@ -139,7 +139,6 @@ football-manager/
 ├── .python-version        # Python version specification
 ├── .gitignore            # Git ignore rules
 ├── README.md             # This file
-└── football_manager.db   # SQLite database (auto-generated)
 ```
 
 ## Data Persistence
