@@ -10,6 +10,7 @@ from db import (
     get_db,
     get_all_players,
     add_player,
+    find_player_by_name_or_alias,
     delete_player,
     reset_teams,
     update_player_attrs,
@@ -136,7 +137,7 @@ def home():
 
 
 @rt("/players")
-def players_page():
+def players_page(error: str = None):
     """All players page"""
     players = get_all_players()
     sorted_players = sorted(
@@ -153,7 +154,7 @@ def players_page():
             render_navbar(),
             Div(cls="container")(
                 H2(f"All Players ({len(players)})"),
-                render_add_player_form(),
+                render_add_player_form(error),
                 Div(cls="container-white")(render_player_table(sorted_players)),
             ),
         ),
@@ -229,16 +230,49 @@ def route_import_players(signup_text: str):
 
 
 @rt("/add_player", methods=["POST"])
-def route_add_player(name: str):
+async def route_add_player(req: Request):
     """Add single player"""
-    add_player(name)
-    return RedirectResponse("/players", status_code=303)
+    try:
+        form = await req.form()
+        name = form.get("name", "").strip()
+        
+        if not name:
+            from urllib.parse import quote
+            return RedirectResponse(f"/players?error={quote('Player name cannot be empty')}", status_code=303)
+        
+        # Check if name matches an existing player's name or alias
+        existing_player = find_player_by_name_or_alias(name)
+        if existing_player:
+            from urllib.parse import quote
+            if existing_player.get("alias") == name and existing_player.get("name") != name:
+                error_msg = f"Name '{name}' matches an existing player's alias (Player: {existing_player.get('name')})"
+            else:
+                error_msg = f"Player name '{name}' already exists"
+            return RedirectResponse(f"/players?error={quote(error_msg)}", status_code=303)
+        
+        add_player(name)
+        return RedirectResponse("/players", status_code=303)
+    except Exception as e:
+        print(f"Error adding player: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        from urllib.parse import quote
+        return RedirectResponse(f"/players?error={quote(f'Error adding player: {str(e)}')}", status_code=303)
 
 
 @rt("/update_player_name/{player_id}", methods=["POST"])
-def route_update_player_name(player_id: int, name: str):
-    """Update player name"""
-    update_player_name(player_id, name)
+async def route_update_player_name(player_id: int, req: Request):
+    """Update player name and alias"""
+    try:
+        form = await req.form()
+        name = form.get("name", "").strip()
+        alias = form.get("alias", "").strip()
+        alias = alias if alias else None
+        update_player_name(player_id, name, alias)
+    except Exception as e:
+        print(f"Error updating name/alias: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
     return RedirectResponse(f"/player/{player_id}", status_code=303)
 
 

@@ -427,17 +427,26 @@ def render_player_detail_form(player):
     gk_score = calculate_gk_score(player)
 
     return Div(cls="container-white")(
-        # Name edit form
+        # Name and Alias edit form
         Form(
-            Div(cls="input-group", style="margin-bottom: 20px;")(
+            Div(cls="input-group", style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;")(
+                Label("Name: ", style="font-weight: bold;"),
                 Input(
                     type="text",
                     name="name",
                     value=player["name"],
                     required=True,
-                    style="flex: 1;",
+                    style="flex: 1; min-width: 150px;",
                 ),
-                Button("Update Name", type="submit", cls="btn-success"),
+                Label("Alias: ", style="font-weight: bold; margin-left: 10px;"),
+                Input(
+                    type="text",
+                    name="alias",
+                    value=player.get("alias", "") or "",
+                    placeholder="Optional",
+                    style="flex: 1; min-width: 150px;",
+                ),
+                Button("Update Name/Alias", type="submit", cls="btn-success"),
             ),
             method="post",
             action=f"/update_player_name/{player['id']}",
@@ -612,10 +621,27 @@ def render_player_detail_form(player):
     )
 
 
-def render_add_player_form():
+def render_add_player_form(error=None):
     """Render add player form"""
-    return Div(cls="container-white")(
+    error_msg = None
+    if error:
+        # Decode URL-encoded error message
+        from urllib.parse import unquote
+        error_msg = unquote(str(error))
+    
+    form_elements = [
         H3("Add New Player"),
+    ]
+    
+    if error_msg:
+        form_elements.append(
+            Div(
+                error_msg,
+                style="color: #d32f2f; background-color: #ffebee; padding: 12px; border-radius: 4px; margin-bottom: 15px; border-left: 4px solid #d32f2f;",
+            )
+        )
+    
+    form_elements.append(
         Form(
             Div(cls="input-group")(
                 Input(
@@ -629,8 +655,10 @@ def render_add_player_form():
             ),
             method="post",
             action="/add_player",
-        ),
+        )
     )
+    
+    return Div(cls="container-white")(*form_elements)
 
 
 # ============ LEAGUES ============
