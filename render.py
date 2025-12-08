@@ -123,7 +123,7 @@ def render_player_detail_form(player):
                     value=str(round(overall)),
                     min=str(SCORE_RANGES["overall"][0]),
                     max=str(SCORE_RANGES["overall"][1]),
-                    placeholder="Set overall score (1-200)",
+                    placeholder=f"Set overall score ({SCORE_RANGES['overall'][0]}-{SCORE_RANGES['overall'][1]})",
                     style="flex: 1;",
                 ),
                 Button("Set Overall Score", type="submit", cls="btn-success"),
@@ -384,7 +384,7 @@ def render_player_detail_form(player):
         # Overall Score form
         Form(
             Div(cls="input-group", style="margin-bottom: 20px;")(
-                Label("Overall Score (1-200): ", style="margin-right: 10px; font-weight: bold;"),
+                Label(f"Overall Score ({SCORE_RANGES['overall'][0]}-{SCORE_RANGES['overall'][1]}): ", style="margin-right: 10px; font-weight: bold;"),
                 Input(
                     type="number",
                     name="score_overall",
@@ -404,7 +404,7 @@ def render_player_detail_form(player):
             H3("Category Scores"),
             Div(cls="attr-section", style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;")(
                 Div(style="display: flex; align-items: center; gap: 10px;")(
-                    Label("Technical (1-60): ", cls="attr-label"),
+                    Label(f"Technical ({SCORE_RANGES['technical'][0]}-{SCORE_RANGES['technical'][1]}): ", cls="attr-label"),
                     Input(
                         type="number",
                         name="score_technical",
@@ -416,7 +416,7 @@ def render_player_detail_form(player):
                     ),
                 ),
                 Div(style="display: flex; align-items: center; gap: 10px;")(
-                    Label("Mental (1-40): ", cls="attr-label"),
+                    Label(f"Mental ({SCORE_RANGES['mental'][0]}-{SCORE_RANGES['mental'][1]}): ", cls="attr-label"),
                     Input(
                         type="number",
                         name="score_mental",
@@ -428,7 +428,7 @@ def render_player_detail_form(player):
                     ),
                 ),
                 Div(style="display: flex; align-items: center; gap: 10px;")(
-                    Label("Physical (1-60): ", cls="attr-label"),
+                    Label(f"Physical ({SCORE_RANGES['physical'][0]}-{SCORE_RANGES['physical'][1]}): ", cls="attr-label"),
                     Input(
                         type="number",
                         name="score_physical",
@@ -440,7 +440,7 @@ def render_player_detail_form(player):
                     ),
                 ),
                 Div(style="display: flex; align-items: center; gap: 10px;")(
-                    Label("GK (1-40): ", cls="attr-label"),
+                    Label(f"GK ({SCORE_RANGES['gk'][0]}-{SCORE_RANGES['gk'][1]}): ", cls="attr-label"),
                     Input(
                         type="number",
                         name="score_gk",
