@@ -1,5 +1,6 @@
 # main.py - Football Manager Application
 
+import os
 from fasthtml.common import *
 from fasthtml_hf import setup_hf_backup
 
@@ -75,9 +76,10 @@ init_db()
 
 app, rt = fast_app()
 
-# Setup Hugging Face backup for persistent storage
+# Setup Hugging Face backup for persistent storage (only on Hugging Face Spaces)
 # Note: /data directory is already created by config.py and init_db()
-setup_hf_backup(app)
+if os.environ.get("HF_SPACE_ID"):
+    setup_hf_backup(app)
 
 
 @rt("/")
