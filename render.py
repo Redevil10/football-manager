@@ -14,6 +14,51 @@ from logic import (
 )
 
 
+def format_match_name(match):
+    """Format match name as 'Match YYYY-MM-DD HH:MMAM/PM' or fallback to 'Match #id'"""
+    if not match:
+        return "Match"
+    
+    match_id = match.get("id", "")
+    match_date = match.get("date", "")
+    start_time = match.get("start_time", "")
+    
+    # If date or time is missing, fallback to ID
+    if not match_date or not start_time:
+        return f"Match #{match_id}" if match_id else "Match"
+    
+    try:
+        # Parse date (format: YYYY-MM-DD)
+        date_obj = datetime.strptime(match_date, "%Y-%m-%d").date()
+        date_str = date_obj.strftime("%Y-%m-%d")
+        
+        # Parse time (format: HH:MM or HH:MM:SS)
+        time_parts = start_time.split(":")
+        hour = int(time_parts[0])
+        minute = int(time_parts[1])
+        
+        # Convert to 12-hour format with AM/PM
+        if hour == 0:
+            hour_12 = 12
+            am_pm = "AM"
+        elif hour < 12:
+            hour_12 = hour
+            am_pm = "AM"
+        elif hour == 12:
+            hour_12 = 12
+            am_pm = "PM"
+        else:
+            hour_12 = hour - 12
+            am_pm = "PM"
+        
+        time_str = f"{hour_12}:{minute:02d}{am_pm}"
+        
+        return f"Match {date_str} {time_str}"
+    except (ValueError, IndexError, AttributeError):
+        # If parsing fails, fallback to ID
+        return f"Match #{match_id}" if match_id else "Match"
+
+
 def is_match_completed(match):
     """Check if a match has already been completed (past match)"""
     if not match:
@@ -89,7 +134,7 @@ def render_next_match(match, teams, match_players_dict):
     content = [
         H2("Next Match"),
         Div(cls="container-white")(
-            H3(f"Match #{match['id']}"),
+            H3(format_match_name(match)),
             Div(style="margin-bottom: 15px;")(
                 P(f"Date: {match.get('date', 'N/A')}"),
                 P(f"Start Time: {match.get('start_time', 'N/A')}"),
@@ -171,7 +216,7 @@ def render_recent_matches(matches):
         content.append(
             Div(cls="container-white", style="margin-bottom: 10px;")(
                 A(
-                    H4(f"Match #{match['id']}", style="margin: 0; color: #007bff;"),
+                    H4(format_match_name(match), style="margin: 0; color: #007bff;"),
                     href=f"/match/{match['id']}",
                     style="text-decoration: none;",
                 ),
@@ -229,6 +274,49 @@ def render_player_table(players):
         )
         rows.append(row)
 
+    return Table(cls="player-table")(
+        Thead(
+            Tr(
+                Th("Name"),
+                Th("Overall"),
+                Th("Actions"),
+            )
+        ),
+        Tbody(*rows),
+    )
+
+
+def render_match_available_players(match_id, signup_players):
+    """Render available players for a match with remove button"""
+    if not signup_players:
+        return P("No available players yet", cls="empty-state")
+    
+    from logic import calculate_overall_score
+    
+    rows = []
+    for mp in signup_players:
+        overall = round(calculate_overall_score(mp), 1)
+        match_player_id = mp.get("id")  # This is match_players.id
+        player_id = mp.get("player_id")  # This is players.id
+        row = Tr(
+            Td(mp["name"]),
+            Td(str(overall), style="font-weight: bold; color: #0066cc;"),
+            Td(
+                Div(cls="player-row-actions")(
+                    A("View", href=f"/player/{player_id}", style="background: #0066cc;"),
+                    Form(
+                        method="POST",
+                        action=f"/remove_match_signup_player/{match_id}/{match_player_id}",
+                        style="display: inline;",
+                        **{"onsubmit": "return confirm('Remove this player from match signup?');"}
+                    )(
+                        Button("Remove", type="submit", cls="btn-danger", style="padding: 5px 10px; font-size: 12px;"),
+                    ),
+                ),
+            ),
+        )
+        rows.append(row)
+    
     return Table(cls="player-table")(
         Thead(
             Tr(
@@ -580,7 +668,7 @@ def render_league_matches(league, matches):
                 Div(cls="container-white", style="margin-bottom: 10px;")(
                     Div(style="display: flex; justify-content: space-between; align-items: center;")(
                         A(
-                            H4(f"Match #{match['id']}", style="margin: 0; color: #007bff;"),
+                            H4(format_match_name(match), style="margin: 0; color: #007bff;"),
                             href=f"/match/{match['id']}",
                             style="text-decoration: none; flex: 1;",
                         ),
@@ -656,7 +744,7 @@ def render_all_matches(matches):
                 Div(cls="container-white", style="margin-bottom: 10px;")(
                     Div(style="display: flex; justify-content: space-between; align-items: center;")(
                         A(
-                            H4(f"Match #{match['id']}", style="margin: 0; color: #007bff;"),
+                            H4(format_match_name(match), style="margin: 0; color: #007bff;"),
                             href=f"/match/{match['id']}",
                             style="text-decoration: none; flex: 1;",
                         ),
@@ -815,7 +903,7 @@ def render_match_teams(match_id, teams, match_players_dict, is_completed=False):
     )
 
 
-def render_match_detail(match, teams, match_players_dict, events, all_players=None, match_player_ids=None):
+def render_match_detail(match, teams, match_players_dict, events, all_players=None, match_player_ids=None, signup_players=None):
     """Render detailed match information"""
     from logic import calculate_overall_score
     
@@ -824,7 +912,7 @@ def render_match_detail(match, teams, match_players_dict, events, all_players=No
     
     # Match info section
     content = [
-        H2(f"Match #{match['id']}"),
+        H2(format_match_name(match)),
         Div(cls="container-white")(
             P(f"Date: {match.get('date', 'N/A')}"),
             P(f"Start Time: {match.get('start_time', 'N/A')}"),
@@ -832,11 +920,7 @@ def render_match_detail(match, teams, match_players_dict, events, all_players=No
             P(f"Location: {match.get('location', 'N/A')}"),
             P(f"Teams: {match.get('num_teams', 2)}"),
             Div(cls="btn-group", style="margin-top: 10px;")(
-                *([
-                    A(Button("Edit Match", cls="btn-primary"), href=f"/edit_match/{match['id']}"),
-                ] if not is_completed else [
-                    Button("Edit Match", cls="btn-primary", disabled=True, style="opacity: 0.5; cursor: not-allowed;"),
-                ]),
+                A(Button("Edit Match", cls="btn-primary"), href=f"/edit_match/{match['id']}"),
                 Form(
                     method="POST",
                     action=f"/delete_match/{match['id']}",
@@ -889,17 +973,36 @@ def render_match_detail(match, teams, match_players_dict, events, all_players=No
         )
     
     # Available Players section (only show signup players not yet allocated)
-    if all_players is not None and len(all_players) > 0:
-        sorted_available = sorted(
-            all_players, key=lambda x: calculate_overall_score(x), reverse=True
-        )
-        
+    if signup_players is not None:
         content.append(
-            H2(f"Available Players ({len(sorted_available)})", style="margin-top: 30px;")
+            Div(cls="container-white", style="margin-top: 20px;")(
+                H3(f"Available Players ({len(signup_players)})"),
+                Div(cls="btn-group", style="margin-bottom: 15px;")(
+                    A(
+                        Button("Import Players", cls="btn-success"),
+                        href=f"/import_match_players/{match['id']}",
+                    ),
+                    A(
+                        Button("Add Player", cls="btn-primary"),
+                        href=f"/add_match_player_manual/{match['id']}",
+                    ),
+                ),
+                render_match_available_players(match['id'], signup_players),
+            ),
         )
-        content.append(
-            Div(cls="container-white")(render_player_table(sorted_available))
-        )
+    else:
+        # Fallback to old format if signup_players not provided
+        if all_players is not None and len(all_players) > 0:
+            sorted_available = sorted(
+                all_players, key=lambda x: calculate_overall_score(x), reverse=True
+            )
+            
+            content.append(
+                H2(f"Available Players ({len(sorted_available)})", style="margin-top: 30px;")
+            )
+            content.append(
+                Div(cls="container-white")(render_player_table(sorted_available))
+            )
     
     # Render events (goals, assists, etc.)
     content.append(

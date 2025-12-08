@@ -1162,23 +1162,28 @@ def match_detail_page(match_id: int):
 
     # Get signup players (available players are those signed up but not allocated to a team)
     signup_players = get_match_signup_players(match_id)
+    # Filter signup players to only those not allocated to teams
+    available_signup_players = [mp for mp in signup_players if mp["player_id"] not in match_player_ids]
+    
+    # Keep available_players_list for backward compatibility
     available_players_list = []
-    for mp in signup_players:
-        if mp["player_id"] not in match_player_ids:
-            available_players_list.append(
-                {
-                    "id": mp["player_id"],
-                    "name": mp["name"],
-                    "technical_attrs": mp["technical_attrs"],
-                    "mental_attrs": mp["mental_attrs"],
-                    "physical_attrs": mp["physical_attrs"],
-                    "gk_attrs": mp["gk_attrs"],
-                }
-            )
+    for mp in available_signup_players:
+        available_players_list.append(
+            {
+                "id": mp["player_id"],
+                "name": mp["name"],
+                "technical_attrs": mp["technical_attrs"],
+                "mental_attrs": mp["mental_attrs"],
+                "physical_attrs": mp["physical_attrs"],
+                "gk_attrs": mp["gk_attrs"],
+            }
+        )
 
+    from render import format_match_name
+    
     return Html(
         Head(
-            Title(f"Match #{match_id} - Football Manager"),
+            Title(f"{format_match_name(match)} - Football Manager"),
             Style(STYLE),
             Script(src="https://unpkg.com/htmx.org@1.9.10"),
         ),
@@ -1193,6 +1198,7 @@ def match_detail_page(match_id: int):
                         events,
                         available_players_list,
                         match_player_ids,
+                        signup_players=available_signup_players,
                     ),
                 ),
             ),
@@ -1226,9 +1232,10 @@ def route_allocate_match(match_id: int):
         # Get signup players (available players are those signed up but not allocated to a team)
         # After allocation, available players = all signup players minus those allocated to teams
         signup_players = get_match_signup_players(match_id)
+        available_signup_players = [mp for mp in signup_players if mp["player_id"] not in match_player_ids]
         available_players_list = []
         # signup_players already have team_id = NULL, so we just need to convert format
-        for mp in signup_players:
+        for mp in available_signup_players:
             available_players_list.append(
                 {
                     "id": mp["player_id"],
@@ -1251,6 +1258,7 @@ def route_allocate_match(match_id: int):
             events,
             available_players_list,
             match_player_ids,
+            signup_players=available_signup_players,
         )
     except Exception as e:
         print(f"Error in allocate_match: {e}")
@@ -1287,9 +1295,10 @@ def route_reset_match_teams(match_id: int):
         # Get signup players (available players are those signed up but not allocated to a team)
         # After reset, all players should be back in available list (team_id = NULL)
         signup_players = get_match_signup_players(match_id)
+        available_signup_players = [mp for mp in signup_players if mp["player_id"] not in match_player_ids]
         available_players_list = []
         # signup_players already have team_id = NULL, so we just need to convert format
-        for mp in signup_players:
+        for mp in available_signup_players:
             available_players_list.append(
                 {
                     "id": mp["player_id"],
@@ -1312,6 +1321,7 @@ def route_reset_match_teams(match_id: int):
             events,
             available_players_list,
             match_player_ids,
+            signup_players=available_signup_players,
         )
     except Exception as e:
         print(f"Error in reset_match_teams: {e}")
@@ -1326,6 +1336,8 @@ def route_reset_match_teams(match_id: int):
 @rt("/edit_match/{match_id}")
 def edit_match_page(match_id: int):
     """Edit match page"""
+    from render import format_match_name
+    
     match = get_match(match_id)
     if not match:
         return RedirectResponse("/leagues", status_code=303)
@@ -1342,14 +1354,14 @@ def edit_match_page(match_id: int):
 
     return Html(
         Head(
-            Title(f"Edit Match #{match_id}"),
+            Title(f"Edit {format_match_name(match)}"),
             Style(STYLE),
             Script(src="https://unpkg.com/htmx.org@1.9.10"),
         ),
         Body(
             render_navbar(),
             Div(cls="container")(
-                H2(f"Edit Match #{match_id}"),
+                H2(f"Edit {format_match_name(match)}"),
                 Div(cls="container-white")(
                     Form(
                         Div(style="margin-bottom: 15px;")(
@@ -1449,18 +1461,6 @@ def edit_match_page(match_id: int):
                             ),
                         ),
                         Hr(),
-                        Div(style="margin-bottom: 15px;")(
-                            Label(
-                                "Import Signup Text (optional):",
-                                style="display: block; margin-bottom: 5px;",
-                            ),
-                            Textarea(
-                                name="signup_text",
-                                placeholder="Paste signup text here to import players...",
-                                style="width: 100%; min-height: 100px; padding: 8px;",
-                            ),
-                        ),
-                        Hr(),
                         *[
                             Div(style="margin-bottom: 15px;")(
                                 H4(f"Team {team['team_number']}"),
@@ -1540,44 +1540,6 @@ async def route_update_match(match_id: int, req: Request):
     max_players_per_team = form.get("max_players_per_team", "").strip()
     max_players = int(max_players_per_team) if max_players_per_team else None
 
-    # Import players if signup text provided and add them to match signup list
-    signup_text = form.get("signup_text", "").strip()
-    if signup_text:
-        # First import players to database (if they don't exist)
-        from logic import import_players, parse_signup_text
-
-        imported_count = import_players(signup_text)
-        print(f"Imported {imported_count} new players from signup text")
-
-        # Parse signup text to get player names
-        player_names = parse_signup_text(signup_text)
-        print(
-            f"Parsed {len(player_names)} player names from signup text: {player_names[:5]}..."
-        )
-
-        # Get all players and find matching ones (after import)
-        all_players = get_all_players()
-        player_dict = {p["name"]: p for p in all_players}
-        print(f"Found {len(all_players)} total players in database")
-
-        # Add signup players to match_players (team_id = NULL means signed up but not allocated)
-        added_count = 0
-        for name in player_names:
-            if name in player_dict:
-                # Check if player already signed up for this match
-                existing = get_match_players(match_id)
-                player_id = player_dict[name]["id"]
-                if not any(p["player_id"] == player_id for p in existing):
-                    result = add_match_player(
-                        match_id, player_id, team_id=None, position=None, is_starter=0
-                    )
-                    if result:
-                        added_count += 1
-            else:
-                print(f"Warning: Player '{name}' not found in database after import")
-
-        print(f"Added {added_count} players to match {match_id} signup list")
-
     update_match(
         match_id,
         league_id,
@@ -1617,6 +1579,8 @@ def route_delete_match(match_id: int):
 @rt("/edit_match_team/{match_id}/{team_id}")
 def edit_match_team_page(match_id: int, team_id: int):
     """Edit team roster page"""
+    from render import format_match_name
+    
     match = get_match(match_id)
     if not match:
         return RedirectResponse("/leagues", status_code=303)
@@ -1639,7 +1603,7 @@ def edit_match_team_page(match_id: int, team_id: int):
 
     return Html(
         Head(
-            Title(f"Edit Team Roster - Match #{match_id}"),
+            Title(f"Edit Team Roster - {format_match_name(match)}"),
             Style(STYLE),
             Script(src="https://unpkg.com/htmx.org@1.9.10"),
         ),
@@ -1861,9 +1825,11 @@ def route_remove_match_player(match_player_id: int):
     return RedirectResponse("/leagues", status_code=303)
 
 
-@rt("/add_match_event/{match_id}")
+@rt("/add_match_event/{match_id}", methods=["GET"])
 def add_match_event_page(match_id: int):
     """Add match event page"""
+    from render import format_match_name
+    
     match = get_match(match_id)
     if not match:
         return RedirectResponse("/leagues", status_code=303)
@@ -1876,14 +1842,14 @@ def add_match_event_page(match_id: int):
 
     return Html(
         Head(
-            Title(f"Add Event - Match #{match_id}"),
+            Title(f"Add Event - {format_match_name(match)}"),
             Style(STYLE),
             Script(src="https://unpkg.com/htmx.org@1.9.10"),
         ),
         Body(
             render_navbar(),
             Div(cls="container")(
-                H2(f"Add Event - Match #{match_id}"),
+                H2(f"Add Event - {format_match_name(match)}"),
                 Div(cls="container-white")(
                     Form(
                         Div(style="margin-bottom: 15px;")(
@@ -1962,8 +1928,10 @@ def add_match_event_page(match_id: int):
                                 href=f"/match/{match_id}",
                             ),
                         ),
-                        method="post",
-                        action=f"/add_match_event/{match_id}",
+                        **{
+                            "method": "post",
+                            "action": f"/add_match_event/{match_id}",
+                        },
                     ),
                 ),
             ),
@@ -2001,11 +1969,214 @@ def route_delete_match_event(event_id: int):
         "SELECT match_id FROM match_events WHERE id = ?", (event_id,)
     ).fetchone()
     conn.close()
-
+    
     if event:
         delete_match_event(event_id)
         return RedirectResponse(f"/match/{event['match_id']}", status_code=303)
     return RedirectResponse("/leagues", status_code=303)
+
+
+@rt("/import_match_players/{match_id}", methods=["GET"])
+def import_match_players_page(match_id: int):
+    """Import players page for a match"""
+    from render import format_match_name
+    
+    match = get_match(match_id)
+    if not match:
+        return RedirectResponse("/matches", status_code=303)
+    
+    return Html(
+        Head(
+            Title(f"Import Players - {format_match_name(match)}"),
+            Style(STYLE),
+        ),
+        Body(
+            render_navbar(),
+            Div(cls="container")(
+                H2(f"Import Players for {format_match_name(match)}"),
+                Div(cls="container-white")(
+                    Form(
+                        Div(style="margin-bottom: 15px;")(
+                            Label("Signup Text:", style="display: block; margin-bottom: 5px;"),
+                            Textarea(
+                                name="signup_text",
+                                placeholder="Paste signup text here to import players...",
+                                style="width: 100%; min-height: 200px; padding: 8px;",
+                                required=True,
+                            ),
+                        ),
+                        Div(cls="btn-group")(
+                            Button("Import Players", type="submit", cls="btn-success"),
+                            A(Button("Cancel", cls="btn-secondary"), href=f"/match/{match_id}"),
+                        ),
+                        **{
+                            "method": "post",
+                            "action": f"/import_match_players/{match_id}",
+                        },
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+@rt("/import_match_players/{match_id}", methods=["POST"])
+async def route_import_match_players(match_id: int, req: Request):
+    """Import players for a match"""
+    form = await req.form()
+    signup_text = form.get("signup_text", "").strip()
+    
+    if signup_text:
+        from logic import import_players, parse_signup_text
+        
+        # Import players to database (if they don't exist)
+        imported_count = import_players(signup_text)
+        print(f"Imported {imported_count} new players from signup text")
+        
+        # Parse signup text to get player names
+        player_names = parse_signup_text(signup_text)
+        print(f"Parsed {len(player_names)} player names from signup text")
+        
+        # Get all players and find matching ones (after import)
+        all_players = get_all_players()
+        player_dict = {p["name"]: p for p in all_players}
+        
+        # Add signup players to match_players (team_id = NULL means signed up but not allocated)
+        added_count = 0
+        existing = get_match_players(match_id)
+        for name in player_names:
+            if name in player_dict:
+                player_id = player_dict[name]["id"]
+                if not any(p["player_id"] == player_id for p in existing):
+                    result = add_match_player(match_id, player_id, team_id=None, position=None, is_starter=0)
+                    if result:
+                        added_count += 1
+    
+    return RedirectResponse(f"/match/{match_id}", status_code=303)
+
+
+@rt("/add_match_player_manual/{match_id}", methods=["GET"])
+def add_match_player_manual_page(match_id: int):
+    """Add player manually page for a match"""
+    from render import format_match_name
+    
+    match = get_match(match_id)
+    if not match:
+        return RedirectResponse("/matches", status_code=303)
+    
+    all_players = get_all_players()
+    # Get players already in this match
+    match_players = get_match_players(match_id)
+    match_player_ids = {p["player_id"] for p in match_players}
+    # Filter out players already in match
+    available_players = [p for p in all_players if p["id"] not in match_player_ids]
+    
+    if not available_players:
+        return Html(
+            Head(
+                Title(f"Add Player - {format_match_name(match)}"),
+                Style(STYLE),
+            ),
+            Body(
+                render_navbar(),
+                Div(cls="container")(
+                    H2(f"Add Player to {format_match_name(match)}"),
+                    Div(cls="container-white")(
+                        P("No available players to add. All players are already in this match.", style="color: #666;"),
+                        A(Button("Back to Match", cls="btn-secondary"), href=f"/match/{match_id}"),
+                    ),
+                ),
+            ),
+        )
+    
+    return Html(
+        Head(
+            Title(f"Add Player - {format_match_name(match)}"),
+            Style(STYLE),
+        ),
+        Body(
+            render_navbar(),
+            Div(cls="container")(
+                H2(f"Add Player to {format_match_name(match)}"),
+                Div(cls="container-white")(
+                    Form(
+                        Div(style="margin-bottom: 15px;")(
+                            Label("Select Player:", style="display: block; margin-bottom: 5px;"),
+                            Select(
+                                *[
+                                    Option(f"{p['name']} (Overall: {round(calculate_player_overall(p), 1)})", value=str(p["id"]))
+                                    for p in sorted(available_players, key=lambda x: calculate_player_overall(x), reverse=True)
+                                ],
+                                name="player_id",
+                                required=True,
+                                style="width: 100%; padding: 8px;",
+                            ),
+                        ),
+                        Div(cls="btn-group")(
+                            Button("Add Player", type="submit", cls="btn-success"),
+                            A(Button("Cancel", cls="btn-secondary"), href=f"/match/{match_id}"),
+                        ),
+                        **{
+                            "method": "post",
+                            "action": f"/add_match_player_manual/{match_id}",
+                        },
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+@rt("/add_match_player_manual/{match_id}", methods=["POST"])
+async def route_add_match_player_manual(match_id: int, req: Request):
+    """Add player manually to a match"""
+    try:
+        print(f"=== ADD PLAYER MANUAL REQUEST for match {match_id} ===", flush=True)
+        form = await req.form()
+        print(f"Form data: {dict(form)}", flush=True)
+        
+        player_id_str = form.get("player_id", "0").strip()
+        print(f"player_id_str: '{player_id_str}'", flush=True)
+        
+        if not player_id_str or player_id_str == "0":
+            print("Error: No player_id provided", flush=True)
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+        
+        try:
+            player_id = int(player_id_str)
+        except ValueError as e:
+            print(f"Error: Invalid player_id '{player_id_str}': {e}", flush=True)
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+        
+        print(f"Adding player {player_id} to match {match_id}", flush=True)
+        
+        # Check if player already in match
+        existing = get_match_players(match_id)
+        if any(p["player_id"] == player_id for p in existing):
+            print(f"Warning: Player {player_id} already in match {match_id}", flush=True)
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+        
+        result = add_match_player(match_id, player_id, team_id=None, position=None, is_starter=0)
+        print(f"add_match_player returned: {result}", flush=True)
+        
+        if result:
+            print(f"Successfully added player {player_id} to match {match_id}", flush=True)
+        else:
+            print(f"Warning: add_match_player returned None for player {player_id}", flush=True)
+        
+    except Exception as e:
+        print(f"Error in route_add_match_player_manual: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+    
+    return RedirectResponse(f"/match/{match_id}", status_code=303)
+
+
+@rt("/remove_match_signup_player/{match_id}/{match_player_id}", methods=["POST"])
+def route_remove_match_signup_player(match_id: int, match_player_id: int):
+    """Remove a player from match signup (delete from match_players)"""
+    remove_match_player(match_player_id)
+    return RedirectResponse(f"/match/{match_id}", status_code=303)
 
 
 if __name__ == "__main__":
