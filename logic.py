@@ -40,13 +40,15 @@ def parse_signup_text(text):
 
 def import_players(text):
     """Import players from signup text"""
+    from db import find_player_by_name_or_alias, add_player
+    
     player_names = parse_signup_text(text)
-
-    existing = {p["name"] for p in get_all_players()}
     imported = 0
 
     for name in player_names:
-        if name not in existing:
+        # Check if player exists by name or alias
+        existing_player = find_player_by_name_or_alias(name)
+        if not existing_player:
             add_player(name)
             imported += 1
 

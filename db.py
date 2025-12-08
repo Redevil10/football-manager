@@ -46,6 +46,12 @@ def init_db():
         c.execute("ALTER TABLE players ADD COLUMN weight INTEGER")
     except sqlite3.OperationalError:
         pass  # Column already exists
+    
+    # Add alias column if it doesn't exist (for existing databases)
+    try:
+        c.execute("ALTER TABLE players ADD COLUMN alias TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     # Leagues table
     c.execute(
@@ -181,7 +187,25 @@ def get_all_players():
     return result
 
 
-def add_player(name, position_pref=""):
+def find_player_by_name_or_alias(name):
+    """Find player by name or alias"""
+    conn = get_db()
+    player = conn.execute(
+        "SELECT * FROM players WHERE name = ? OR alias = ?",
+        (name, name)
+    ).fetchone()
+    conn.close()
+    if player:
+        player_dict = dict(player)
+        player_dict["technical_attrs"] = json.loads(player["technical_attrs"] or "{}")
+        player_dict["mental_attrs"] = json.loads(player["mental_attrs"] or "{}")
+        player_dict["physical_attrs"] = json.loads(player["physical_attrs"] or "{}")
+        player_dict["gk_attrs"] = json.loads(player["gk_attrs"] or "{}")
+        return player_dict
+    return None
+
+
+def add_player(name, position_pref="", alias=None):
     """Add player with random attributes"""
     conn = get_db()
     try:
@@ -191,8 +215,8 @@ def add_player(name, position_pref=""):
         gk = json.dumps(generate_random_gk())
 
         conn.execute(
-            "INSERT INTO players (name, position_pref, technical_attrs, mental_attrs, physical_attrs, gk_attrs) VALUES (?, ?, ?, ?, ?, ?)",
-            (name, position_pref, technical, mental, physical, gk),
+            "INSERT INTO players (name, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (name, position_pref, alias, technical, mental, physical, gk),
         )
         conn.commit()
     except sqlite3.IntegrityError:
@@ -237,11 +261,11 @@ def update_player_attrs(player_id, tech_attrs, mental_attrs, phys_attrs, gk_attr
     conn.close()
 
 
-def update_player_name(player_id, name):
-    """Update player name"""
+def update_player_name(player_id, name, alias=None):
+    """Update player name and alias"""
     conn = get_db()
     try:
-        conn.execute("UPDATE players SET name = ? WHERE id = ?", (name, player_id))
+        conn.execute("UPDATE players SET name = ?, alias = ? WHERE id = ?", (name, alias, player_id))
         conn.commit()
     except sqlite3.IntegrityError:
         print(f"Player {name} already exists")
