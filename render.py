@@ -94,6 +94,29 @@ def is_match_completed(match):
         return False
 
 
+def get_match_score_display(match_id):
+    """Get match score display string for a match"""
+    from db import get_match_teams
+    
+    teams = get_match_teams(match_id)
+    if not teams:
+        return ""
+    
+    team1_score = None
+    team2_score = None
+    for team in teams:
+        if team.get("team_number") == 1:
+            team1_score = team.get("score", 0)
+        elif team.get("team_number") == 2:
+            team2_score = team.get("score", 0)
+    
+    if team1_score is not None and team2_score is not None:
+        return f"Score: {team1_score} - {team2_score}"
+    elif team1_score is not None:
+        return f"Score: {team1_score}"
+    return ""
+
+
 def render_navbar():
     """Render navigation bar"""
     return Div(cls="navbar")(
@@ -151,11 +174,11 @@ def render_next_match(match, teams, match_players_dict):
     ]
     
     # Render team allocation if teams exist
-    if teams and len(teams) >= 2:
+    if teams and len(teams) >= 1:
         team1 = teams[0]
-        team2 = teams[1]
+        team2 = teams[1] if len(teams) > 1 else None
         team1_players = match_players_dict.get(team1["id"], [])
-        team2_players = match_players_dict.get(team2["id"], [])
+        team2_players = match_players_dict.get(team2["id"], []) if team2 else []
         
         if team1_players or team2_players:
             content.append(
@@ -213,6 +236,11 @@ def render_recent_matches(matches):
         if league_name:
             match_info.append(f"League: {league_name}")
         
+        # Get score if match is completed
+        score_display = ""
+        if is_match_completed(match):
+            score_display = get_match_score_display(match['id'])
+        
         content.append(
             Div(cls="container-white", style="margin-bottom: 10px;")(
                 A(
@@ -221,6 +249,7 @@ def render_recent_matches(matches):
                     style="text-decoration: none;",
                 ),
                 P(" | ".join(match_info), style="margin: 5px 0; color: #666;") if match_info else "",
+                P(score_display, style="margin: 5px 0; font-weight: bold; color: #0066cc;") if score_display else "",
             )
         )
     
@@ -664,6 +693,11 @@ def render_league_matches(league, matches):
             if match_location:
                 match_info.append(f"Location: {match_location}")
             
+            # Get score if match is completed
+            score_display = ""
+            if is_match_completed(match):
+                score_display = get_match_score_display(match['id'])
+            
             content.append(
                 Div(cls="container-white", style="margin-bottom: 10px;")(
                     Div(style="display: flex; justify-content: space-between; align-items: center;")(
@@ -682,6 +716,7 @@ def render_league_matches(league, matches):
                         ),
                     ),
                     P(" | ".join(match_info), style="margin: 5px 0; color: #666;") if match_info else "",
+                    P(score_display, style="margin: 5px 0; font-weight: bold; color: #0066cc;") if score_display else "",
                 )
             )
     else:
@@ -740,6 +775,11 @@ def render_all_matches(matches):
             if match_location:
                 match_info.append(f"Location: {match_location}")
             
+            # Get score if match is completed
+            score_display = ""
+            if is_match_completed(match):
+                score_display = get_match_score_display(match['id'])
+            
             content.append(
                 Div(cls="container-white", style="margin-bottom: 10px;")(
                     Div(style="display: flex; justify-content: space-between; align-items: center;")(
@@ -758,6 +798,7 @@ def render_all_matches(matches):
                         ),
                     ),
                     P(" | ".join(match_info), style="margin: 5px 0; color: #666;") if match_info else "",
+                    P(score_display, style="margin: 5px 0; font-weight: bold; color: #0066cc;") if score_display else "",
                 )
             )
     
@@ -768,7 +809,7 @@ def render_match_teams(match_id, teams, match_players_dict, is_completed=False, 
     """Render match teams similar to home page render_teams"""
     from logic import calculate_overall_score
     
-    if not teams or len(teams) < 2:
+    if not teams or len(teams) < 1:
         return Div(cls="container-white")(
             P("No teams allocated. Click 'Allocate Teams' to start.", cls="empty-state")
         )
@@ -926,6 +967,22 @@ def render_match_detail(match, teams, match_players_dict, events, all_players=No
     is_completed = is_match_completed(match)
     
     # Match info section
+    # Get team scores
+    team1_score = None
+    team2_score = None
+    if teams:
+        for team in teams:
+            if team.get("team_number") == 1:
+                team1_score = team.get("score", 0)
+            elif team.get("team_number") == 2:
+                team2_score = team.get("score", 0)
+    
+    score_display = ""
+    if team1_score is not None and team2_score is not None:
+        score_display = f"Score: {team1_score} - {team2_score}"
+    elif team1_score is not None:
+        score_display = f"Score: {team1_score}"
+    
     content = [
         H2(format_match_name(match)),
         Div(cls="container-white")(
@@ -934,6 +991,7 @@ def render_match_detail(match, teams, match_players_dict, events, all_players=No
             P(f"End Time: {match.get('end_time', 'N/A')}"),
             P(f"Location: {match.get('location', 'N/A')}"),
             P(f"Teams: {match.get('num_teams', 2)}"),
+            P(score_display, style="font-weight: bold; font-size: 18px; color: #0066cc;") if score_display else "",
             Div(cls="btn-group", style="margin-top: 10px;")(
                 A(Button("Edit Match", cls="btn-primary"), href=f"/edit_match/{match['id']}"),
                 Form(

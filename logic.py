@@ -431,12 +431,14 @@ def assign_positions(team, team_num):
 
 
 def allocate_match_teams(match_id):
-    """Allocate players into two balanced teams for a match"""
+    """Allocate players into teams for a match (supports 1 or 2 teams)"""
     from db import get_match, get_match_signup_players, create_match_team, get_match_teams, get_match_players, update_match_player
     
     match = get_match(match_id)
     if not match:
         return False, "Match not found"
+    
+    num_teams = match.get("num_teams", 2)
     
     # First, reset all allocated players back to available (set team_id to NULL)
     # This ensures we start fresh from all signup players
@@ -463,11 +465,66 @@ def allocate_match_teams(match_id):
             "gk_attrs": mp["gk_attrs"],
         })
     
-    if len(players) < 2:
-        return False, "Need at least 2 signup players"
+    if len(players) < 1:
+        return False, "Need at least 1 signup player"
     
-    # Get match teams
+    if num_teams == 1:
+        # Single team allocation - pick players with higher score first
+        return allocate_single_team(match_id, players, match)
+    else:
+        # Two team allocation - balanced teams
+        return allocate_two_teams(match_id, players, match, teams)
+
+
+def allocate_single_team(match_id, players, match):
+    """Allocate players to a single team, prioritizing higher scores"""
+    from db import get_match_teams, create_match_team
+    from logic import calculate_overall_score
+    
+    # Get or create team 1
     teams = get_match_teams(match_id)
+    team1 = next((t for t in teams if t["team_number"] == 1), None)
+    if team1:
+        team1_id = team1["id"]
+    else:
+        team1_id = create_match_team(match_id, 1, "Team 1", "Blue")
+    
+    if not team1_id:
+        return False, "Failed to create team"
+    
+    # Get max players per team from match
+    max_players_per_team = match.get("max_players_per_team")
+    
+    # Sort by overall rating (descending) - higher scores first
+    sorted_players = sorted(
+        players, key=lambda x: calculate_overall_score(x), reverse=True
+    )
+    
+    # Allocate starters (up to max_players_per_team)
+    starters = []
+    substitutes = []
+    
+    max_per_team = max_players_per_team if max_players_per_team else len(sorted_players)
+    
+    for i, player in enumerate(sorted_players):
+        if i < max_per_team:
+            starters.append(player)
+        else:
+            substitutes.append(player)
+    
+    # Assign positions for starters and substitutes
+    assign_match_positions_with_subs(starters, substitutes, team1_id, match_id)
+    
+    return True, "Team allocated"
+
+
+def allocate_two_teams(match_id, players, match, teams):
+    """Allocate players into two balanced teams for a match"""
+    from db import create_match_team, get_match_teams
+    from logic import calculate_overall_score
+    
+    if len(players) < 2:
+        return False, "Need at least 2 signup players for two teams"
     
     # If teams don't exist or are less than 2, create them
     if len(teams) < 2:
