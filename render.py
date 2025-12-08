@@ -99,9 +99,9 @@ def render_navbar():
     return Div(cls="navbar")(
         H1("⚽ Football Manager"),
         A("Home", href="/"),
-        A("Leagues", href="/leagues"),
         A("Matches", href="/matches"),
         A("Players", href="/players"),
+        A("Leagues", href="/leagues"),
     )
 
 
