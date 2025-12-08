@@ -27,6 +27,8 @@ from logic import (
     set_physical_score,
     set_gk_score,
     set_overall_score,
+    adjust_attributes_by_category_score,
+    adjust_category_attributes_by_single_attr,
 )
 from render import (
     render_navbar,
@@ -203,7 +205,7 @@ def route_update_player_name(player_id: int, name: str):
 
 
 @rt("/update_player_scores/{player_id}", methods=["POST"])
-def route_update_player_scores(player_id: int, **kwargs):
+async def route_update_player_scores(player_id: int, req: Request):
     """Update player category scores or overall score"""
     players = {p["id"]: p for p in get_all_players()}
     player = players.get(player_id)
@@ -212,10 +214,14 @@ def route_update_player_scores(player_id: int, **kwargs):
         return RedirectResponse(f"/player/{player_id}", status_code=303)
 
     try:
+        # Get form data
+        form = await req.form()
+        form_data = dict(form)
+        
         # Check which form was submitted
-        if "score_overall" in kwargs and kwargs["score_overall"]:
-            # Overall score form
-            overall_score = int(kwargs["score_overall"])
+        if "score_overall" in form_data and form_data["score_overall"]:
+            # Overall score form - set overall and redistribute all categories
+            overall_score = int(form_data["score_overall"])
             scores = set_overall_score(overall_score)
             update_player_attrs(
                 player_id,
@@ -224,19 +230,20 @@ def route_update_player_scores(player_id: int, **kwargs):
                 scores["physical"],
                 scores["gk"],
             )
-        elif any(k.startswith("score_") for k in kwargs.keys()):
-            # Category scores form
+        elif any(k.startswith("score_") for k in form_data.keys()):
+            # Category scores form - set attributes based on category scores
             tech_score = int(
-                kwargs.get("score_technical", calculate_technical_score(player))
+                form_data.get("score_technical", calculate_technical_score(player))
             )
             mental_score = int(
-                kwargs.get("score_mental", calculate_mental_score(player))
+                form_data.get("score_mental", calculate_mental_score(player))
             )
             phys_score = int(
-                kwargs.get("score_physical", calculate_physical_score(player))
+                form_data.get("score_physical", calculate_physical_score(player))
             )
-            gk_score = int(kwargs.get("score_gk", calculate_gk_score(player)))
+            gk_score = int(form_data.get("score_gk", calculate_gk_score(player)))
 
+            # Set attributes based on category scores (this will distribute attributes proportionally)
             tech_attrs = set_technical_score(tech_score)
             mental_attrs = set_mental_score(mental_score)
             phys_attrs = set_physical_score(phys_score)
@@ -247,6 +254,8 @@ def route_update_player_scores(player_id: int, **kwargs):
             )
     except (ValueError, TypeError, KeyError) as e:
         print(f"Error updating player scores: {e}")
+        import traceback
+        traceback.print_exc()
 
     return RedirectResponse(f"/player/{player_id}", status_code=303)
 
@@ -272,70 +281,122 @@ async def route_update_player(player_id: int, req: Request):
         traceback.print_exc()
         return RedirectResponse(f"/player/{player_id}", status_code=303)
     
-    # Extract attributes from form data, using current values as fallback
+    # Extract attributes from form data
     tech_attrs = {}
+    mental_attrs = {}
+    phys_attrs = {}
+    gk_attrs = {}
+    
+    # Track which attributes were changed
+    tech_changes = {}
+    mental_changes = {}
+    phys_changes = {}
+    gk_changes = {}
+    
+    # Parse technical attributes
     for k in TECHNICAL_ATTRS.keys():
         field_name = f"tech_{k}"
         value = form_data.get(field_name)
+        old_value = player["technical_attrs"].get(k, 10)
         if value is not None:
             value_str = str(value).strip()
             if value_str != "":
                 try:
-                    tech_attrs[k] = int(value_str)
+                    new_value = int(value_str)
+                    tech_attrs[k] = new_value
+                    if new_value != old_value:
+                        tech_changes[k] = (old_value, new_value)
                 except (ValueError, TypeError):
-                    tech_attrs[k] = player["technical_attrs"].get(k, 10)
+                    tech_attrs[k] = old_value
             else:
-                tech_attrs[k] = player["technical_attrs"].get(k, 10)
+                tech_attrs[k] = old_value
         else:
-            tech_attrs[k] = player["technical_attrs"].get(k, 10)
+            tech_attrs[k] = old_value
     
-    mental_attrs = {}
+    # Parse mental attributes
     for k in MENTAL_ATTRS.keys():
         field_name = f"mental_{k}"
         value = form_data.get(field_name)
+        old_value = player["mental_attrs"].get(k, 10)
         if value is not None:
             value_str = str(value).strip()
             if value_str != "":
                 try:
-                    mental_attrs[k] = int(value_str)
+                    new_value = int(value_str)
+                    mental_attrs[k] = new_value
+                    if new_value != old_value:
+                        mental_changes[k] = (old_value, new_value)
                 except (ValueError, TypeError):
-                    mental_attrs[k] = player["mental_attrs"].get(k, 10)
+                    mental_attrs[k] = old_value
             else:
-                mental_attrs[k] = player["mental_attrs"].get(k, 10)
+                mental_attrs[k] = old_value
         else:
-            mental_attrs[k] = player["mental_attrs"].get(k, 10)
+            mental_attrs[k] = old_value
     
-    phys_attrs = {}
+    # Parse physical attributes
     for k in PHYSICAL_ATTRS.keys():
         field_name = f"phys_{k}"
         value = form_data.get(field_name)
+        old_value = player["physical_attrs"].get(k, 10)
         if value is not None:
             value_str = str(value).strip()
             if value_str != "":
                 try:
-                    phys_attrs[k] = int(value_str)
+                    new_value = int(value_str)
+                    phys_attrs[k] = new_value
+                    if new_value != old_value:
+                        phys_changes[k] = (old_value, new_value)
                 except (ValueError, TypeError):
-                    phys_attrs[k] = player["physical_attrs"].get(k, 10)
+                    phys_attrs[k] = old_value
             else:
-                phys_attrs[k] = player["physical_attrs"].get(k, 10)
+                phys_attrs[k] = old_value
         else:
-            phys_attrs[k] = player["physical_attrs"].get(k, 10)
+            phys_attrs[k] = old_value
     
-    gk_attrs = {}
+    # Parse goalkeeper attributes
     for k in GK_ATTRS.keys():
         field_name = f"gk_{k}"
         value = form_data.get(field_name)
+        old_value = player["gk_attrs"].get(k, 10)
         if value is not None:
             value_str = str(value).strip()
             if value_str != "":
                 try:
-                    gk_attrs[k] = int(value_str)
+                    new_value = int(value_str)
+                    gk_attrs[k] = new_value
+                    if new_value != old_value:
+                        gk_changes[k] = (old_value, new_value)
                 except (ValueError, TypeError):
-                    gk_attrs[k] = player["gk_attrs"].get(k, 10)
+                    gk_attrs[k] = old_value
             else:
-                gk_attrs[k] = player["gk_attrs"].get(k, 10)
+                gk_attrs[k] = old_value
         else:
-            gk_attrs[k] = player["gk_attrs"].get(k, 10)
+            gk_attrs[k] = old_value
+    
+    # If only one attribute changed in a category, adjust others proportionally
+    if len(tech_changes) == 1:
+        changed_key, (old_val, new_val) = list(tech_changes.items())[0]
+        tech_attrs = adjust_category_attributes_by_single_attr(
+            tech_attrs, changed_key, new_val
+        )
+    
+    if len(mental_changes) == 1:
+        changed_key, (old_val, new_val) = list(mental_changes.items())[0]
+        mental_attrs = adjust_category_attributes_by_single_attr(
+            mental_attrs, changed_key, new_val
+        )
+    
+    if len(phys_changes) == 1:
+        changed_key, (old_val, new_val) = list(phys_changes.items())[0]
+        phys_attrs = adjust_category_attributes_by_single_attr(
+            phys_attrs, changed_key, new_val
+        )
+    
+    if len(gk_changes) == 1:
+        changed_key, (old_val, new_val) = list(gk_changes.items())[0]
+        gk_attrs = adjust_category_attributes_by_single_attr(
+            gk_attrs, changed_key, new_val
+        )
 
     all_attrs = (
         list(tech_attrs.values())
