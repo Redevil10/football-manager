@@ -1,6 +1,5 @@
 # main.py - Football Manager Application
 
-import os
 from fasthtml.common import *
 from fasthtml_hf import setup_hf_backup
 
@@ -57,6 +56,7 @@ from logic import (
     set_overall_score,
     adjust_category_attributes_by_single_attr,
 )
+from migrate_attributes import migrate_attributes
 from render import (
     render_navbar,
     render_player_table,
@@ -71,21 +71,28 @@ from render import (
     render_recent_matches,
 )
 from styles import STYLE
-from migrate_attributes import migrate_attributes
-
-init_db()
 
 # ============ ROUTES ============
 
 app, rt = fast_app()
 
 # Setup Hugging Face backup for persistent storage (only on Hugging Face Spaces)
-# Note: /data directory is already created by config.py and init_db()
+# Note: data directory is already created by config.py
 # This will restore the database from Hugging Face Dataset if available
-if os.environ.get("HF_SPACE_ID"):
+# IMPORTANT: setup_hf_backup must be called before init_db() so that the database
+# is restored first, then init_db() ensures the table structure exists
+if os.environ.get("HF_TOKEN"):
+    print("#########setup_hf_backup#######")
     setup_hf_backup(app)
+else:
+    print("========DO NOT run setup_hf_backup=======")
 
-# Run attribute migration on startup (after database restore)
+
+# Initialize database (after restore if on HF Spaces)
+# This ensures table structure exists (CREATE TABLE IF NOT EXISTS)
+init_db()
+
+# Run attribute migration on startup (after database restore and init)
 # This ensures migrated data is not overwritten by restore
 try:
     migrate_attributes()
@@ -235,29 +242,43 @@ async def route_add_player(req: Request):
     try:
         form = await req.form()
         name = form.get("name", "").strip()
-        
+
         if not name:
             from urllib.parse import quote
-            return RedirectResponse(f"/players?error={quote('Player name cannot be empty')}", status_code=303)
-        
+
+            return RedirectResponse(
+                f"/players?error={quote('Player name cannot be empty')}",
+                status_code=303,
+            )
+
         # Check if name matches an existing player's name or alias
         existing_player = find_player_by_name_or_alias(name)
         if existing_player:
             from urllib.parse import quote
-            if existing_player.get("alias") == name and existing_player.get("name") != name:
+
+            if (
+                existing_player.get("alias") == name
+                and existing_player.get("name") != name
+            ):
                 error_msg = f"Name '{name}' matches an existing player's alias (Player: {existing_player.get('name')})"
             else:
                 error_msg = f"Player name '{name}' already exists"
-            return RedirectResponse(f"/players?error={quote(error_msg)}", status_code=303)
-        
+            return RedirectResponse(
+                f"/players?error={quote(error_msg)}", status_code=303
+            )
+
         add_player(name)
         return RedirectResponse("/players", status_code=303)
     except Exception as e:
         print(f"Error adding player: {e}", flush=True)
         import traceback
+
         traceback.print_exc()
         from urllib.parse import quote
-        return RedirectResponse(f"/players?error={quote(f'Error adding player: {str(e)}')}", status_code=303)
+
+        return RedirectResponse(
+            f"/players?error={quote(f'Error adding player: {str(e)}')}", status_code=303
+        )
 
 
 @rt("/update_player_name/{player_id}", methods=["POST"])
@@ -272,6 +293,7 @@ async def route_update_player_name(player_id: int, req: Request):
     except Exception as e:
         print(f"Error updating name/alias: {e}", flush=True)
         import traceback
+
         traceback.print_exc()
     return RedirectResponse(f"/player/{player_id}", status_code=303)
 
@@ -283,10 +305,13 @@ async def route_update_player_height_weight(player_id: int, req: Request):
         form = await req.form()
         height = form.get("height", "").strip()
         weight = form.get("weight", "").strip()
-        update_player_height_weight(player_id, height if height else None, weight if weight else None)
+        update_player_height_weight(
+            player_id, height if height else None, weight if weight else None
+        )
     except Exception as e:
         print(f"Error updating height/weight: {e}", flush=True)
         import traceback
+
         traceback.print_exc()
     return RedirectResponse(f"/player/{player_id}", status_code=303)
 

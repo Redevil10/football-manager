@@ -2,17 +2,9 @@
 
 import os
 
-# Use /data for persistent storage on Hugging Face Spaces
-# Hugging Face Spaces automatically mounts /data as persistent storage
-# Check for HF_SPACE_ID environment variable to detect Hugging Face Spaces
-if os.environ.get("HF_SPACE_ID") or os.path.exists("/data"):
-    # Ensure /data directory exists
-    os.makedirs("/data", exist_ok=True)
-    DB_PATH = "/data/football_manager.db"
-else:
-    # Fall back to /tmp/data for local development
-    os.makedirs("/tmp/data", exist_ok=True)
-    DB_PATH = "/tmp/data/football_manager.db"
+
+os.makedirs("data", exist_ok=True)
+DB_PATH = "data/football_manager.db"
 
 # Technical Attributes (ordered as in screenshot)
 TECHNICAL_ATTRS = {
@@ -73,7 +65,10 @@ GK_ATTRS = {
 
 # Scoring ranges
 SCORE_RANGES = {
-    "overall": (10, 200),  # 综合总分 (min when all attributes=1: (1*5*3 + 1*5*2 + 1*5*3 + 1*5*2)/5 = 10)
+    "overall": (
+        10,
+        200,
+    ),  # 综合总分 (min when all attributes=1: (1*5*3 + 1*5*2 + 1*5*3 + 1*5*2)/5 = 10)
     "technical": (5, 100),  # 进攻和防守 (min when all attributes=1: 1*5 = 5)
     "mental": (5, 100),  # 精神 (min when all attributes=1: 1*5 = 5)
     "physical": (5, 100),  # 身体 (min when all attributes=1: 1*5 = 5)
@@ -82,8 +77,12 @@ SCORE_RANGES = {
 }
 
 # Score calculation constants
-ATTRIBUTE_TO_CATEGORY_SCALE = 5  # Scale factor: 1-20 attribute to 1-100 category (20 * 5 = 100)
-CATEGORY_TO_ATTRIBUTE_SCALE = 5  # Scale factor: 1-100 category to 1-20 attribute (100 / 5 = 20)
+ATTRIBUTE_TO_CATEGORY_SCALE = (
+    5  # Scale factor: 1-20 attribute to 1-100 category (20 * 5 = 100)
+)
+CATEGORY_TO_ATTRIBUTE_SCALE = (
+    5  # Scale factor: 1-100 category to 1-20 attribute (100 / 5 = 20)
+)
 
 # Overall score calculation weights
 OVERALL_SCORE_WEIGHTS = {
