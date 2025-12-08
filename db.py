@@ -18,6 +18,9 @@ def init_db():
         """CREATE TABLE IF NOT EXISTS players
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   name TEXT NOT NULL UNIQUE,
+                  alias TEXT,
+                  height INTEGER,
+                  weight INTEGER,
                   position_pref TEXT,
                   team INTEGER,
                   position TEXT,
@@ -29,24 +32,7 @@ def init_db():
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY (league_id) REFERENCES leagues(id))"""
     )
-    
-    # Add league_id column if it doesn't exist (for existing databases)
-    try:
-        c.execute("ALTER TABLE players ADD COLUMN league_id INTEGER")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    
-    # Add height and weight columns if they don't exist (for existing databases)
-    try:
-        c.execute("ALTER TABLE players ADD COLUMN height INTEGER")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    
-    try:
-        c.execute("ALTER TABLE players ADD COLUMN weight INTEGER")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    
+
     # Add alias column if it doesn't exist (for existing databases)
     try:
         c.execute("ALTER TABLE players ADD COLUMN alias TEXT")
@@ -76,17 +62,6 @@ def init_db():
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY (league_id) REFERENCES leagues(id))"""
     )
-    
-    # Add new columns if they don't exist (for existing databases)
-    try:
-        c.execute("ALTER TABLE matches ADD COLUMN start_time TEXT")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    
-    try:
-        c.execute("ALTER TABLE matches ADD COLUMN end_time TEXT")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
 
     # Match teams table
     c.execute(
@@ -191,8 +166,7 @@ def find_player_by_name_or_alias(name):
     """Find player by name or alias"""
     conn = get_db()
     player = conn.execute(
-        "SELECT * FROM players WHERE name = ? OR alias = ?",
-        (name, name)
+        "SELECT * FROM players WHERE name = ? OR alias = ?", (name, name)
     ).fetchone()
     conn.close()
     if player:
@@ -265,7 +239,10 @@ def update_player_name(player_id, name, alias=None):
     """Update player name and alias"""
     conn = get_db()
     try:
-        conn.execute("UPDATE players SET name = ?, alias = ? WHERE id = ?", (name, alias, player_id))
+        conn.execute(
+            "UPDATE players SET name = ?, alias = ? WHERE id = ?",
+            (name, alias, player_id),
+        )
         conn.commit()
     except sqlite3.IntegrityError:
         print(f"Player {name} already exists")
@@ -281,7 +258,7 @@ def update_player_height_weight(player_id, height=None, weight=None):
     weight = int(weight) if weight and str(weight).strip() else None
     conn.execute(
         "UPDATE players SET height = ?, weight = ? WHERE id = ?",
-        (height, weight, player_id)
+        (height, weight, player_id),
     )
     conn.commit()
     conn.close()
@@ -385,7 +362,7 @@ def get_or_create_friendly_league():
     if league:
         conn.close()
         return dict(league)["id"]
-    
+
     # Create Friendly league if it doesn't exist
     cursor = conn.execute(
         "INSERT INTO leagues (name, description) VALUES (?, ?)",
@@ -483,11 +460,11 @@ def get_next_match():
 def get_last_completed_match():
     """Get the last completed match (past match, not upcoming)"""
     from datetime import datetime, date
-    
+
     conn = get_db()
     today = date.today().isoformat()
     now = datetime.now().strftime("%H:%M:%S")
-    
+
     # Get matches that are in the past (date < today, or date = today but start_time < now)
     match = conn.execute(
         """SELECT m.*, l.name as league_name
@@ -517,7 +494,9 @@ def get_recent_matches(limit=5):
     # If there's only one match, return empty list (it's the next match)
     if len(matches_list) <= 1:
         return []
-    return matches_list[1:limit+1]  # Return up to limit matches, excluding the first
+    return matches_list[
+        1 : limit + 1
+    ]  # Return up to limit matches, excluding the first
 
 
 def get_match(match_id):
@@ -528,12 +507,28 @@ def get_match(match_id):
     return dict(match) if match else None
 
 
-def create_match(league_id, date, start_time, end_time, location, num_teams=2, max_players_per_team=None):
+def create_match(
+    league_id,
+    date,
+    start_time,
+    end_time,
+    location,
+    num_teams=2,
+    max_players_per_team=None,
+):
     """Create a new match"""
     conn = get_db()
     cursor = conn.execute(
         "INSERT INTO matches (league_id, date, start_time, end_time, location, num_teams, max_players_per_team) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (league_id, date, start_time, end_time, location, num_teams, max_players_per_team),
+        (
+            league_id,
+            date,
+            start_time,
+            end_time,
+            location,
+            num_teams,
+            max_players_per_team,
+        ),
     )
     match_id = cursor.lastrowid
     conn.commit()
@@ -541,12 +536,30 @@ def create_match(league_id, date, start_time, end_time, location, num_teams=2, m
     return match_id
 
 
-def update_match(match_id, league_id, date, start_time, end_time, location, num_teams, max_players_per_team):
+def update_match(
+    match_id,
+    league_id,
+    date,
+    start_time,
+    end_time,
+    location,
+    num_teams,
+    max_players_per_team,
+):
     """Update a match"""
     conn = get_db()
     conn.execute(
         "UPDATE matches SET league_id = ?, date = ?, start_time = ?, end_time = ?, location = ?, num_teams = ?, max_players_per_team = ? WHERE id = ?",
-        (league_id, date, start_time, end_time, location, num_teams, max_players_per_team, match_id),
+        (
+            league_id,
+            date,
+            start_time,
+            end_time,
+            location,
+            num_teams,
+            max_players_per_team,
+            match_id,
+        ),
     )
     conn.commit()
     conn.close()
@@ -595,7 +608,7 @@ def create_match_team(match_id, team_number, team_name, jersey_color):
             (match_id, team_number, team_name, jersey_color, team_name, jersey_color),
         )
         conn.commit()
-        
+
         # After INSERT or UPDATE, get the team_id
         # If it was an INSERT, lastrowid will have the new ID
         # If it was an UPDATE (ON CONFLICT), we need to query for the existing ID
@@ -604,16 +617,17 @@ def create_match_team(match_id, team_number, team_name, jersey_color):
             # ON CONFLICT was triggered, query for existing team_id
             result = conn.execute(
                 "SELECT id FROM match_teams WHERE match_id = ? AND team_number = ?",
-                (match_id, team_number)
+                (match_id, team_number),
             ).fetchone()
             if result:
                 team_id = result[0]
-        
+
         conn.close()
         return team_id
     except Exception as e:
         print(f"Error creating match team: {e}")
         import traceback
+
         traceback.print_exc()
         conn.close()
         return None
@@ -669,7 +683,7 @@ def get_match_players(match_id, team_id=None):
             (match_id,),
         ).fetchall()
     conn.close()
-    
+
     result = []
     for p in players:
         player_dict = dict(p)
@@ -693,7 +707,7 @@ def get_match_signup_players(match_id):
         (match_id,),
     ).fetchall()
     conn.close()
-    
+
     result = []
     for p in players:
         player_dict = dict(p)
@@ -716,15 +730,22 @@ def add_match_player(match_id, player_id, team_id=None, position=None, is_starte
         match_player_id = cursor.lastrowid
         conn.commit()
         conn.close()
-        print(f"Successfully added player {player_id} to match {match_id}, match_player_id={match_player_id}", flush=True)
+        print(
+            f"Successfully added player {player_id} to match {match_id}, match_player_id={match_player_id}",
+            flush=True,
+        )
         return match_player_id
     except sqlite3.IntegrityError as e:
-        print(f"IntegrityError adding player {player_id} to match {match_id}: {e}", flush=True)
+        print(
+            f"IntegrityError adding player {player_id} to match {match_id}: {e}",
+            flush=True,
+        )
         conn.close()
         return None
     except Exception as e:
         print(f"Error adding player {player_id} to match {match_id}: {e}", flush=True)
         import traceback
+
         traceback.print_exc()
         conn.close()
         return None
@@ -733,9 +754,12 @@ def add_match_player(match_id, player_id, team_id=None, position=None, is_starte
 # Sentinel object to distinguish between "not provided" and "set to NULL"
 _UNSET = object()
 
-def update_match_player(match_player_id, team_id=_UNSET, position=_UNSET, is_starter=_UNSET, rating=_UNSET):
+
+def update_match_player(
+    match_player_id, team_id=_UNSET, position=_UNSET, is_starter=_UNSET, rating=_UNSET
+):
     """Update a match player
-    
+
     Args:
         match_player_id: ID of the match_player record
         team_id: Team ID to assign. Pass None to set to NULL (unassign from team), or omit to leave unchanged.
@@ -746,7 +770,7 @@ def update_match_player(match_player_id, team_id=_UNSET, position=_UNSET, is_sta
     conn = get_db()
     updates = []
     values = []
-    
+
     # Handle team_id - _UNSET means "not provided", None means "set to NULL"
     if team_id is not _UNSET:
         if team_id is None:
@@ -754,7 +778,7 @@ def update_match_player(match_player_id, team_id=_UNSET, position=_UNSET, is_sta
         else:
             updates.append("team_id = ?")
             values.append(team_id)
-    
+
     # Handle position
     if position is not _UNSET:
         if position is None:
@@ -762,24 +786,24 @@ def update_match_player(match_player_id, team_id=_UNSET, position=_UNSET, is_sta
         else:
             updates.append("position = ?")
             values.append(position)
-    
+
     # Handle is_starter
     if is_starter is not _UNSET:
         updates.append("is_starter = ?")
         values.append(is_starter)
-    
+
     # Handle rating
     if rating is not _UNSET:
         updates.append("rating = ?")
         values.append(rating)
-    
+
     if updates:
         values.append(match_player_id)
         # Build SQL with proper handling of NULL values
         sql_updates = []
         sql_values = []
         for update in updates:
-            if 'NULL' in update:
+            if "NULL" in update:
                 sql_updates.append(update)
             else:
                 sql_updates.append(update)
@@ -820,7 +844,9 @@ def get_match_events(match_id):
     return [dict(event) for event in events]
 
 
-def add_match_event(match_id, event_type, player_id=None, team_id=None, minute=None, description=""):
+def add_match_event(
+    match_id, event_type, player_id=None, team_id=None, minute=None, description=""
+):
     """Add an event to a match (goal, assist, etc.)"""
     conn = get_db()
     cursor = conn.execute(
@@ -848,10 +874,12 @@ def swap_match_players(match_player1_id, match_player2_id):
 
     # Get both match players
     p1 = c.execute(
-        "SELECT team_id, position, is_starter FROM match_players WHERE id = ?", (match_player1_id,)
+        "SELECT team_id, position, is_starter FROM match_players WHERE id = ?",
+        (match_player1_id,),
     ).fetchone()
     p2 = c.execute(
-        "SELECT team_id, position, is_starter FROM match_players WHERE id = ?", (match_player2_id,)
+        "SELECT team_id, position, is_starter FROM match_players WHERE id = ?",
+        (match_player2_id,),
     ).fetchone()
 
     if p1 and p2:
