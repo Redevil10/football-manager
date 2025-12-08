@@ -14,41 +14,52 @@ else:
     os.makedirs("/tmp/data", exist_ok=True)
     DB_PATH = "/tmp/data/football_manager.db"
 
-# Technical Attributes
+# Technical Attributes (ordered as in screenshot)
 TECHNICAL_ATTRS = {
-    "pace": "Pace",
-    "shooting": "Shooting",
-    "passing": "Passing",
+    "corners": "Corners",
+    "crossing": "Crossing",
     "dribbling": "Dribbling",
-    "tackling": "Tackling",
-    "heading": "Heading",
-    "first_touch": "First Touch",
     "finishing": "Finishing",
-    "technique": "Technique",
+    "first_touch": "First Touch",
+    "free_kick_taking": "Free Kick Taking",
+    "heading": "Heading",
     "long_shots": "Long Shots",
+    "long_throws": "Long Throws",
+    "marking": "Marking",
+    "passing": "Passing",
+    "penalty_taking": "Penalty Taking",
+    "tackling": "Tackling",
+    "technique": "Technique",
 }
 
-# Mental Attributes
+# Mental Attributes (ordered as in screenshot)
 MENTAL_ATTRS = {
-    "decisions": "Decisions",
     "aggression": "Aggression",
-    "teamwork": "Teamwork",
-    "work_rate": "Work Rate",
     "anticipation": "Anticipation",
+    "bravery": "Bravery",
     "composure": "Composure",
-    "vision": "Vision",
+    "concentration": "Concentration",
+    "decisions": "Decisions",
+    "determination": "Determination",
     "flair": "Flair",
+    "leadership": "Leadership",
+    "off_the_ball": "Off The Ball",
     "positioning": "Positioning",
+    "teamwork": "Teamwork",
+    "vision": "Vision",
+    "work_rate": "Work Rate",
 }
 
-# Physical Attributes
+# Physical Attributes (ordered as in screenshot)
 PHYSICAL_ATTRS = {
-    "strength": "Strength",
-    "stamina": "Stamina",
     "acceleration": "Acceleration",
-    "jumping_reach": "Jumping Reach",
     "agility": "Agility",
     "balance": "Balance",
+    "jumping_reach": "Jumping Reach",
+    "natural_fitness": "Natural Fitness",
+    "pace": "Pace",
+    "stamina": "Stamina",
+    "strength": "Strength",
 }
 
 # Goalkeeper Attributes
