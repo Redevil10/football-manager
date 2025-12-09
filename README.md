@@ -37,27 +37,6 @@ A comprehensive web application for managing amateur football team rosters, allo
 
 **Requirements**: Python 3.13+
 
-1. **Clone the repository**
-```bash
-git clone <your-repo-url>
-cd football-manager
-```
-
-2. **Install dependencies**
-```bash
-pip install -r requirements.txt
-```
-
-3. **Run the app**
-```bash
-python main.py
-```
-
-4. **Open in browser**
-```
-http://localhost:7860
-```
-
 ### Using uv (recommended)
 
 ```bash
