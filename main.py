@@ -2218,22 +2218,24 @@ async def route_import_match_players(match_id: int, req: Request):
         player_names = parse_signup_text(signup_text)
         print(f"Parsed {len(player_names)} player names from signup text")
 
-        # Get all players and find matching ones (after import)
-        all_players = get_all_players()
-        player_dict = {p["name"]: p for p in all_players}
-
         # Add signup players to match_players (team_id = NULL means signed up but not allocated)
+        # Use find_player_by_name_or_alias to support both name and alias matching
         added_count = 0
         existing = get_match_players(match_id)
         for name in player_names:
-            if name in player_dict:
-                player_id = player_dict[name]["id"]
+            # Find player by name or alias (supports automatic alias recognition)
+            player = find_player_by_name_or_alias(name)
+            if player:
+                player_id = player["id"]
                 if not any(p["player_id"] == player_id for p in existing):
                     result = add_match_player(
                         match_id, player_id, team_id=None, position=None, is_starter=0
                     )
                     if result:
                         added_count += 1
+                        # Log if alias was used for matching
+                        if player.get("alias") == name and player.get("name") != name:
+                            print(f"Matched alias '{name}' to player '{player.get('name')}'")
 
     return RedirectResponse(f"/match/{match_id}", status_code=303)
 
