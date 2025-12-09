@@ -324,9 +324,13 @@ def register_match_routes(rt, STYLE):
                                     cls="btn-success",
                                     id="create_match_btn",
                                 ),
-                                A(
-                                    Button("Cancel", cls="btn-secondary"),
-                                    href="/matches",
+                                Button(
+                                    "Cancel",
+                                    type="button",
+                                    cls="btn-secondary",
+                                    **{
+                                        "onclick": "window.location.href='/matches'; return false;"
+                                    },
                                 ),
                             ),
                             **{
@@ -1156,9 +1160,13 @@ def register_match_routes(rt, STYLE):
                                 Button(
                                     "Save Changes", type="submit", cls="btn-success"
                                 ),
-                                A(
-                                    Button("Cancel", cls="btn-secondary"),
-                                    href=f"/match/{match_id}",
+                                Button(
+                                    "Cancel",
+                                    type="button",
+                                    cls="btn-secondary",
+                                    **{
+                                        "onclick": f"window.location.href='/match/{match_id}'; return false;"
+                                    },
                                 ),
                             ),
                             method="post",
@@ -1360,9 +1368,13 @@ def register_match_routes(rt, STYLE):
                                 Button(
                                     "Save Changes", type="submit", cls="btn-success"
                                 ),
-                                A(
-                                    Button("Cancel", cls="btn-secondary"),
-                                    href=f"/match/{match_id}",
+                                Button(
+                                    "Cancel",
+                                    type="button",
+                                    cls="btn-secondary",
+                                    **{
+                                        "onclick": f"window.location.href='/match/{match_id}'; return false;"
+                                    },
                                 ),
                             ),
                             method="post",
@@ -1417,9 +1429,13 @@ def register_match_routes(rt, STYLE):
                                         type="submit",
                                         cls="btn-primary",
                                     ),
-                                    A(
-                                        Button("Cancel", cls="btn-secondary"),
-                                        href=f"/match/{match_id}",
+                                    Button(
+                                        "Cancel",
+                                        type="button",
+                                        cls="btn-secondary",
+                                        **{
+                                            "onclick": f"window.location.href='/match/{match_id}'; return false;"
+                                        },
                                     ),
                                 ),
                                 method="post",
@@ -1667,9 +1683,13 @@ def register_match_routes(rt, STYLE):
                             ),
                             Div(cls="btn-group")(
                                 Button("Add Event", type="submit", cls="btn-success"),
-                                A(
-                                    Button("Cancel", cls="btn-secondary"),
-                                    href=f"/match/{match_id}",
+                                Button(
+                                    "Cancel",
+                                    type="button",
+                                    cls="btn-secondary",
+                                    **{
+                                        "onclick": f"window.location.href='/match/{match_id}'; return false;"
+                                    },
                                 ),
                             ),
                             **{
@@ -1692,9 +1712,22 @@ def register_match_routes(rt, STYLE):
         minute = form.get("minute", "").strip()
         description = form.get("description", "").strip()
 
-        player_id_val = int(player_id) if player_id else None
-        team_id_val = int(team_id) if team_id else None
-        minute_val = int(minute) if minute else None
+        # Validate required field - if event_type is empty, just redirect (likely a cancel or invalid submission)
+        if not event_type:
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
+        # Convert to int, handling empty strings and "None" string
+        def safe_int(value):
+            if not value or value.lower() == "none":
+                return None
+            try:
+                return int(value)
+            except ValueError:
+                return None
+
+        player_id_val = safe_int(player_id)
+        team_id_val = safe_int(team_id)
+        minute_val = safe_int(minute)
 
         add_match_event(
             match_id, event_type, player_id_val, team_id_val, minute_val, description
@@ -1753,9 +1786,13 @@ def register_match_routes(rt, STYLE):
                                 Button(
                                     "Import Players", type="submit", cls="btn-success"
                                 ),
-                                A(
-                                    Button("Cancel", cls="btn-secondary"),
-                                    href=f"/match/{match_id}",
+                                Button(
+                                    "Cancel",
+                                    type="button",
+                                    cls="btn-secondary",
+                                    **{
+                                        "onclick": f"window.location.href='/match/{match_id}'; return false;"
+                                    },
                                 ),
                             ),
                             **{
@@ -1890,9 +1927,13 @@ def register_match_routes(rt, STYLE):
                             ),
                             Div(cls="btn-group")(
                                 Button("Add Player", type="submit", cls="btn-success"),
-                                A(
-                                    Button("Cancel", cls="btn-secondary"),
-                                    href=f"/match/{match_id}",
+                                Button(
+                                    "Cancel",
+                                    type="button",
+                                    cls="btn-secondary",
+                                    **{
+                                        "onclick": f"window.location.href='/match/{match_id}'; return false;"
+                                    },
                                 ),
                             ),
                             **{
