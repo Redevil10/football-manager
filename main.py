@@ -27,6 +27,7 @@ from db import (
     update_match,
     delete_match,
     get_last_match_by_league,
+    get_next_matches_by_all_leagues,
     get_or_create_friendly_league,
     get_match_teams,
     create_match_team,
@@ -68,6 +69,7 @@ from render import (
     render_all_matches,
     render_match_detail,
     render_next_match,
+    render_next_matches_by_league,
     render_recent_matches,
 )
 from styles import STYLE
@@ -104,26 +106,33 @@ except Exception as e:
 def home():
     """Home page"""
     from db import (
-        get_next_match,
         get_recent_matches,
         get_match_teams,
         get_match_players,
     )
 
-    # Get next match (most recent match)
-    next_match = get_next_match()
+    # Get next match for each league
+    next_matches_by_league = get_next_matches_by_all_leagues()
 
-    # Get recent matches (excluding the next match)
+    # Get teams and players for each next match
+    next_matches_data = {}
+    for league_id, data in next_matches_by_league.items():
+        match = data["match"]
+        match_id = match["id"]
+        teams = get_match_teams(match_id)
+        match_players_dict = {}
+        for team in teams:
+            team_players = get_match_players(match_id, team["id"])
+            match_players_dict[team["id"]] = team_players
+        next_matches_data[league_id] = {
+            "league": data["league"],
+            "match": match,
+            "teams": teams,
+            "match_players_dict": match_players_dict,
+        }
+
+    # Get recent matches (excluding the next matches)
     recent_matches = get_recent_matches(limit=5)
-
-    # Get teams and players for next match if it exists
-    next_match_teams = []
-    next_match_players_dict = {}
-    if next_match:
-        next_match_teams = get_match_teams(next_match["id"])
-        for team in next_match_teams:
-            team_players = get_match_players(next_match["id"], team["id"])
-            next_match_players_dict[team["id"]] = team_players
 
     return Html(
         Head(
@@ -134,9 +143,7 @@ def home():
         Body(
             render_navbar(),
             Div(cls="container")(
-                render_next_match(
-                    next_match, next_match_teams, next_match_players_dict
-                ),
+                render_next_matches_by_league(next_matches_data),
                 render_recent_matches(recent_matches),
             ),
         ),
