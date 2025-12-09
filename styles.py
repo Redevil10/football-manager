@@ -291,6 +291,24 @@ button:hover { background: #0052a3; }
     border: 2px dashed #0066cc;
 }
 
+.captain-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #000;
+    background: #ffd700;
+    color: #000;
+    font-weight: bold;
+    font-size: 12px;
+    line-height: 1;
+    margin-left: 5px;
+    flex-shrink: 0;
+    padding: 0;
+}
+
 @media (max-width: 900px) {
     .navbar {
         flex-direction: column;
