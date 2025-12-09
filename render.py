@@ -953,13 +953,18 @@ def render_match_teams(match_id, teams, match_players_dict, is_completed=False, 
     team1_players = match_players_dict.get(team1["id"], []) if team1 else []
     team2_players = match_players_dict.get(team2["id"], []) if team2 else []
     
-    def render_team(team, team_players, team_num):
+    def render_team(team, team_players, team_num, team_data=None):
         positions_order = ["Goalkeeper", "Defender", "Midfielder", "Forward"]
         starters_grouped = {pos: [] for pos in positions_order}
         
         # Separate starters and substitutes
         starters = [p for p in team_players if p.get("is_starter", 0) == 1]
         substitutes = [p for p in team_players if p.get("is_starter", 0) == 0]
+        
+        # Get captain_id from team_data
+        captain_id = None
+        if team_data:
+            captain_id = team_data.get("captain_id")
         
         for player in starters:
             pos = player.get("position")
@@ -986,12 +991,22 @@ def render_match_teams(match_id, teams, match_players_dict, is_completed=False, 
                 for player in players_in_pos:
                     player_overall = calculate_overall_score(player)
                     match_player_id = player.get("id")  # This is the match_players.id, not players.id
+                    is_captain = (captain_id == match_player_id)
                     
                     # Format player name with or without score
                     if show_scores:
-                        player_display = f"{player['name']} ({player_overall})"
+                        player_name_text = f"{player['name']} ({player_overall})"
                     else:
-                        player_display = player['name']
+                        player_name_text = player['name']
+                    
+                    # Create player display with optional captain badge
+                    if is_captain:
+                        player_display = Span(style="display: inline-flex; align-items: center;")(
+                            player_name_text,
+                            Span("C", cls="captain-badge")
+                        )
+                    else:
+                        player_display = player_name_text
                     
                     # Only add drag-and-drop attributes if match is not completed
                     if is_completed:
@@ -1027,12 +1042,22 @@ def render_match_teams(match_id, teams, match_players_dict, is_completed=False, 
             for player in substitutes:
                 player_overall = calculate_overall_score(player)
                 match_player_id = player.get("id")  # This is the match_players.id, not players.id
+                is_captain = (captain_id == match_player_id)
                 
                 # Format player name with or without score
                 if show_scores:
-                    player_display = f"{player['name']} ({player_overall})"
+                    player_name_text = f"{player['name']} ({player_overall})"
                 else:
-                    player_display = player['name']
+                    player_name_text = player['name']
+                
+                # Create player display with optional captain badge
+                if is_captain:
+                    player_display = Span(style="display: inline-flex; align-items: center;")(
+                        player_name_text,
+                        Span("C", cls="captain-badge")
+                    )
+                else:
+                    player_display = player_name_text
                 
                 # Only add drag-and-drop attributes if match is not completed
                 if is_completed:
@@ -1085,11 +1110,63 @@ def render_match_teams(match_id, teams, match_players_dict, is_completed=False, 
     
     return Div(cls="container-white")(
         Div(cls="teams-grid")(
-            render_team(team1, team1_players, 1) if team1 else Div(),
-            render_team(team2, team2_players, 2) if team2 else Div(),
+            render_team(team1, team1_players, 1, teams[0] if teams and len(teams) > 0 else None) if team1 else Div(),
+            render_team(team2, team2_players, 2, teams[1] if teams and len(teams) > 1 else None) if team2 else Div(),
         ),
         Script(script_content) if script_content else "",
     )
+
+
+def render_captain_selection(match_id, teams, match_players_dict, is_completed=False):
+    """Render captain selection UI for each team"""
+    if is_completed or not teams:
+        return []
+    
+    content = []
+    for team in teams:
+        team_players = match_players_dict.get(team["id"], [])
+        if not team_players:
+            continue
+        
+        current_captain_id = team.get("captain_id")
+        team_name = team.get('team_name', f'Team {team.get("team_number", "?")}')
+        
+        # Create options for captain selection
+        options = [Option("-- 选择队长 --", value="", selected=(not current_captain_id))]
+        for player in team_players:
+            match_player_id = player.get("id")  # This is match_players.id
+            player_name = player.get("name", "Unknown")
+            is_selected = (current_captain_id == match_player_id)
+            options.append(
+                Option(player_name, value=str(match_player_id), selected=is_selected)
+            )
+        
+        content.append(
+            Div(cls="container-white", style="margin-top: 15px;")(
+                H4(f"{team_name} - 选择队长", style="margin-bottom: 10px;"),
+                Form(
+                    method="POST",
+                    action=f"/set_captain/{match_id}/{team['id']}",
+                    **{
+                        "hx-post": f"/set_captain/{match_id}/{team['id']}",
+                        "hx-target": "#match-content",
+                        "hx-swap": "innerHTML",
+                    },
+                    style="display: flex; align-items: center; gap: 10px;",
+                )(
+                    Select(
+                        *options,
+                        name="captain_id",
+                        style="flex: 1; padding: 8px;",
+                        **{
+                            "onchange": "this.form.requestSubmit()",
+                        },
+                    ),
+                ),
+            ),
+        )
+    
+    return content
 
 
 def render_match_detail(match, teams, match_players_dict, events, all_players=None, match_player_ids=None, signup_players=None):
@@ -1175,6 +1252,8 @@ def render_match_detail(match, teams, match_players_dict, events, all_players=No
                     ),
                 ),
                 Div(id="match-teams-result")(render_match_teams(match['id'], teams, match_players_dict, is_completed=False)),
+                # Captain selection for each team
+                *render_captain_selection(match['id'], teams, match_players_dict, is_completed=False),
             ),
         )
     

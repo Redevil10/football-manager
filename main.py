@@ -32,6 +32,7 @@ from db import (
     get_match_teams,
     create_match_team,
     update_match_team,
+    update_team_captain,
     get_match_players,
     get_match_signup_players,
     add_match_player,
@@ -1968,6 +1969,58 @@ async def route_update_match_team(match_id: int, team_id: int, req: Request):
                 )
 
     return RedirectResponse(f"/match/{match_id}", status_code=303)
+
+
+@rt("/set_captain/{match_id}/{team_id}", methods=["POST"])
+async def route_set_captain(match_id: int, team_id: int, req: Request):
+    """Set team captain"""
+    form = await req.form()
+    captain_id_str = form.get("captain_id", "").strip()
+    
+    captain_id = int(captain_id_str) if captain_id_str else None
+    
+    # Update team captain
+    update_team_captain(team_id, captain_id)
+    
+    # Get updated match data and return full match detail view
+    match = get_match(match_id)
+    if not match:
+        return RedirectResponse("/matches", status_code=303)
+    
+    teams = get_match_teams(match_id)
+    events = get_match_events(match_id)
+    
+    # Get players grouped by team
+    match_players_dict = {}
+    match_player_ids = set()
+    for team in teams:
+        team_players = get_match_players(match_id, team["id"])
+        match_players_dict[team["id"]] = team_players
+        for player in team_players:
+            match_player_ids.add(player.get("player_id"))
+    
+    # Get signup players
+    signup_players = get_match_signup_players(match_id)
+    available_signup_players = [
+        mp for mp in signup_players if mp["player_id"] not in match_player_ids
+    ]
+    
+    available_players_list = []
+    for mp in available_signup_players:
+        available_players_list.append(
+            {
+                "id": mp["player_id"],
+                "name": mp["name"],
+                "technical_attrs": mp["technical_attrs"],
+                "mental_attrs": mp["mental_attrs"],
+                "physical_attrs": mp["physical_attrs"],
+                "gk_attrs": mp["gk_attrs"],
+            }
+        )
+    
+    from render import render_match_detail
+    
+    return render_match_detail(match, teams, match_players_dict, events, available_players_list, match_player_ids, signup_players)
 
 
 @rt("/add_match_players/{match_id}/{team_id}", methods=["POST"])

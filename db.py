@@ -72,9 +72,19 @@ def init_db():
                   team_name TEXT,
                   jersey_color TEXT,
                   score INTEGER DEFAULT 0,
+                  captain_id INTEGER,
                   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
+                  FOREIGN KEY (captain_id) REFERENCES match_players(id),
                   UNIQUE(match_id, team_number))"""
     )
+    
+    # Add captain_id column if it doesn't exist (for existing databases)
+    try:
+        c.execute("ALTER TABLE match_teams ADD COLUMN captain_id INTEGER")
+        c.execute("""CREATE INDEX IF NOT EXISTS idx_match_teams_captain 
+                     ON match_teams(captain_id)""")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     # Match players table (players in a specific match)
     c.execute(
@@ -681,19 +691,42 @@ def create_match_team(match_id, team_number, team_name, jersey_color):
         return None
 
 
-def update_match_team(team_id, team_name, jersey_color, score=None):
+def update_match_team(team_id, team_name, jersey_color, score=None, captain_id=None):
     """Update a match team"""
     conn = get_db()
     if score is not None:
-        conn.execute(
-            "UPDATE match_teams SET team_name = ?, jersey_color = ?, score = ? WHERE id = ?",
-            (team_name, jersey_color, score, team_id),
-        )
+        if captain_id is not None:
+            conn.execute(
+                "UPDATE match_teams SET team_name = ?, jersey_color = ?, score = ?, captain_id = ? WHERE id = ?",
+                (team_name, jersey_color, score, captain_id, team_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE match_teams SET team_name = ?, jersey_color = ?, score = ? WHERE id = ?",
+                (team_name, jersey_color, score, team_id),
+            )
     else:
-        conn.execute(
-            "UPDATE match_teams SET team_name = ?, jersey_color = ? WHERE id = ?",
-            (team_name, jersey_color, team_id),
-        )
+        if captain_id is not None:
+            conn.execute(
+                "UPDATE match_teams SET team_name = ?, jersey_color = ?, captain_id = ? WHERE id = ?",
+                (team_name, jersey_color, captain_id, team_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE match_teams SET team_name = ?, jersey_color = ? WHERE id = ?",
+                (team_name, jersey_color, team_id),
+            )
+    conn.commit()
+    conn.close()
+
+
+def update_team_captain(team_id, captain_id):
+    """Update team captain"""
+    conn = get_db()
+    conn.execute(
+        "UPDATE match_teams SET captain_id = ? WHERE id = ?",
+        (captain_id, team_id),
+    )
     conn.commit()
     conn.close()
 
