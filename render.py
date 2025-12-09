@@ -207,6 +207,85 @@ def render_next_match(match, teams, match_players_dict):
     return Div(*content)
 
 
+def render_next_matches_by_league(next_matches_data):
+    """Render next match for each league"""
+    if not next_matches_data:
+        return Div(cls="container-white")(
+            H2("Next Matches by League"),
+            P("No upcoming matches scheduled.", style="color: #666;")
+        )
+    
+    content = [
+        H2("Next Matches by League"),
+    ]
+    
+    # Sort by league name for consistent display
+    sorted_leagues = sorted(
+        next_matches_data.items(),
+        key=lambda x: x[1]["league"].get("name", "Friendly")
+    )
+    
+    for league_id, data in sorted_leagues:
+        match = data["match"]
+        teams = data["teams"]
+        match_players_dict = data["match_players_dict"]
+        league = data["league"]
+        league_name = league.get("name", "Friendly")
+        
+        league_content = [
+            Div(cls="container-white", style="margin-bottom: 20px;")(
+                H3(f"{league_name} - Next Match", style="color: #007bff; margin-bottom: 15px;"),
+                H4(format_match_name(match)),
+                Div(style="margin-bottom: 15px;")(
+                    P(f"Date: {match.get('date', 'N/A')}"),
+                    P(f"Start Time: {match.get('start_time', 'N/A')}"),
+                    P(f"End Time: {match.get('end_time', 'N/A')}"),
+                    P(f"Location: {match.get('location', 'N/A')}"),
+                ),
+                A(
+                    Button("View Match Details", cls="btn-primary"),
+                    href=f"/match/{match['id']}",
+                    style="margin-bottom: 15px; display: inline-block;",
+                ),
+            ),
+        ]
+        
+        # Render team allocation if teams exist
+        if teams and len(teams) >= 1:
+            team1 = teams[0]
+            team2 = teams[1] if len(teams) > 1 else None
+            team1_players = match_players_dict.get(team1["id"], [])
+            team2_players = match_players_dict.get(team2["id"], []) if team2 else []
+            
+            if team1_players or team2_players:
+                league_content.append(
+                    Div(cls="container-white", style="margin-top: 10px;")(
+                        H4("Team Allocation", style="font-size: 1.1em;"),
+                        render_match_teams(match['id'], teams, match_players_dict, is_completed=True, show_scores=False),
+                    )
+                )
+            else:
+                league_content.append(
+                    Div(cls="container-white", style="margin-top: 10px;")(
+                        H4("Team Allocation", style="font-size: 1.1em;"),
+                        P("Teams not yet allocated. ", style="color: #666;"),
+                        A("Go to match detail page to allocate teams", href=f"/match/{match['id']}", style="color: #007bff;"),
+                    )
+                )
+        else:
+            league_content.append(
+                Div(cls="container-white", style="margin-top: 10px;")(
+                    H4("Team Allocation", style="font-size: 1.1em;"),
+                    P("Teams not yet allocated. ", style="color: #666;"),
+                    A("Go to match detail page to allocate teams", href=f"/match/{match['id']}", style="color: #007bff;"),
+                )
+            )
+        
+        content.extend(league_content)
+    
+    return Div(*content)
+
+
 def render_recent_matches(matches):
     """Render recent matches list"""
     if not matches:
