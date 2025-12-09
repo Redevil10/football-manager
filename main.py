@@ -785,10 +785,10 @@ def matches_page():
 
 
 @rt("/create_match", methods=["GET"])
-def create_match_page():
+def create_match_page(league_id: str = None):
     """Create match page - can select league or use Friendly"""
     print("Rendering create match page")
-    from db import get_last_completed_match
+    from db import get_last_created_match
 
     leagues = get_all_leagues()
     friendly_league_id = get_or_create_friendly_league()
@@ -798,11 +798,16 @@ def create_match_page():
         league for league in leagues if league["name"].lower() != "friendly"
     ]
 
-    # Get the last completed match to prefill league
-    last_completed_match = get_last_completed_match()
+    # Determine selected league_id: priority is query parameter > most recently created match
     selected_league_id = ""
-    if last_completed_match and last_completed_match.get("league_id"):
-        selected_league_id = str(last_completed_match.get("league_id"))
+    if league_id:
+        # Use league_id from query parameter (from league page)
+        selected_league_id = str(league_id)
+    else:
+        # Fallback to most recently created match
+        last_created_match = get_last_created_match()
+        if last_created_match and last_created_match.get("league_id"):
+            selected_league_id = str(last_created_match.get("league_id"))
 
     # Default values
     default_date = ""
@@ -1170,8 +1175,9 @@ def api_get_last_match(league_id: int):
 
 @rt("/create_match/{league_id}")
 def create_match_page_with_league(league_id: int):
-    """Create match page for a specific league (backward compatibility)"""
-    return RedirectResponse("/create_match", status_code=303)
+    """Create match page for a specific league - redirects with league_id parameter"""
+    from urllib.parse import urlencode
+    return RedirectResponse(f"/create_match?{urlencode({'league_id': league_id})}", status_code=303)
 
 
 @rt("/create_match", methods=["POST"])
