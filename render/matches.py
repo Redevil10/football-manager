@@ -636,7 +636,6 @@ def render_match_detail(
             P(f"Start Time: {match.get('start_time', 'N/A')}"),
             P(f"End Time: {match.get('end_time', 'N/A')}"),
             P(f"Location: {match.get('location', 'N/A')}"),
-            P(f"Teams: {match.get('num_teams', 2)}"),
             (
                 P(
                     score_display,

@@ -1201,7 +1201,6 @@ def render_match_detail(match, teams, match_players_dict, events, all_players=No
             P(f"Start Time: {match.get('start_time', 'N/A')}"),
             P(f"End Time: {match.get('end_time', 'N/A')}"),
             P(f"Location: {match.get('location', 'N/A')}"),
-            P(f"Teams: {match.get('num_teams', 2)}"),
             P(score_display, style="font-weight: bold; font-size: 18px; color: #0066cc;") if score_display else "",
             Div(cls="btn-group", style="margin-top: 10px;")(
                 A(Button("Edit Match", cls="btn-primary"), href=f"/edit_match/{match['id']}"),
