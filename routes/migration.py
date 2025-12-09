@@ -54,7 +54,7 @@ def register_migration_routes(rt, STYLE):
         try:
             from migration import migrate_db
 
-            migrate_db()
+            messages = migrate_db()
             return Div(
                 cls="container-white",
                 style="background: #d4edda; border: 1px solid #c3e6cb;",
@@ -63,10 +63,13 @@ def register_migration_routes(rt, STYLE):
                     "✅ Migration completed successfully!",
                     style="color: #155724; font-weight: bold; margin: 0;",
                 ),
-                P(
-                    "The captain_id column has been added to the match_teams table.",
-                    style="color: #155724; margin: 10px 0 0 0;",
-                ),
+                *[
+                    P(
+                        f"• {msg}",
+                        style="color: #155724; margin: 5px 0 0 0;",
+                    )
+                    for msg in messages
+                ],
             )
         except Exception as e:
             error_msg = str(e)
