@@ -7,16 +7,18 @@ from db import get_match_teams
 
 
 def format_match_name(match):
-    """Format match name as 'Match YYYY-MM-DD HH:MMAM/PM' or fallback to 'Match #id'"""
+    """Format match name based on match status:
+    - Not started: YYYY-MM-DD HomeTeamName VS AwayTeamName
+    - Completed: YYYY-MM-DD HomeTeamName hometeamscore : awayteamscore AwayTeamName
+    """
     if not match:
         return "Match"
 
-    match_id = match.get("id", "")
+    match_id = match.get("id")
     match_date = match.get("date", "")
-    start_time = match.get("start_time", "")
 
-    # If date or time is missing, fallback to ID
-    if not match_date or not start_time:
+    # If date is missing, fallback to ID
+    if not match_date:
         return f"Match #{match_id}" if match_id else "Match"
 
     try:
@@ -24,28 +26,34 @@ def format_match_name(match):
         date_obj = datetime.strptime(match_date, "%Y-%m-%d").date()
         date_str = date_obj.strftime("%Y-%m-%d")
 
-        # Parse time (format: HH:MM or HH:MM:SS)
-        time_parts = start_time.split(":")
-        hour = int(time_parts[0])
-        minute = int(time_parts[1])
+        # Get teams
+        teams = get_match_teams(match_id) if match_id else []
+        
+        # Get team names and scores
+        home_team_name = "Home Team"
+        away_team_name = "Away Team"
+        home_team_score = None
+        away_team_score = None
+        
+        for team in teams:
+            team_number = team.get("team_number")
+            team_name = team.get("team_name", "")
+            if team_number == 1:
+                home_team_name = team_name or "Home Team"
+                home_team_score = team.get("score")
+            elif team_number == 2:
+                away_team_name = team_name or "Away Team"
+                away_team_score = team.get("score")
 
-        # Convert to 12-hour format with AM/PM
-        if hour == 0:
-            hour_12 = 12
-            am_pm = "AM"
-        elif hour < 12:
-            hour_12 = hour
-            am_pm = "AM"
-        elif hour == 12:
-            hour_12 = 12
-            am_pm = "PM"
+        # Check if match is completed
+        is_completed = is_match_completed(match)
+
+        if is_completed and home_team_score is not None and away_team_score is not None:
+            # Completed match with scores: YYYY-MM-DD HomeTeamName hometeamscore : awayteamscore AwayTeamName
+            return f"{date_str} {home_team_name} {home_team_score} : {away_team_score} {away_team_name}"
         else:
-            hour_12 = hour - 12
-            am_pm = "PM"
-
-        time_str = f"{hour_12}:{minute:02d}{am_pm}"
-
-        return f"Match {date_str} {time_str}"
+            # Not started match: YYYY-MM-DD HomeTeamName VS AwayTeamName
+            return f"{date_str} {home_team_name} VS {away_team_name}"
     except (ValueError, IndexError, AttributeError):
         # If parsing fails, fallback to ID
         return f"Match #{match_id}" if match_id else "Match"
