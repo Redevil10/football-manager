@@ -472,16 +472,13 @@ def get_next_matches_by_all_leagues():
     """Get the next match for each league"""
     leagues = get_all_leagues()
     next_matches = {}
-    
+
     for league in leagues:
         league_id = league["id"]
         match = get_next_match_by_league(league_id)
         if match:
-            next_matches[league_id] = {
-                "league": league,
-                "match": match
-            }
-    
+            next_matches[league_id] = {"league": league, "match": match}
+
     # Also handle matches without a league (league_id is NULL)
     conn = get_db()
     match_no_league = conn.execute(
@@ -491,13 +488,13 @@ def get_next_matches_by_all_leagues():
            ORDER BY m.date DESC, m.start_time DESC LIMIT 1""",
     ).fetchone()
     conn.close()
-    
+
     if match_no_league:
         next_matches[None] = {
             "league": {"id": None, "name": "Friendly"},
-            "match": dict(match_no_league)
+            "match": dict(match_no_league),
         }
-    
+
     return next_matches
 
 
