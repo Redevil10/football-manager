@@ -33,12 +33,6 @@ def init_db():
                   FOREIGN KEY (league_id) REFERENCES leagues(id))"""
     )
 
-    # Add alias column if it doesn't exist (for existing databases)
-    try:
-        c.execute("ALTER TABLE players ADD COLUMN alias TEXT")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-
     # Leagues table
     c.execute(
         """CREATE TABLE IF NOT EXISTS leagues
@@ -77,14 +71,6 @@ def init_db():
                   FOREIGN KEY (captain_id) REFERENCES match_players(id),
                   UNIQUE(match_id, team_number))"""
     )
-    
-    # Add captain_id column if it doesn't exist (for existing databases)
-    try:
-        c.execute("ALTER TABLE match_teams ADD COLUMN captain_id INTEGER")
-        c.execute("""CREATE INDEX IF NOT EXISTS idx_match_teams_captain 
-                     ON match_teams(captain_id)""")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
 
     # Match players table (players in a specific match)
     c.execute(

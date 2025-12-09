@@ -58,7 +58,6 @@ from logic import (
     set_overall_score,
     adjust_category_attributes_by_single_attr,
 )
-from migrate_attributes import migrate_attributes
 from render import (
     render_navbar,
     render_player_table,
@@ -69,7 +68,6 @@ from render import (
     render_league_matches,
     render_all_matches,
     render_match_detail,
-    render_next_match,
     render_next_matches_by_league,
     render_recent_matches,
 )
@@ -94,13 +92,6 @@ else:
 # Initialize database (after restore if on HF Spaces)
 # This ensures table structure exists (CREATE TABLE IF NOT EXISTS)
 init_db()
-
-# Run attribute migration on startup (after database restore and init)
-# This ensures migrated data is not overwritten by restore
-try:
-    migrate_attributes()
-except Exception as e:
-    print(f"Warning: Migration failed: {e}", flush=True)
 
 
 @rt("/")
@@ -591,6 +582,87 @@ def confirm_swap_match_page(
 
     swap_match_players(match_player1_id, match_player2_id)
     return RedirectResponse(f"/match/{match_id}", status_code=303)
+
+
+# ============ DATABASE MIGRATION ============
+
+
+@rt("/migration")
+def migration_page():
+    """Database migration page"""
+    return Html(
+        Head(
+            Title("Database Migration - Football Manager"),
+            Style(STYLE),
+            Script(src="https://unpkg.com/htmx.org@1.9.10"),
+        ),
+        Body(
+            render_navbar(),
+            Div(cls="container")(
+                H2("Database Migration"),
+                Div(cls="container-white")(
+                    P(
+                        "Run database migrations to update the schema. This is safe to run multiple times.",
+                        style="margin-bottom: 20px; color: #666;",
+                    ),
+                    Form(
+                        method="POST",
+                        action="/run_migration",
+                        **{
+                            "hx-post": "/run_migration",
+                            "hx-target": "#migration-result",
+                            "hx-swap": "innerHTML",
+                        },
+                    )(
+                        Button(
+                            "Run Migration",
+                            type="submit",
+                            cls="btn-success",
+                            style="font-size: 16px; padding: 12px 24px;",
+                        ),
+                    ),
+                    Div(id="migration-result", style="margin-top: 20px;"),
+                ),
+            ),
+        ),
+    )
+
+
+@rt("/run_migration", methods=["POST"])
+def route_run_migration():
+    """Run database migration"""
+    try:
+        from migration import migrate_db
+
+        migrate_db()
+        return Div(
+            cls="container-white",
+            style="background: #d4edda; border: 1px solid #c3e6cb;",
+        )(
+            P(
+                "✅ Migration completed successfully!",
+                style="color: #155724; font-weight: bold; margin: 0;",
+            ),
+            P(
+                "The captain_id column has been added to the match_teams table.",
+                style="color: #155724; margin: 10px 0 0 0;",
+            ),
+        )
+    except Exception as e:
+        error_msg = str(e)
+        return Div(
+            cls="container-white",
+            style="background: #f8d7da; border: 1px solid #f5c6cb;",
+        )(
+            P(
+                "❌ Migration failed!",
+                style="color: #721c24; font-weight: bold; margin: 0;",
+            ),
+            P(
+                f"Error: {error_msg}",
+                style="color: #721c24; margin: 10px 0 0 0; font-family: monospace;",
+            ),
+        )
 
 
 # ============ LEAGUES ============
@@ -1976,20 +2048,20 @@ async def route_set_captain(match_id: int, team_id: int, req: Request):
     """Set team captain"""
     form = await req.form()
     captain_id_str = form.get("captain_id", "").strip()
-    
+
     captain_id = int(captain_id_str) if captain_id_str else None
-    
+
     # Update team captain
     update_team_captain(team_id, captain_id)
-    
+
     # Get updated match data and return full match detail view
     match = get_match(match_id)
     if not match:
         return RedirectResponse("/matches", status_code=303)
-    
+
     teams = get_match_teams(match_id)
     events = get_match_events(match_id)
-    
+
     # Get players grouped by team
     match_players_dict = {}
     match_player_ids = set()
@@ -1998,13 +2070,13 @@ async def route_set_captain(match_id: int, team_id: int, req: Request):
         match_players_dict[team["id"]] = team_players
         for player in team_players:
             match_player_ids.add(player.get("player_id"))
-    
+
     # Get signup players
     signup_players = get_match_signup_players(match_id)
     available_signup_players = [
         mp for mp in signup_players if mp["player_id"] not in match_player_ids
     ]
-    
+
     available_players_list = []
     for mp in available_signup_players:
         available_players_list.append(
@@ -2017,10 +2089,18 @@ async def route_set_captain(match_id: int, team_id: int, req: Request):
                 "gk_attrs": mp["gk_attrs"],
             }
         )
-    
+
     from render import render_match_detail
-    
-    return render_match_detail(match, teams, match_players_dict, events, available_players_list, match_player_ids, signup_players)
+
+    return render_match_detail(
+        match,
+        teams,
+        match_players_dict,
+        events,
+        available_players_list,
+        match_player_ids,
+        signup_players,
+    )
 
 
 @rt("/add_match_players/{match_id}/{team_id}", methods=["POST"])
@@ -2295,7 +2375,9 @@ async def route_import_match_players(match_id: int, req: Request):
                         added_count += 1
                         # Log if alias was used for matching
                         if player.get("alias") == name and player.get("name") != name:
-                            print(f"Matched alias '{name}' to player '{player.get('name')}'")
+                            print(
+                                f"Matched alias '{name}' to player '{player.get('name')}'"
+                            )
 
     return RedirectResponse(f"/match/{match_id}", status_code=303)
 

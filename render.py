@@ -125,6 +125,7 @@ def render_navbar():
         A("Matches", href="/matches"),
         A("Players", href="/players"),
         A("Leagues", href="/leagues"),
+        A("Migration", href="/migration"),
     )
 
 
