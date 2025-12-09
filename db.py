@@ -519,6 +519,19 @@ def get_last_completed_match():
     return dict(match) if match else None
 
 
+def get_last_created_match():
+    """Get the most recently created match (by created_at timestamp)"""
+    conn = get_db()
+    match = conn.execute(
+        """SELECT m.*, l.name as league_name
+           FROM matches m
+           LEFT JOIN leagues l ON m.league_id = l.id
+           ORDER BY m.created_at DESC LIMIT 1""",
+    ).fetchone()
+    conn.close()
+    return dict(match) if match else None
+
+
 def get_recent_matches(limit=5):
     """Get recent matches (excluding the next match)"""
     conn = get_db()
