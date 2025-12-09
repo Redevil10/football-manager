@@ -181,6 +181,7 @@ def register_match_routes(rt, STYLE):
                                     value=default_start_time,
                                     required=True,
                                     style="width: 100%; padding: 8px;",
+                                    step="60",
                                 ),
                             ),
                             Div(style="margin-bottom: 15px;")(
@@ -194,6 +195,7 @@ def register_match_routes(rt, STYLE):
                                     id="end_time",
                                     value=default_end_time,
                                     style="width: 100%; padding: 8px;",
+                                    step="60",
                                 ),
                             ),
                             Div(style="margin-bottom: 15px;")(
@@ -212,21 +214,6 @@ def register_match_routes(rt, STYLE):
                             ),
                             Div(style="margin-bottom: 15px;")(
                                 Label(
-                                    "Number of Teams:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Select(
-                                    Option("1", value="1"),
-                                    Option("2", value="2", selected=True),
-                                    name="num_teams",
-                                    id="num_teams",
-                                    required=True,
-                                    style="width: 100%; padding: 8px;",
-                                    **{"onchange": "toggleTeam2Fields()"},
-                                ),
-                            ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
                                     "Max Players Per Team:",
                                     style="display: block; margin-bottom: 5px;",
                                 ),
@@ -239,36 +226,70 @@ def register_match_routes(rt, STYLE):
                                 ),
                             ),
                             Hr(),
-                            H3("Team 1"),
                             Div(style="margin-bottom: 15px;")(
-                                Label(
-                                    "Team Name:",
-                                    style="display: block; margin-bottom: 5px;",
+                                Div(style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;")(
+                                    H3("Home Team", style="margin: 0; flex: 1;"),
+                                    Div(style="display: flex; align-items: center; gap: 5px;")(
+                                        Input(
+                                            type="checkbox",
+                                            name="allocate_team1",
+                                            id="allocate_team1",
+                                            checked=True,
+                                            value="1",
+                                        ),
+                                        Label(
+                                            "Allocate Team",
+                                            for_="allocate_team1",
+                                            style="margin: 0; font-weight: normal;",
+                                        ),
+                                    ),
                                 ),
-                                Input(
-                                    type="text",
-                                    name="team1_name",
-                                    id="team1_name",
-                                    placeholder="Team 1",
-                                    style="width: 100%; padding: 8px;",
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Team Name:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="team1_name",
+                                        id="team1_name",
+                                        placeholder="Home Team",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
                                 ),
-                            ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
-                                    "Jersey Color:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="text",
-                                    name="team1_color",
-                                    id="team1_color",
-                                    placeholder="e.g., Blue, Red, White",
-                                    style="width: 100%; padding: 8px;",
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Jersey Color:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="team1_color",
+                                        id="team1_color",
+                                        placeholder="e.g., Blue, Red, White",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
                                 ),
                             ),
                             Hr(),
-                            Div(id="team2_section")(
-                                H3("Team 2"),
+                            Div(style="margin-bottom: 15px;")(
+                                Div(style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;")(
+                                    H3("Away Team", style="margin: 0; flex: 1;"),
+                                    Div(style="display: flex; align-items: center; gap: 5px;")(
+                                        Input(
+                                            type="checkbox",
+                                            name="allocate_team2",
+                                            id="allocate_team2",
+                                            checked=True,
+                                            value="1",
+                                        ),
+                                        Label(
+                                            "Allocate Team",
+                                            for_="allocate_team2",
+                                            style="margin: 0; font-weight: normal;",
+                                        ),
+                                    ),
+                                ),
                                 Div(style="margin-bottom: 15px;")(
                                     Label(
                                         "Team Name:",
@@ -278,7 +299,7 @@ def register_match_routes(rt, STYLE):
                                         type="text",
                                         name="team2_name",
                                         id="team2_name",
-                                        placeholder="Team 2",
+                                        placeholder="Away Team",
                                         style="width: 100%; padding: 8px;",
                                     ),
                                 ),
@@ -318,20 +339,6 @@ def register_match_routes(rt, STYLE):
                     ),
                     Script(
                         """
-                        function toggleTeam2Fields() {
-                            const numTeams = document.getElementById('num_teams').value;
-                            const team2Section = document.getElementById('team2_section');
-                            if (numTeams === '1') {
-                                team2Section.style.display = 'none';
-                            } else {
-                                team2Section.style.display = 'block';
-                            }
-                        }
-
-                        // Initialize on page load
-                        document.addEventListener('DOMContentLoaded', function() {
-                            toggleTeam2Fields();
-                        });
 
                         async function prefillMatchInfo() {
                             const leagueId = document.getElementById('league_select').value;
@@ -522,18 +529,18 @@ def register_match_routes(rt, STYLE):
             start_time = form.get("start_time", "").strip()
             end_time = form.get("end_time", "").strip()
             location = form.get("location", "").strip()
-            num_teams_str = form.get("num_teams", "2").strip()
-            print(f"num_teams_str: '{num_teams_str}'")
-            try:
-                num_teams = int(num_teams_str)
-            except ValueError as e:
-                print(
-                    f"Error converting num_teams_str '{num_teams_str}': {e}, using default 2"
-                )
-                num_teams = 2
+            # Get allocate team checkboxes
+            allocate_team1 = form.get("allocate_team1") == "1"
+            allocate_team2 = form.get("allocate_team2") == "1"
+            # Ensure at least 1 team
+            if not allocate_team1 and not allocate_team2:
+                allocate_team1 = True  # Default to team1 if both unchecked
+            print(f"allocate_team1: {allocate_team1}, allocate_team2: {allocate_team2}")
             max_players_per_team = form.get("max_players_per_team", "").strip()
             max_players = int(max_players_per_team) if max_players_per_team else None
 
+            # Calculate num_teams for backward compatibility (can be removed later)
+            num_teams = sum([allocate_team1, allocate_team2])
             print(
                 f"Parsed values: league_id={league_id}, date='{date}', start_time='{start_time}', location='{location}', num_teams={num_teams}, max_players={max_players}"
             )
@@ -586,46 +593,76 @@ def register_match_routes(rt, STYLE):
 
             print(f"Created match {match_id} successfully")
 
-            # Create teams
-            team1_id = create_match_team(
-                match_id,
-                1,
-                form.get("team1_name", "Team 1").strip() or "Team 1",
-                form.get("team1_color", "Blue").strip() or "Blue",
-            )
+            # Create teams with should_allocate flag
+            team1_id = None
+            if allocate_team1:
+                team1_id = create_match_team(
+                    match_id,
+                    1,
+                    form.get("team1_name", "Home Team").strip() or "Home Team",
+                    form.get("team1_color", "Blue").strip() or "Blue",
+                    should_allocate=1,
+                )
+            else:
+                # Create team but mark as should not allocate
+                team1_id = create_match_team(
+                    match_id,
+                    1,
+                    form.get("team1_name", "Home Team").strip() or "Home Team",
+                    form.get("team1_color", "Blue").strip() or "Blue",
+                    should_allocate=0,
+                )
 
-            # Only create team 2 if num_teams >= 2
+            # Create team 2 with should_allocate flag
             team2_id = None
-            if num_teams >= 2:
+            if allocate_team2:
                 team2_id = create_match_team(
                     match_id,
                     2,
-                    form.get("team2_name", "Team 2").strip() or "Team 2",
+                    form.get("team2_name", "Away Team").strip() or "Away Team",
                     form.get("team2_color", "Red").strip() or "Red",
+                    should_allocate=1,
+                )
+            else:
+                # Create team but mark as should not allocate
+                team2_id = create_match_team(
+                    match_id,
+                    2,
+                    form.get("team2_name", "Away Team").strip() or "Away Team",
+                    form.get("team2_color", "Red").strip() or "Red",
+                    should_allocate=0,
                 )
 
-            if not team1_id or not team2_id:
+            # Check if required teams were created successfully
+            if allocate_team1 and not team1_id:
                 print(
-                    f"Error: Failed to create teams. team1_id={team1_id}, team2_id={team2_id}"
+                    f"Error: Failed to create team1. team1_id={team1_id}"
                 )
-                # Try to get existing teams
+                # Try to get existing team
                 existing_teams = get_match_teams(match_id)
+                team1 = next(
+                    (t for t in existing_teams if t["team_number"] == 1), None
+                )
+                team1_id = team1["id"] if team1 else None
                 if not team1_id:
-                    team1 = next(
-                        (t for t in existing_teams if t["team_number"] == 1), None
-                    )
-                    team1_id = team1["id"] if team1 else None
-                if not team2_id:
-                    team2 = next(
-                        (t for t in existing_teams if t["team_number"] == 2), None
-                    )
-                    team2_id = team2["id"] if team2 else None
-
-                if not team1_id or not team2_id:
                     print(
-                        f"Error: Could not create or find teams. Still redirecting to match page."
+                        f"Error: Could not create or find team1. Still redirecting to match page."
                     )
-                    # Continue anyway - teams can be created later
+            
+            if allocate_team2 and not team2_id:
+                print(
+                    f"Error: Failed to create team2. team2_id={team2_id}"
+                )
+                # Try to get existing team
+                existing_teams = get_match_teams(match_id)
+                team2 = next(
+                    (t for t in existing_teams if t["team_number"] == 2), None
+                )
+                team2_id = team2["id"] if team2 else None
+                if not team2_id:
+                    print(
+                        f"Error: Could not create or find team2. Still redirecting to match page."
+                    )
 
             print(
                 f"Match {match_id} created successfully. Redirecting to /match/{match_id}"
@@ -851,6 +888,12 @@ def register_match_routes(rt, STYLE):
         leagues = get_all_leagues()
         friendly_league_id = get_or_create_friendly_league()
         current_league_id = match.get("league_id") or friendly_league_id
+        
+        # Get should_allocate status from teams to determine checkbox states
+        team1 = next((t for t in teams if t["team_number"] == 1), None)
+        team2 = next((t for t in teams if t["team_number"] == 2), None)
+        allocate_team1_checked = team1 and team1.get("should_allocate", 1) == 1
+        allocate_team2_checked = team2 and team2.get("should_allocate", 1) == 1
 
         # Filter out "Friendly" league from the list since we show it as "Friendly (Default)"
         other_leagues = [
@@ -920,6 +963,7 @@ def register_match_routes(rt, STYLE):
                                     value=match.get("start_time", ""),
                                     required=True,
                                     style="width: 100%; padding: 8px;",
+                                    step="60",
                                 ),
                             ),
                             Div(style="margin-bottom: 15px;")(
@@ -932,6 +976,7 @@ def register_match_routes(rt, STYLE):
                                     name="end_time",
                                     value=match.get("end_time", ""),
                                     style="width: 100%; padding: 8px;",
+                                    step="60",
                                 ),
                             ),
                             Div(style="margin-bottom: 15px;")(
@@ -949,29 +994,6 @@ def register_match_routes(rt, STYLE):
                             ),
                             Div(style="margin-bottom: 15px;")(
                                 Label(
-                                    "Number of Teams:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Select(
-                                    Option(
-                                        "1",
-                                        value="1",
-                                        selected=(match.get("num_teams", 2) == 1),
-                                    ),
-                                    Option(
-                                        "2",
-                                        value="2",
-                                        selected=(match.get("num_teams", 2) == 2),
-                                    ),
-                                    name="num_teams",
-                                    id="num_teams_edit",
-                                    required=True,
-                                    style="width: 100%; padding: 8px;",
-                                    **{"onchange": "toggleTeam2FieldsEdit()"},
-                                ),
-                            ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
                                     "Max Players Per Team:",
                                     style="display: block; margin-bottom: 5px;",
                                 ),
@@ -983,58 +1005,153 @@ def register_match_routes(rt, STYLE):
                                 ),
                             ),
                             Hr(),
-                            *[
-                                (
-                                    Div(
-                                        id="team2_section_edit",
-                                        style="margin-bottom: 15px;",
-                                    )
-                                    if team["team_number"] == 2
-                                    else Div(
-                                        style="margin-bottom: 15px;",
-                                    )
-                                )(
-                                    H4(f"Team {team['team_number']}"),
+                            # Home Team section - always show
+                            Div(style="margin-bottom: 15px;")(
+                                Div(style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;")(
+                                    H3("Home Team", style="margin: 0; flex: 1;"),
+                                    Div(style="display: flex; align-items: center; gap: 5px;")(
+                                        Input(
+                                            type="checkbox",
+                                            name="allocate_team1",
+                                            id="allocate_team1_edit",
+                                            checked=allocate_team1_checked,
+                                            value="1",
+                                        ),
+                                        Label(
+                                            "Allocate Team",
+                                            for_="allocate_team1_edit",
+                                            style="margin: 0; font-weight: normal;",
+                                        ),
+                                    ),
+                                ),
+                                *[
                                     Input(
                                         type="hidden",
-                                        name=f"team{team['team_number']}_id",
-                                        value=team["id"],
+                                        name="team1_id",
+                                        value=str(team["id"]),
+                                    )
+                                    for team in teams
+                                    if team["team_number"] == 1
+                                ],
+                                Label(
+                                    "Team Name:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="text",
+                                    name="team1_name",
+                                    value=next(
+                                        (t.get("team_name", "") for t in teams if t["team_number"] == 1),
+                                        "Home Team",
                                     ),
-                                    Label(
-                                        "Team Name:",
-                                        style="display: block; margin-bottom: 5px;",
+                                    placeholder="Home Team",
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                                Label(
+                                    "Jersey Color:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="text",
+                                    name="team1_color",
+                                    value=next(
+                                        (t.get("jersey_color", "") for t in teams if t["team_number"] == 1),
+                                        "",
                                     ),
+                                    placeholder="e.g., Blue, Red, White",
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                                Label(
+                                    "Score:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="number",
+                                    name="team1_score",
+                                    value=str(
+                                        next(
+                                            (t.get("score", 0) for t in teams if t["team_number"] == 1),
+                                            0,
+                                        )
+                                    ),
+                                    min="0",
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                            ),
+                            Hr(),
+                            # Away Team section - always show
+                            Div(style="margin-bottom: 15px;")(
+                                Div(style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;")(
+                                    H3("Away Team", style="margin: 0; flex: 1;"),
+                                    Div(style="display: flex; align-items: center; gap: 5px;")(
+                                        Input(
+                                            type="checkbox",
+                                            name="allocate_team2",
+                                            id="allocate_team2_edit",
+                                            checked=allocate_team2_checked,
+                                            value="1",
+                                        ),
+                                        Label(
+                                            "Allocate Team",
+                                            for_="allocate_team2_edit",
+                                            style="margin: 0; font-weight: normal;",
+                                        ),
+                                    ),
+                                ),
+                                *[
                                     Input(
-                                        type="text",
-                                        name=f"team{team['team_number']}_name",
-                                        value=team.get("team_name", ""),
-                                        style="width: 100%; padding: 8px;",
+                                        type="hidden",
+                                        name="team2_id",
+                                        value=str(team["id"]),
+                                    )
+                                    for team in teams
+                                    if team["team_number"] == 2
+                                ],
+                                Label(
+                                    "Team Name:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="text",
+                                    name="team2_name",
+                                    value=next(
+                                        (t.get("team_name", "") for t in teams if t["team_number"] == 2),
+                                        "Away Team",
                                     ),
-                                    Label(
-                                        "Jersey Color:",
-                                        style="display: block; margin-bottom: 5px;",
+                                    placeholder="Away Team",
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                                Label(
+                                    "Jersey Color:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="text",
+                                    name="team2_color",
+                                    value=next(
+                                        (t.get("jersey_color", "") for t in teams if t["team_number"] == 2),
+                                        "",
                                     ),
-                                    Input(
-                                        type="text",
-                                        name=f"team{team['team_number']}_color",
-                                        value=team.get("jersey_color", ""),
-                                        placeholder="e.g., Blue, Red, White",
-                                        style="width: 100%; padding: 8px;",
+                                    placeholder="e.g., Blue, Red, White",
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                                Label(
+                                    "Score:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="number",
+                                    name="team2_score",
+                                    value=str(
+                                        next(
+                                            (t.get("score", 0) for t in teams if t["team_number"] == 2),
+                                            0,
+                                        )
                                     ),
-                                    Label(
-                                        "Score:",
-                                        style="display: block; margin-bottom: 5px;",
-                                    ),
-                                    Input(
-                                        type="number",
-                                        name=f"team{team['team_number']}_score",
-                                        value=str(team.get("score", 0)),
-                                        min="0",
-                                        style="width: 100%; padding: 8px;",
-                                    ),
-                                )
-                                for team in teams
-                            ],
+                                    min="0",
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                            ),
                             Div(cls="btn-group")(
                                 Button(
                                     "Save Changes", type="submit", cls="btn-success"
@@ -1048,26 +1165,6 @@ def register_match_routes(rt, STYLE):
                             action=f"/update_match/{match_id}",
                         ),
                     ),
-                ),
-                Script(
-                    """
-                    function toggleTeam2FieldsEdit() {
-                        const numTeams = document.getElementById('num_teams_edit').value;
-                        const team2Section = document.getElementById('team2_section_edit');
-                        if (team2Section) {
-                            if (numTeams === '1') {
-                                team2Section.style.display = 'none';
-                            } else {
-                                team2Section.style.display = 'block';
-                            }
-                        }
-                    }
-
-                    // Initialize on page load
-                    document.addEventListener('DOMContentLoaded', function() {
-                        toggleTeam2FieldsEdit();
-                    });
-                    """
                 ),
             ),
         )
@@ -1088,10 +1185,17 @@ def register_match_routes(rt, STYLE):
         start_time = form.get("start_time", "").strip()
         end_time = form.get("end_time", "").strip()
         location = form.get("location", "").strip()
-        num_teams = int(form.get("num_teams", "2"))
+        # Get allocate team checkboxes
+        allocate_team1 = form.get("allocate_team1") == "1"
+        allocate_team2 = form.get("allocate_team2") == "1"
+        # Ensure at least 1 team
+        if not allocate_team1 and not allocate_team2:
+            allocate_team1 = True  # Default to team1 if both unchecked
         max_players_per_team = form.get("max_players_per_team", "").strip()
         max_players = int(max_players_per_team) if max_players_per_team else None
 
+        # Calculate num_teams for backward compatibility (can be removed later)
+        num_teams = sum([allocate_team1, allocate_team2])
         update_match(
             match_id,
             league_id,
@@ -1103,35 +1207,40 @@ def register_match_routes(rt, STYLE):
             max_players,
         )
 
-        # Update teams
-        for team_num in range(1, num_teams + 1):
-            team_id = form.get(f"team{team_num}_id", "").strip()
-            if team_id:
-                team_name = form.get(f"team{team_num}_name", "").strip()
-                jersey_color = form.get(f"team{team_num}_color", "").strip()
-                score_str = form.get(f"team{team_num}_score", "").strip()
-                # Handle empty string or "0" - both should be treated as 0
-                try:
-                    score = int(score_str) if score_str else 0
-                except ValueError:
-                    score = 0
-                update_match_team(int(team_id), team_name, jersey_color, score)
+        # Update or create teams based on allocate checkboxes
+        # Home Team (Team 1) - always update/create, set should_allocate based on checkbox
+        team1_id = form.get("team1_id", "").strip()
+        team1_name = form.get("team1_name", "").strip() or "Home Team"
+        team1_color = form.get("team1_color", "").strip() or "Blue"
+        team1_score_str = form.get("team1_score", "").strip()
+        try:
+            team1_score = int(team1_score_str) if team1_score_str else 0
+        except ValueError:
+            team1_score = 0
+        
+        if team1_id:
+            # Update existing team with should_allocate flag
+            update_match_team(int(team1_id), team1_name, team1_color, team1_score, should_allocate=1 if allocate_team1 else 0)
+        else:
+            # Create new team with should_allocate flag
+            create_match_team(match_id, 1, team1_name, team1_color, should_allocate=1 if allocate_team1 else 0)
 
-        # If num_teams was reduced from 2 to 1, we should still update team2 if it exists
-        # But only if team2_id is in the form (meaning it wasn't hidden)
-        if num_teams == 1:
-            team2_id = form.get("team2_id", "").strip()
-            if team2_id:
-                # Team 2 exists but should be hidden, update it anyway if score was provided
-                team2_score_str = form.get("team2_score", "").strip()
-                try:
-                    team2_score = int(team2_score_str) if team2_score_str else 0
-                except ValueError:
-                    team2_score = 0
-                # Only update if we have the team_id in form (it might be hidden but still in form)
-                team2_name = form.get("team2_name", "").strip() or "Team 2"
-                team2_color = form.get("team2_color", "").strip() or "Red"
-                update_match_team(int(team2_id), team2_name, team2_color, team2_score)
+        # Away Team (Team 2) - always update/create, set should_allocate based on checkbox
+        team2_id = form.get("team2_id", "").strip()
+        team2_name = form.get("team2_name", "").strip() or "Away Team"
+        team2_color = form.get("team2_color", "").strip() or "Red"
+        team2_score_str = form.get("team2_score", "").strip()
+        try:
+            team2_score = int(team2_score_str) if team2_score_str else 0
+        except ValueError:
+            team2_score = 0
+        
+        if team2_id:
+            # Update existing team with should_allocate flag
+            update_match_team(int(team2_id), team2_name, team2_color, team2_score, should_allocate=1 if allocate_team2 else 0)
+        else:
+            # Create new team with should_allocate flag
+            create_match_team(match_id, 2, team2_name, team2_color, should_allocate=1 if allocate_team2 else 0)
 
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 

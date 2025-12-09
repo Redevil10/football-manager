@@ -65,6 +65,7 @@ def init_db():
                   jersey_color TEXT,
                   score INTEGER DEFAULT 0,
                   captain_id INTEGER,
+                  should_allocate INTEGER DEFAULT 1,
                   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
                   FOREIGN KEY (captain_id) REFERENCES match_players(id),
                   UNIQUE(match_id, team_number))"""

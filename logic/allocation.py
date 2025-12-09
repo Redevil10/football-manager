@@ -7,7 +7,6 @@ from db import (
     update_player_team,
     get_match,
     get_match_signup_players,
-    create_match_team,
     get_match_teams,
     get_match_players,
     update_match_player,
@@ -69,16 +68,18 @@ def assign_positions(team, team_num):
 
 
 def allocate_match_teams(match_id):
-    """Allocate players into teams for a match (supports 1 or 2 teams)"""
+    """Allocate players into teams for a match (supports 1 or 2 teams based on should_allocate)"""
     match = get_match(match_id)
     if not match:
         return False, "Match not found"
 
-    num_teams = match.get("num_teams", 2)
+    # Get teams and filter by should_allocate
+    teams = get_match_teams(match_id)
+    allocated_teams = [t for t in teams if t.get("should_allocate", 1) == 1]
+    num_allocated_teams = len(allocated_teams)
 
     # First, reset all allocated players back to available (set team_id to NULL)
     # This ensures we start fresh from all signup players
-    teams = get_match_teams(match_id)
     for team in teams:
         team_players = get_match_players(match_id, team["id"])
         for mp in team_players:
@@ -106,23 +107,27 @@ def allocate_match_teams(match_id):
     if len(players) < 1:
         return False, "Need at least 1 signup player"
 
-    if num_teams == 1:
+    if num_allocated_teams == 1:
         # Single team allocation - pick players with higher score first
-        return allocate_single_team(match_id, players, match)
-    else:
+        return allocate_single_team(match_id, players, match, allocated_teams)
+    elif num_allocated_teams == 2:
         # Two team allocation - balanced teams
-        return allocate_two_teams(match_id, players, match, teams)
-
-
-def allocate_single_team(match_id, players, match):
-    """Allocate players to a single team, prioritizing higher scores"""
-    # Get or create team 1
-    teams = get_match_teams(match_id)
-    team1 = next((t for t in teams if t["team_number"] == 1), None)
-    if team1:
-        team1_id = team1["id"]
+        return allocate_two_teams(match_id, players, match, allocated_teams)
     else:
-        team1_id = create_match_team(match_id, 1, "Team 1", "Blue")
+        return (
+            False,
+            f"Invalid number of allocated teams: {num_allocated_teams}. Expected 1 or 2.",
+        )
+
+
+def allocate_single_team(match_id, players, match, allocated_teams):
+    """Allocate players to a single team, prioritizing higher scores"""
+    # Get the allocated team (should be team 1)
+    if not allocated_teams or len(allocated_teams) == 0:
+        return False, "No allocated team found"
+
+    team1 = allocated_teams[0]
+    team1_id = team1["id"]
 
     if not team1_id:
         return False, "Failed to create team"
@@ -153,39 +158,26 @@ def allocate_single_team(match_id, players, match):
     return True, "Team allocated"
 
 
-def allocate_two_teams(match_id, players, match, teams):
+def allocate_two_teams(match_id, players, match, allocated_teams):
     """Allocate players into two balanced teams for a match"""
     if len(players) < 2:
         return False, "Need at least 2 signup players for two teams"
 
-    # If teams don't exist or are less than 2, create them
-    if len(teams) < 2:
-        # Create teams if they don't exist
-        team1_id = None
-        team2_id = None
+    # Get the two allocated teams
+    if len(allocated_teams) < 2:
+        return False, "Need 2 allocated teams for two-team allocation"
 
-        # Check if team 1 exists
-        team1 = next((t for t in teams if t["team_number"] == 1), None)
-        if team1:
-            team1_id = team1["id"]
-        else:
-            team1_id = create_match_team(match_id, 1, "Team 1", "Blue")
+    team1 = next((t for t in allocated_teams if t["team_number"] == 1), None)
+    team2 = next((t for t in allocated_teams if t["team_number"] == 2), None)
 
-        # Check if team 2 exists
-        team2 = next((t for t in teams if t["team_number"] == 2), None)
-        if team2:
-            team2_id = team2["id"]
-        else:
-            team2_id = create_match_team(match_id, 2, "Team 2", "Red")
+    if not team1 or not team2:
+        return False, "Both team 1 and team 2 must be allocated"
 
-        if not team1_id or not team2_id:
-            return False, "Failed to create teams"
+    team1_id = team1["id"]
+    team2_id = team2["id"]
 
-        # Refresh teams list
-        teams = get_match_teams(match_id)
-    else:
-        team1_id = teams[0]["id"]
-        team2_id = teams[1]["id"]
+    if not team1_id or not team2_id:
+        return False, "Failed to get team IDs"
 
     # Get max players per team from match
     max_players_per_team = match.get("max_players_per_team")
@@ -317,7 +309,9 @@ def assign_match_positions_with_subs(starters, substitutes, team_id, match_id):
     starter_positions.extend(["Goalkeeper"] * 1)
     starter_positions.extend(["Defender"] * max(1, int(starter_size * 0.4)))
     starter_positions.extend(["Midfielder"] * max(1, int(starter_size * 0.35)))
-    starter_positions.extend(["Forward"] * max(1, starter_size - len(starter_positions)))
+    starter_positions.extend(
+        ["Forward"] * max(1, starter_size - len(starter_positions))
+    )
     starter_positions = starter_positions[:starter_size]
 
     # Add/update starters to match
