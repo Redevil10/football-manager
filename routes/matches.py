@@ -19,6 +19,7 @@ from db import (
     add_match_player,
     update_match_player,
     remove_match_player,
+    remove_all_match_signup_players,
     get_match_events,
     add_match_event,
     delete_match_event,
@@ -2006,4 +2007,10 @@ def register_match_routes(rt, STYLE):
     def route_remove_match_signup_player(match_id: int, match_player_id: int):
         """Remove a player from match signup (delete from match_players)"""
         remove_match_player(match_player_id)
+        return RedirectResponse(f"/match/{match_id}", status_code=303)
+
+    @rt("/remove_all_match_signup_players/{match_id}", methods=["POST"])
+    def route_remove_all_match_signup_players(match_id: int):
+        """Remove all signup players (available players) from a match"""
+        remove_all_match_signup_players(match_id)
         return RedirectResponse(f"/match/{match_id}", status_code=303)
