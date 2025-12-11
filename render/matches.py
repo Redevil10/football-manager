@@ -729,6 +729,20 @@ def render_match_detail(
                         Button("Add Player", cls="btn-primary"),
                         href=f"/add_match_player_manual/{match['id']}",
                     ),
+                    Form(
+                        method="POST",
+                        action=f"/remove_all_match_signup_players/{match['id']}",
+                        style="display: inline;",
+                        **{
+                            "onsubmit": "return confirm('Remove all available players from this match? This will allow you to import again.');"
+                        },
+                    )(
+                        Button(
+                            "Remove All",
+                            type="submit",
+                            cls="btn-danger",
+                        ),
+                    ),
                 ),
                 render_match_available_players(match["id"], signup_players),
             ),

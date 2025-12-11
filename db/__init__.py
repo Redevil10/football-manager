@@ -51,6 +51,7 @@ from db.match_players import (
     add_match_player,
     update_match_player,
     remove_match_player,
+    remove_all_match_signup_players,
     swap_match_players,
 )
 from db.match_events import (
@@ -109,6 +110,7 @@ __all__ = [
     "add_match_player",
     "update_match_player",
     "remove_match_player",
+    "remove_all_match_signup_players",
     "swap_match_players",
     # Match Events
     "get_match_events",

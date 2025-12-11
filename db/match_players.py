@@ -170,6 +170,17 @@ def remove_match_player(match_player_id):
     conn.close()
 
 
+def remove_all_match_signup_players(match_id):
+    """Remove all signup players (players with team_id = NULL) from a match"""
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM match_players WHERE match_id = ? AND team_id IS NULL",
+        (match_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
 def swap_match_players(match_player1_id, match_player2_id):
     """Swap two match players' teams and positions"""
     conn = get_db()
