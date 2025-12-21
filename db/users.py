@@ -52,7 +52,7 @@ def get_user_clubs(user_id):
     """Get all clubs for a user with their roles"""
     conn = get_db()
     clubs = conn.execute(
-        """SELECT c.*, uc.role 
+        """SELECT c.*, uc.role
            FROM clubs c
            JOIN user_clubs uc ON c.id = uc.club_id
            WHERE uc.user_id = ?""",

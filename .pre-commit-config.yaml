@@ -28,4 +28,3 @@ repos:
         args: [--fix, --extend-select=I]
       # Run ruff formatter
       - id: ruff-format
-
