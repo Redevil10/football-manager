@@ -46,10 +46,10 @@ def migrate_db():
 
             # Step 2: Copy data (excluding league_id)
             conn.execute("""
-                INSERT INTO players_new 
-                (id, name, alias, height, weight, position_pref, team, position, 
+                INSERT INTO players_new
+                (id, name, alias, height, weight, position_pref, team, position,
                  club_id, technical_attrs, mental_attrs, physical_attrs, gk_attrs, created_at)
-                SELECT 
+                SELECT
                     id, name, alias, height, weight, position_pref, team, position,
                     club_id, technical_attrs, mental_attrs, physical_attrs, gk_attrs, created_at
                 FROM players

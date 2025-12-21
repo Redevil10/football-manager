@@ -11,9 +11,21 @@ def register_migration_routes(rt, STYLE):
 
     @rt("/migration")
     def migration_page(req: Request = None, sess=None):
-        """Database migration page"""
+        """Database migration page - only accessible to superusers"""
         user = get_current_user(req, sess)
-        # Migration page doesn't require login (for initial setup)
+
+        # Require authentication
+        if not user:
+            from fasthtml.common import RedirectResponse
+
+            return RedirectResponse("/login", status_code=303)
+
+        # Require superuser status
+        if not user.get("is_superuser"):
+            from fasthtml.common import RedirectResponse
+
+            return RedirectResponse("/", status_code=303)
+
         return Html(
             Head(
                 Title("Database Migration - Football Manager"),
@@ -72,8 +84,22 @@ def register_migration_routes(rt, STYLE):
         )
 
     @rt("/run_migration", methods=["POST"])
-    def route_run_migration():
-        """Run comprehensive database migration"""
+    def route_run_migration(req: Request = None, sess=None):
+        """Run comprehensive database migration - only accessible to superusers"""
+        user = get_current_user(req, sess)
+
+        # Require authentication
+        if not user:
+            from fasthtml.common import RedirectResponse
+
+            return RedirectResponse("/login", status_code=303)
+
+        # Require superuser status
+        if not user.get("is_superuser"):
+            from fasthtml.common import RedirectResponse
+
+            return RedirectResponse("/", status_code=303)
+
         try:
             # Capture print output
             import io

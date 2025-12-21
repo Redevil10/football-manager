@@ -33,7 +33,7 @@ def migrate_db():
                   is_superuser INTEGER DEFAULT 0,
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"""
         )
-        
+
         # Clubs table
         conn.execute(
             """CREATE TABLE IF NOT EXISTS clubs
@@ -42,7 +42,7 @@ def migrate_db():
                   description TEXT,
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"""
         )
-        
+
         # User-Club relationship (many-to-many with role)
         conn.execute(
             """CREATE TABLE IF NOT EXISTS user_clubs
@@ -58,7 +58,7 @@ def migrate_db():
         conn.commit()
         messages.append("Created authentication tables (users, clubs, user_clubs)")
         print("Created authentication tables (users, clubs, user_clubs)", flush=True)
-        
+
         # Step 1: Add club_id column to players table if it doesn't exist
         try:
             conn.execute("ALTER TABLE players ADD COLUMN club_id INTEGER")

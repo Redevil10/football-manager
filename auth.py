@@ -27,7 +27,7 @@ def verify_password(password: str, password_hash: str, salt: str) -> bool:
 
 def get_session_from_request(req: Request):
     """Get session dict from request
-    
+
     NOTE: In FastHTML, sessions are typically accessed via the 'session' parameter
     injected into route handlers. This function is a fallback for cases where we
     need to access the session from the request object directly.
@@ -40,7 +40,7 @@ def get_session_from_request(req: Request):
             sess = req.scope.get("session", {})
             if isinstance(sess, dict):
                 return dict(sess)
-        
+
         if hasattr(req, "session"):
             sess = req.session
             if isinstance(sess, dict):
@@ -71,14 +71,14 @@ def login_user(req: Request, username: str, password: str, sess: dict = None) ->
         # The session parameter persists via cookies automatically
         if sess is None:
             return False
-        
+
         try:
             sess["user_id"] = user["id"]
             return True
         except Exception as e:
             print(f"Error setting session: {e}")
             return False
-    
+
     return False
 
 
@@ -96,7 +96,7 @@ def logout_user(req: Request, sess: dict = None):
 
 def get_current_user(req: Request, sess: dict = None) -> Optional[dict]:
     """Get current logged-in user from session
-    
+
     In FastHTML, the session is injected as a parameter. If sess is provided,
     use it directly. Otherwise, try to get it from the request.
     """
@@ -104,14 +104,16 @@ def get_current_user(req: Request, sess: dict = None) -> Optional[dict]:
         user_id = sess.get("user_id")
         if user_id:
             from db.users import get_user_by_id
+
             return get_user_by_id(user_id)
-    
+
     if req is not None:
         sess = get_session_from_request(req)
         if isinstance(sess, dict):
             user_id = sess.get("user_id")
             if user_id:
                 from db.users import get_user_by_id
+
                 return get_user_by_id(user_id)
 
     return None

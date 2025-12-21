@@ -3,13 +3,12 @@
 from fasthtml.common import *  # noqa: F403, F405
 from fasthtml.common import RedirectResponse, Request
 
-from auth import hash_password, login_user, logout_user
+from auth import get_current_user, hash_password, login_user, logout_user
 from db.users import create_user, get_user_by_username
 
 
 def register_auth_routes(rt, STYLE):
     """Register authentication-related routes"""
-
 
     @rt("/login", methods=["POST"])
     async def route_login(req: Request, sess=None):
@@ -98,18 +97,6 @@ def register_auth_routes(rt, STYLE):
                         method="post",
                         action="/login",
                     ),
-                    Hr(style="margin: 20px 0;"),
-                    Div(style="text-align: center;")(
-                        P(
-                            "First time setup?",
-                            style="margin-bottom: 10px; color: #666;",
-                        ),
-                        A(
-                            "Run Database Migration",
-                            href="/migration",
-                            style="display: inline-block; padding: 8px 16px; background: #17a2b8; color: white; text-decoration: none; border-radius: 4px;",
-                        ),
-                    ),
                 ),
             ),
         )
@@ -122,13 +109,24 @@ def register_auth_routes(rt, STYLE):
 
     @rt("/register", methods=["POST"])
     async def route_register(req: Request, sess=None):
-        """Handle registration form submission"""
+        """Handle registration form submission - only accessible to superusers"""
+        user = get_current_user(req, sess)
+
+        # Require authentication
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Require superuser status
+        if not user.get("is_superuser"):
+            return RedirectResponse("/", status_code=303)
+
         try:
             print(f"Registration POST received. Method: {req.method}, URL: {req.url}")
 
             # Check if users table exists
             try:
                 from db.connection import get_db
+
                 conn = get_db()
                 conn.execute("SELECT 1 FROM users LIMIT 1")
                 conn.close()
@@ -146,14 +144,36 @@ def register_auth_routes(rt, STYLE):
             email = form.get("email", "").strip() or None
             password = form.get("password", "")
             is_superuser = form.get("is_superuser") == "1"
+            role = form.get("role", "").strip()
+            club_id_str = form.get("club_id", "").strip()
 
             print(
-                f"Parsed: username={username}, email={email}, is_superuser={is_superuser}, password_length={len(password)}"
+                f"Parsed: username={username}, email={email}, is_superuser={is_superuser}, role={role}, club_id={club_id_str}, password_length={len(password)}"
             )
 
             if not username or not password:
                 return RedirectResponse(
                     "/register?error=Please+provide+username+and+password",
+                    status_code=303,
+                )
+
+            if not role or role not in ["viewer", "manager"]:
+                return RedirectResponse(
+                    "/register?error=Please+select+a+valid+role",
+                    status_code=303,
+                )
+
+            if not club_id_str:
+                return RedirectResponse(
+                    "/register?error=Please+select+a+club",
+                    status_code=303,
+                )
+
+            try:
+                club_id = int(club_id_str)
+            except ValueError:
+                return RedirectResponse(
+                    "/register?error=Invalid+club+ID",
                     status_code=303,
                 )
 
@@ -175,7 +195,7 @@ def register_auth_routes(rt, STYLE):
 
             if user_id:
                 print(f"User created successfully with ID: {user_id}")
-                
+
                 # Verify user was actually created by querying the database
                 verify_user = get_user_by_username(username)
                 if not verify_user:
@@ -184,8 +204,24 @@ def register_auth_routes(rt, STYLE):
                         "/register?error=User+created+but+not+found+in+database",
                         status_code=303,
                     )
-                print(f"Verified: User '{username}' exists in database with ID {verify_user['id']}")
-                
+                print(
+                    f"Verified: User '{username}' exists in database with ID {verify_user['id']}"
+                )
+
+                # Assign user to club with role
+                from db.users import add_user_to_club
+
+                club_assigned = add_user_to_club(user_id, club_id, role)
+                if not club_assigned:
+                    print(
+                        f"Warning: Failed to assign user {user_id} to club {club_id} with role {role}"
+                    )
+                    return RedirectResponse(
+                        "/register?error=User+created+but+failed+to+assign+to+club",
+                        status_code=303,
+                    )
+                print(f"Assigned user {user_id} to club {club_id} with role {role}")
+
                 # Auto-login after registration
                 if sess is None:
                     sess = {}
@@ -204,8 +240,11 @@ def register_auth_routes(rt, STYLE):
                 # Try to get more info about why it failed
                 try:
                     from db.users import get_all_users
+
                     all_users = get_all_users()
-                    print(f"Current users in database: {[u['username'] for u in all_users]}")
+                    print(
+                        f"Current users in database: {[u['username'] for u in all_users]}"
+                    )
                 except Exception as e:
                     print(f"Could not list users: {e}")
                 return RedirectResponse(
@@ -219,18 +258,34 @@ def register_auth_routes(rt, STYLE):
             print(f"Registration error: {error_detail}")
             print(traceback.format_exc())
             # Check if it's a table doesn't exist error
-            if "no such table" in error_detail.lower() or "users" in error_detail.lower():
-                error_msg = "Database not initialized. Please run migrations at /migration"
+            if (
+                "no such table" in error_detail.lower()
+                or "users" in error_detail.lower()
+            ):
+                error_msg = (
+                    "Database not initialized. Please run migrations at /migration"
+                )
                 return RedirectResponse(
                     f"/register?error={error_msg.replace(' ', '+')}", status_code=303
                 )
             return RedirectResponse(
-                f"/register?error=Registration+failed:+{error_detail.replace(' ', '+')}", status_code=303
+                f"/register?error=Registration+failed:+{error_detail.replace(' ', '+')}",
+                status_code=303,
             )
 
     @rt("/register")
-    def register_page(req: Request = None):
-        """Registration page (for creating initial admin user)"""
+    def register_page(req: Request = None, sess=None):
+        """Registration page - only accessible to superusers"""
+        user = get_current_user(req, sess)
+
+        # Require authentication
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Require superuser status
+        if not user.get("is_superuser"):
+            return RedirectResponse("/", status_code=303)
+
         # Get error from query params if present
         error = None
         if req:
@@ -241,20 +296,12 @@ def register_auth_routes(rt, STYLE):
 
                 query = parse_qs(str(req.url.query))
                 error = query.get("error", [None])[0]
-        
-        # Add link to verify users were created (for debugging)
-        debug_info = ""
-        try:
-            from db.users import get_all_users
-            users = get_all_users()
-            if users:
-                debug_info = P(
-                    f"Debug: Found {len(users)} user(s) in database",
-                    style="color: #666; font-size: 12px; margin-top: 10px;",
-                )
-        except Exception:
-            pass  # Ignore errors in debug info
-        
+
+        # Get all clubs for the dropdown
+        from db.clubs import get_all_clubs
+
+        clubs = get_all_clubs()
+
         return Html(
             Head(
                 Title("Register - Football Manager"),
@@ -298,6 +345,47 @@ def register_auth_routes(rt, STYLE):
                                 value="1",
                             ),
                         ),
+                        Div(cls="input-group", style="margin-bottom: 15px;")(
+                            Label("Role:"),
+                            Select(
+                                Option(
+                                    "Select a role",
+                                    value="",
+                                    disabled=True,
+                                    selected=True,
+                                ),
+                                Option("Viewer", value="viewer"),
+                                Option("Manager", value="manager"),
+                                name="role",
+                                required=True,
+                                style="width: 100%; padding: 8px;",
+                            ),
+                        ),
+                        Div(cls="input-group", style="margin-bottom: 15px;")(
+                            Label("Club:"),
+                            (
+                                Select(
+                                    Option(
+                                        "Select a club",
+                                        value="",
+                                        disabled=True,
+                                        selected=True,
+                                    ),
+                                    *[
+                                        Option(club["name"], value=str(club["id"]))
+                                        for club in clubs
+                                    ],
+                                    name="club_id",
+                                    required=True,
+                                    style="width: 100%; padding: 8px;",
+                                )
+                                if clubs
+                                else P(
+                                    "No clubs available. Please create a club first.",
+                                    style="color: #666; padding: 8px; background: #f0f0f0; border-radius: 4px;",
+                                )
+                            ),
+                        ),
                         error
                         and P(
                             error.replace("+", " "),
@@ -313,8 +401,6 @@ def register_auth_routes(rt, STYLE):
                         method="POST",
                         action="/register",
                     ),
-                    debug_info,
                 ),
             ),
         )
-
