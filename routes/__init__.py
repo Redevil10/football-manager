@@ -1,9 +1,6 @@
 # routes/__init__.py - Route registration
 
 import os
-
-# Initialize app with session support
-# Generate a secret key for session signing (in production, use a secure random key)
 import secrets
 
 from fasthtml.common import fast_app
@@ -21,7 +18,9 @@ if not SECRET_KEY:
     # Generate a secret key and store it (for persistence across restarts on HF Spaces)
     # In production, this should be set via environment variable
     SECRET_KEY = secrets.token_urlsafe(32)
-    print(f"Generated SECRET_KEY (set SECRET_KEY env var for persistence): {SECRET_KEY[:20]}...")
+    print(
+        f"Generated SECRET_KEY (set SECRET_KEY env var for persistence): {SECRET_KEY[:20]}..."
+    )
 
 # FastHTML's fast_app(secret_key=...) automatically handles sessions
 # According to FastHTML docs: "session acts like a dictionary and you can set and get values from it"
@@ -32,11 +31,11 @@ app, rt = fast_app(secret_key=SECRET_KEY)
 # HF Spaces apps run in an iframe on a different domain, requiring special cookie settings
 # See: https://huggingface.co/docs/hub/en/spaces-cookie-limitations
 try:
-    from starlette.middleware.sessions import SessionMiddleware
     from starlette.middleware.base import BaseHTTPMiddleware
-    
+    from starlette.middleware.sessions import SessionMiddleware
+
     is_hf_space = os.environ.get("HF_TOKEN") is not None
-    
+
     if is_hf_space:
         # For cross-origin iframes, we MUST use same_site="none" AND secure=True
         # same_site="none" requires the Secure flag, which requires https_only=True
@@ -45,7 +44,7 @@ try:
     else:
         same_site_setting = "lax"
         https_only_setting = False
-    
+
     # FastHTML's fast_app(secret_key=...) automatically adds SessionMiddleware with default settings
     # Those defaults (likely same_site="lax") don't work for Hugging Face Spaces iframes
     # We need to remove it and add our own with the correct settings to avoid:
@@ -53,22 +52,25 @@ try:
     # 2. Using the wrong cookie settings (won't work in iframe)
     if hasattr(app, "user_middleware"):
         app.user_middleware = [
-            mw for mw in app.user_middleware
+            mw
+            for mw in app.user_middleware
             if not (hasattr(mw, "cls") and "Session" in str(mw.cls))
         ]
-    
+
     # Add middleware to detect HTTPS from proxy headers
     # Needed for HF Spaces where the app sees HTTP internally but browser uses HTTPS
     if is_hf_space:
+
         class HTTPSDetectionMiddleware(BaseHTTPMiddleware):
             """Ensure HTTPS is detected from X-Forwarded-Proto header"""
+
             async def dispatch(self, request, call_next):
                 if request.headers.get("x-forwarded-proto") == "https":
                     request.scope["scheme"] = "https"
                 return await call_next(request)
-        
+
         app.add_middleware(HTTPSDetectionMiddleware)
-    
+
     # Add SessionMiddleware with the correct configuration for our environment
     # (HF Spaces needs same_site="none", local dev can use "lax")
     app.add_middleware(
@@ -78,7 +80,7 @@ try:
         https_only=https_only_setting,
         max_age=86400 * 7,  # 7 days
     )
-    
+
 except ImportError:
     pass  # SessionMiddleware not available
 except Exception as e:
