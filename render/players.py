@@ -2,39 +2,49 @@
 
 from fasthtml.common import *
 
-from config import TECHNICAL_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, GK_ATTRS, SCORE_RANGES
+from config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, SCORE_RANGES, TECHNICAL_ATTRS
 from logic import (
+    calculate_gk_score,
+    calculate_mental_score,
+    calculate_overall_score,
+    calculate_physical_score,
     calculate_player_overall,
     calculate_technical_score,
-    calculate_mental_score,
-    calculate_physical_score,
-    calculate_gk_score,
-    calculate_overall_score,
 )
 from render.common import render_attr_input
 
 
-def render_player_table(players):
+def render_player_table(players, user=None):
     """Render player list as table"""
     if not players:
         return P("No players yet", cls="empty-state")
 
+    from render.common import can_user_delete
+
     rows = []
     for p in players:
         overall = round(calculate_player_overall(p), 1)
+        club_id = p.get("club_id")
+        can_delete = can_user_delete(user, club_id) if user else False
+
+        actions = [
+            A("View", href=f"/player/{p['id']}", style="background: #0066cc;"),
+        ]
+        if can_delete:
+            actions.append(
+                A(
+                    "Delete",
+                    href=f"/delete_player/{p['id']}",
+                    cls="delete",
+                    onclick="return confirm('Confirm delete?');",
+                )
+            )
+
         row = Tr(
             Td(p["name"]),
             Td(str(overall), style="font-weight: bold; color: #0066cc;"),
             Td(
-                Div(cls="player-row-actions")(
-                    A("View", href=f"/player/{p['id']}", style="background: #0066cc;"),
-                    A(
-                        "Delete",
-                        href=f"/delete_player/{p['id']}",
-                        cls="delete",
-                        onclick="return confirm('Confirm delete?');",
-                    ),
-                ),
+                Div(cls="player-row-actions")(*actions),
             ),
         )
         rows.append(row)
@@ -66,7 +76,11 @@ def render_match_available_players(match_id, signup_players):
             Td(str(overall), style="font-weight: bold; color: #0066cc;"),
             Td(
                 Div(cls="player-row-actions")(
-                    A("View", href=f"/player/{player_id}", style="background: #0066cc;"),
+                    A(
+                        "View",
+                        href=f"/player/{player_id}",
+                        style="background: #0066cc;",
+                    ),
                     Form(
                         method="POST",
                         action=f"/remove_match_signup_player/{match_id}/{match_player_id}",
@@ -99,13 +113,36 @@ def render_match_available_players(match_id, signup_players):
     )
 
 
-def render_player_detail_form(player):
+def render_player_detail_form(player, user=None):
     """Render player detail edit form"""
+    from render.common import can_user_delete, can_user_edit
+
     overall = round(calculate_player_overall(player), 1)
     tech_score = calculate_technical_score(player)
     mental_score = calculate_mental_score(player)
     phys_score = calculate_physical_score(player)
     gk_score = calculate_gk_score(player)
+
+    club_id = player.get("club_id")
+    can_edit = can_user_edit(user, club_id) if user else False
+    can_delete = can_user_delete(user, club_id) if user else False
+
+    # If user can't edit, show read-only view
+    if not can_edit:
+        return Div(cls="container-white")(
+            H3(f"Player: {player['name']}"),
+            P(f"Alias: {player.get('alias', 'N/A')}"),
+            P(f"Height: {player.get('height', 'N/A')} cm"),
+            P(f"Weight: {player.get('weight', 'N/A')} kg"),
+            P(f"Overall Score: {overall}"),
+            P(
+                f"Technical: {tech_score} | Mental: {mental_score} | Physical: {phys_score} | GK: {gk_score}"
+            ),
+            P(
+                "(Viewer - Edit/Delete not available)",
+                style="color: #666; font-style: italic; margin-top: 20px;",
+            ),
+        )
 
     return Div(cls="container-white")(
         # Name and Alias edit form
@@ -312,12 +349,18 @@ def render_player_detail_form(player):
             ),
             Div(cls="btn-group", style="margin-top: 20px;")(
                 Button("Save Attributes", type="submit", cls="btn-success"),
-                A(
-                    "Delete Player",
-                    href=f"/delete_player/{player['id']}",
-                    cls="btn-danger",
-                    onclick="return confirm('Confirm delete?');",
-                    style="text-decoration: none;",
+                *(
+                    [
+                        A(
+                            "Delete Player",
+                            href=f"/delete_player/{player['id']}",
+                            cls="btn-danger",
+                            onclick="return confirm('Confirm delete?');",
+                            style="text-decoration: none;",
+                        )
+                    ]
+                    if can_delete
+                    else []
                 ),
             ),
             method="post",

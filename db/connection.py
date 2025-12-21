@@ -12,32 +12,79 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
+    # Users table
+    c.execute(
+        """CREATE TABLE IF NOT EXISTS users
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  username TEXT NOT NULL UNIQUE,
+                  email TEXT,
+                  password_hash TEXT NOT NULL,
+                  password_salt TEXT NOT NULL,
+                  is_superuser INTEGER DEFAULT 0,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"""
+    )
+
+    # Clubs table
+    c.execute(
+        """CREATE TABLE IF NOT EXISTS clubs
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT NOT NULL UNIQUE,
+                  description TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"""
+    )
+
+    # User-Club relationship (many-to-many with role)
+    c.execute(
+        """CREATE TABLE IF NOT EXISTS user_clubs
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  user_id INTEGER NOT NULL,
+                  club_id INTEGER NOT NULL,
+                  role TEXT NOT NULL CHECK(role IN ('viewer', 'manager')),
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                  FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+                  UNIQUE(user_id, club_id))"""
+    )
+
     c.execute(
         """CREATE TABLE IF NOT EXISTS players
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  name TEXT NOT NULL UNIQUE,
+                  name TEXT NOT NULL,
                   alias TEXT,
                   height INTEGER,
                   weight INTEGER,
                   position_pref TEXT,
                   team INTEGER,
                   position TEXT,
-                  league_id INTEGER,
+                  club_id INTEGER,
                   technical_attrs TEXT DEFAULT '{}',
                   mental_attrs TEXT DEFAULT '{}',
                   physical_attrs TEXT DEFAULT '{}',
                   gk_attrs TEXT DEFAULT '{}',
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                  FOREIGN KEY (league_id) REFERENCES leagues(id))"""
+                  FOREIGN KEY (club_id) REFERENCES clubs(id),
+                  UNIQUE(name, club_id))"""
     )
 
-    # Leagues table
+    # Leagues table (independent entities, not tied to a single club)
     c.execute(
         """CREATE TABLE IF NOT EXISTS leagues
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   name TEXT NOT NULL UNIQUE,
                   description TEXT,
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"""
+    )
+
+    # Club-League relationship (many-to-many)
+    c.execute(
+        """CREATE TABLE IF NOT EXISTS club_leagues
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  club_id INTEGER NOT NULL,
+                  league_id INTEGER NOT NULL,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+                  FOREIGN KEY (league_id) REFERENCES leagues(id) ON DELETE CASCADE,
+                  UNIQUE(club_id, league_id))"""
     )
 
     # Matches table (linked to leagues)

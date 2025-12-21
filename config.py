@@ -2,7 +2,6 @@
 
 import os
 
-
 os.makedirs("data", exist_ok=True)
 DB_PATH = "data/football_manager.db"
 

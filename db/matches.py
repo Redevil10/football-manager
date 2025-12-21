@@ -1,6 +1,6 @@
 # db/matches.py - Match database operations
 
-from datetime import datetime, date
+from datetime import date, datetime
 
 from db.connection import get_db
 from db.leagues import get_all_leagues, get_or_create_friendly_league
@@ -21,11 +21,12 @@ def get_match_info():
     return None
 
 
-def save_match_info(date, time, location):
+def save_match_info(date, time, location, club_id):
     """Save match info - creates a match in matches table with Friendly league"""
     # This function is kept for backward compatibility
     # It creates a match in the matches table with the Friendly league
-    friendly_league_id = get_or_create_friendly_league()
+    # The league will be created if it doesn't exist, and the club will be added to it
+    friendly_league_id = get_or_create_friendly_league(club_id)
     conn = get_db()
     # Delete old matches without league_id (if any)
     conn.execute("DELETE FROM matches WHERE league_id IS NULL")
@@ -49,15 +50,31 @@ def get_matches_by_league(league_id):
     return [dict(match) for match in matches]
 
 
-def get_all_matches():
-    """Get all matches across all leagues"""
+def get_all_matches(club_ids=None):
+    """Get all matches across all leagues, optionally filtered by club_ids"""
+    from db.club_leagues import get_league_ids_for_clubs
+
     conn = get_db()
-    matches = conn.execute(
-        """SELECT m.*, l.name as league_name
-           FROM matches m
-           LEFT JOIN leagues l ON m.league_id = l.id
-           ORDER BY m.date DESC, m.start_time DESC""",
-    ).fetchall()
+    if club_ids is not None and len(club_ids) > 0:
+        # Get leagues that the clubs participate in
+        league_ids = get_league_ids_for_clubs(club_ids)
+        if league_ids:
+            placeholders = ",".join("?" * len(league_ids))
+            query = f"""SELECT m.*, l.name as league_name
+               FROM matches m
+               LEFT JOIN leagues l ON m.league_id = l.id
+               WHERE m.league_id IN ({placeholders})
+               ORDER BY m.date DESC, m.start_time DESC"""
+            matches = conn.execute(query, tuple(league_ids)).fetchall()
+        else:
+            matches = []
+    else:
+        matches = conn.execute(
+            """SELECT m.*, l.name as league_name
+               FROM matches m
+               LEFT JOIN leagues l ON m.league_id = l.id
+               ORDER BY m.date DESC, m.start_time DESC""",
+        ).fetchall()
     conn.close()
     return [dict(match) for match in matches]
 
@@ -90,9 +107,10 @@ def get_next_match_by_league(league_id):
     return dict(match) if match else None
 
 
-def get_next_matches_by_all_leagues():
-    """Get the next match for each league"""
-    leagues = get_all_leagues()
+def get_next_matches_by_all_leagues(club_ids=None):
+    """Get the next match for each league, optionally filtered by club_ids"""
+    # Get leagues that the clubs participate in
+    leagues = get_all_leagues(club_ids)
     next_matches = {}
 
     for league in leagues:
@@ -100,22 +118,6 @@ def get_next_matches_by_all_leagues():
         match = get_next_match_by_league(league_id)
         if match:
             next_matches[league_id] = {"league": league, "match": match}
-
-    # Also handle matches without a league (league_id is NULL)
-    conn = get_db()
-    match_no_league = conn.execute(
-        """SELECT m.*, NULL as league_name
-           FROM matches m
-           WHERE m.league_id IS NULL
-           ORDER BY m.date DESC, m.start_time DESC LIMIT 1""",
-    ).fetchone()
-    conn.close()
-
-    if match_no_league:
-        next_matches[None] = {
-            "league": {"id": None, "name": "Friendly"},
-            "match": dict(match_no_league),
-        }
 
     return next_matches
 
@@ -152,16 +154,32 @@ def get_last_created_match():
     return dict(match) if match else None
 
 
-def get_recent_matches(limit=5):
-    """Get recent matches (excluding the next match)"""
+def get_recent_matches(limit=5, club_ids=None):
+    """Get recent matches (excluding the next match), optionally filtered by club_ids"""
+    from db.club_leagues import get_league_ids_for_clubs
+
     conn = get_db()
-    matches = conn.execute(
-        """SELECT m.*, l.name as league_name
-           FROM matches m
-           LEFT JOIN leagues l ON m.league_id = l.id
-           ORDER BY m.date DESC, m.start_time DESC LIMIT ?""",
-        (limit + 1,),  # Get one extra to exclude the first one (next match)
-    ).fetchall()
+    if club_ids is not None and len(club_ids) > 0:
+        # Get leagues that the clubs participate in
+        league_ids = get_league_ids_for_clubs(club_ids)
+        if league_ids:
+            placeholders = ",".join("?" * len(league_ids))
+            query = f"""SELECT m.*, l.name as league_name
+               FROM matches m
+               LEFT JOIN leagues l ON m.league_id = l.id
+               WHERE m.league_id IN ({placeholders})
+               ORDER BY m.date DESC, m.start_time DESC LIMIT ?"""
+            matches = conn.execute(query, tuple(league_ids) + (limit + 1,)).fetchall()
+        else:
+            matches = []
+    else:
+        matches = conn.execute(
+            """SELECT m.*, l.name as league_name
+               FROM matches m
+               LEFT JOIN leagues l ON m.league_id = l.id
+               ORDER BY m.date DESC, m.start_time DESC LIMIT ?""",
+            (limit + 1,),  # Get one extra to exclude the first one (next match)
+        ).fetchall()
     conn.close()
     matches_list = [dict(match) for match in matches]
     # Return all except the first one (which is the next match)
@@ -173,12 +191,27 @@ def get_recent_matches(limit=5):
     ]  # Return up to limit matches, excluding the first
 
 
-def get_match(match_id):
-    """Get a match by ID"""
+def get_match(match_id, club_ids=None):
+    """Get a match by ID, optionally checking if user's clubs participate in the league"""
+    from db.club_leagues import is_club_in_league
+
     conn = get_db()
     match = conn.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
     conn.close()
-    return dict(match) if match else None
+
+    if not match:
+        return None
+
+    match_dict = dict(match)
+
+    # If club_ids provided, check if any of the clubs participate in this league
+    if club_ids is not None and len(club_ids) > 0 and match_dict.get("league_id"):
+        league_id = match_dict["league_id"]
+        has_access = any(is_club_in_league(cid, league_id) for cid in club_ids)
+        if not has_access:
+            return None
+
+    return match_dict
 
 
 def create_match(

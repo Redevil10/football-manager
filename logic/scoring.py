@@ -3,11 +3,11 @@
 from config import (
     ATTRIBUTE_TO_CATEGORY_SCALE,
     CATEGORY_TO_ATTRIBUTE_SCALE,
+    GK_ATTRS,
+    MENTAL_ATTRS,
     OVERALL_SCORE_DIVISOR,
     OVERALL_SCORE_WEIGHTS,
     PHYSICAL_ATTRS,
-    GK_ATTRS,
-    MENTAL_ATTRS,
     SCORE_RANGES,
     TECHNICAL_ATTRS,
 )
@@ -148,7 +148,9 @@ def set_overall_score(overall_score):
     else:
         # Normalize overall_score to 0-1 range, then scale to category range
         normalized = (overall_score - overall_min) / (overall_max - overall_min)
-        target_category_score = category_min + normalized * (category_max - category_min)
+        target_category_score = category_min + normalized * (
+            category_max - category_min
+        )
 
     # Use floor for tech, mental, phys to avoid rounding up
     # Then calculate gk_score to ensure exact overall_score after attribute conversion
@@ -156,9 +158,7 @@ def set_overall_score(overall_score):
     category_score_base = int(target_category_score)  # Floor
 
     # Ensure base score is within valid range
-    category_score_base = max(
-        category_min, min(category_max, category_score_base)
-    )
+    category_score_base = max(category_min, min(category_max, category_score_base))
 
     # Set tech, mental, phys to base score
     tech_score = category_score_base
@@ -227,11 +227,14 @@ def set_overall_score(overall_score):
 
         for trial_adjustment in [-2, -1, 0, 1, 2]:
             trial_gk_score = max(
-                category_min, min(category_max, gk_score + gk_adjustment + trial_adjustment)
+                category_min,
+                min(category_max, gk_score + gk_adjustment + trial_adjustment),
             )
             trial_gk_attrs = set_gk_score(trial_gk_score)
             trial_gk_avg = (
-                sum(trial_gk_attrs.values()) / len(trial_gk_attrs) if trial_gk_attrs else 0
+                sum(trial_gk_attrs.values()) / len(trial_gk_attrs)
+                if trial_gk_attrs
+                else 0
             )
             trial_actual_gk = round(trial_gk_avg * ATTRIBUTE_TO_CATEGORY_SCALE)
 

@@ -48,7 +48,7 @@ def migrate_db():
             raise
     finally:
         conn.close()
-    
+
     return messages
 
 

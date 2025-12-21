@@ -14,14 +14,25 @@ def get_match_teams(match_id):
     return [dict(team) for team in teams]
 
 
-def create_match_team(match_id, team_number, team_name, jersey_color, should_allocate=1):
+def create_match_team(
+    match_id, team_number, team_name, jersey_color, should_allocate=1
+):
     """Create a team for a match"""
     conn = get_db()
     try:
         cursor = conn.execute(
             """INSERT INTO match_teams (match_id, team_number, team_name, jersey_color, should_allocate) VALUES (?, ?, ?, ?, ?)
             ON CONFLICT (match_id, team_number) DO UPDATE SET team_name = ?, jersey_color = ?, should_allocate = ?""",
-            (match_id, team_number, team_name, jersey_color, should_allocate, team_name, jersey_color, should_allocate),
+            (
+                match_id,
+                team_number,
+                team_name,
+                jersey_color,
+                should_allocate,
+                team_name,
+                jersey_color,
+                should_allocate,
+            ),
         )
         conn.commit()
 
@@ -49,30 +60,32 @@ def create_match_team(match_id, team_number, team_name, jersey_color, should_all
         return None
 
 
-def update_match_team(team_id, team_name, jersey_color, score=None, captain_id=None, should_allocate=None):
+def update_match_team(
+    team_id, team_name, jersey_color, score=None, captain_id=None, should_allocate=None
+):
     """Update a match team"""
     conn = get_db()
     # Build update query dynamically based on which fields are provided
     updates = []
     params = []
-    
+
     updates.append("team_name = ?")
     params.append(team_name)
     updates.append("jersey_color = ?")
     params.append(jersey_color)
-    
+
     if score is not None:
         updates.append("score = ?")
         params.append(score)
-    
+
     if captain_id is not None:
         updates.append("captain_id = ?")
         params.append(captain_id)
-    
+
     if should_allocate is not None:
         updates.append("should_allocate = ?")
         params.append(should_allocate)
-    
+
     params.append(team_id)
     query = f"UPDATE match_teams SET {', '.join(updates)} WHERE id = ?"
     conn.execute(query, params)
