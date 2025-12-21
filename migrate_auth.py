@@ -21,6 +21,44 @@ def migrate_db():
     conn.row_factory = sqlite3.Row
 
     try:
+        # Step 0: Create authentication tables if they don't exist
+        # Users table
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS users
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  username TEXT NOT NULL UNIQUE,
+                  email TEXT,
+                  password_hash TEXT NOT NULL,
+                  password_salt TEXT NOT NULL,
+                  is_superuser INTEGER DEFAULT 0,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        
+        # Clubs table
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS clubs
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT NOT NULL UNIQUE,
+                  description TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        
+        # User-Club relationship (many-to-many with role)
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS user_clubs
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  user_id INTEGER NOT NULL,
+                  club_id INTEGER NOT NULL,
+                  role TEXT NOT NULL CHECK(role IN ('viewer', 'manager')),
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                  FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+                  UNIQUE(user_id, club_id))"""
+        )
+        conn.commit()
+        messages.append("Created authentication tables (users, clubs, user_clubs)")
+        print("Created authentication tables (users, clubs, user_clubs)", flush=True)
+        
         # Step 1: Add club_id column to players table if it doesn't exist
         try:
             conn.execute("ALTER TABLE players ADD COLUMN club_id INTEGER")

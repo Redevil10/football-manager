@@ -565,3 +565,4 @@ def render_club_members(club_id, club_members, user=None):
         )
 
     return Div(*content)
+

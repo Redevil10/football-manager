@@ -26,39 +26,27 @@ def verify_password(password: str, password_hash: str, salt: str) -> bool:
 
 
 def get_session_from_request(req: Request):
-    """Get session dict from request - FastHTML/Starlette stores it in req.scope['session']
-
-    CRITICAL: Always return the actual session object from req.scope['session'],
-    not a copy. Modifications to the returned dict will persist.
-
-    Starlette's SessionMiddleware uses req.scope['session'] internally,
-    but also provides req.session as a convenience property.
+    """Get session dict from request
+    
+    NOTE: In FastHTML, sessions are typically accessed via the 'session' parameter
+    injected into route handlers. This function is a fallback for cases where we
+    need to access the session from the request object directly.
     """
     if req is None:
         return {}
 
     try:
-        # Try req.session first (Starlette SessionMiddleware property)
+        if hasattr(req, "scope") and isinstance(req.scope, dict):
+            sess = req.scope.get("session", {})
+            if isinstance(sess, dict):
+                return dict(sess)
+        
         if hasattr(req, "session"):
             sess = req.session
             if isinstance(sess, dict):
-                return sess
-
-        # Fallback to req.scope['session'] (direct access)
-        if hasattr(req, "scope") and isinstance(req.scope, dict):
-            if "session" not in req.scope:
-                req.scope["session"] = {}
-            sess = req.scope["session"]
-            # Ensure it's a dict (Starlette sessions are dict-like)
-            if not isinstance(sess, dict):
-                req.scope["session"] = {}
-                sess = req.scope["session"]
-            return sess
-    except Exception as e:
-        print(f"Error getting session from request: {e}")
-        import traceback
-
-        traceback.print_exc()
+                return dict(sess)
+    except Exception:
+        pass
 
     return {}
 
@@ -76,82 +64,57 @@ def login_user(req: Request, username: str, password: str, sess: dict = None) ->
 
     user = get_user_by_username(username)
     if not user:
-        print(f"Login failed: User '{username}' not found")
         return False
-
-    # Debug: Print user info (remove in production)
-    print(f"Attempting login for user: {username}")
-    print(f"User found: {user['username']}, is_superuser: {user.get('is_superuser')}")
 
     if verify_password(password, user["password_hash"], user["password_salt"]):
-        # CRITICAL: Get the ACTUAL session object from req.scope['session']
-        # Starlette SessionMiddleware reads/writes from req.scope['session']
-        # We must modify the exact object that's in scope, not a copy
-
-        if not hasattr(req, "scope") or not isinstance(req.scope, dict):
-            print("ERROR: req.scope is not available!")
+        # FastHTML injects the session as a parameter - use it directly
+        # The session parameter persists via cookies automatically
+        if sess is None:
             return False
-
-        # Get or create session in scope
-        if "session" not in req.scope:
-            req.scope["session"] = {}
-
-        # Get reference to the actual session dict in scope
-        sess = req.scope["session"]
-
-        # CRITICAL: Ensure sess is a dict (not some other type)
-        if not isinstance(sess, dict):
-            req.scope["session"] = {}
-            sess = req.scope["session"]
-
-        # Modify the actual session object (this is the one SessionMiddleware will save)
-        sess["user_id"] = user["id"]
-        print(f"✓ Login successful: user_id = {user['id']}")
-
-        # Note: req.session is a read-only property in Starlette
-        # We've already modified req.scope['session'], which is what SessionMiddleware uses
-        # SessionMiddleware will automatically save req.scope['session'] to a cookie
-
-        return True
-    else:
-        print(f"Login failed: Password verification failed for user '{username}'")
-        return False
+        
+        try:
+            sess["user_id"] = user["id"]
+            return True
+        except Exception as e:
+            print(f"Error setting session: {e}")
+            return False
+    
+    return False
 
 
 def logout_user(req: Request, sess: dict = None):
     """Logout the current user"""
-    if req is None:
-        return
-
-    # Always get session from req.scope['session'] to modify the actual object
-    sess = get_session_from_request(req)
-    sess.pop("user_id", None)
-    # Session is already in req.scope['session'], so modifications persist automatically
+    # FastHTML injects session as a parameter - use it if provided
+    if sess is not None and isinstance(sess, dict):
+        sess.pop("user_id", None)
+    elif req is not None:
+        # Fallback: try to get session from request
+        sess = get_session_from_request(req)
+        if isinstance(sess, dict):
+            sess.pop("user_id", None)
 
 
 def get_current_user(req: Request, sess: dict = None) -> Optional[dict]:
     """Get current logged-in user from session
-
-    Always reads from req.scope['session'] to ensure we get the actual session,
-    not a stale copy.
+    
+    In FastHTML, the session is injected as a parameter. If sess is provided,
+    use it directly. Otherwise, try to get it from the request.
     """
-    if req is None:
-        return None
+    if sess is not None and isinstance(sess, dict):
+        user_id = sess.get("user_id")
+        if user_id:
+            from db.users import get_user_by_id
+            return get_user_by_id(user_id)
+    
+    if req is not None:
+        sess = get_session_from_request(req)
+        if isinstance(sess, dict):
+            user_id = sess.get("user_id")
+            if user_id:
+                from db.users import get_user_by_id
+                return get_user_by_id(user_id)
 
-    # Always get session from req.scope['session'] to ensure we have the latest
-    sess = get_session_from_request(req)
-
-    if not isinstance(sess, dict):
-        sess = {}
-
-    user_id = sess.get("user_id")
-
-    if not user_id:
-        return None
-
-    from db.users import get_user_by_id
-
-    return get_user_by_id(user_id)
+    return None
 
 
 def get_user_accessible_club_ids(user: dict) -> List[int]:
@@ -206,12 +169,12 @@ def require_auth(f):
     @wraps(f)
     def wrapper(req: Request = None, **kwargs):
         if req is None:
-            # Try to get req from kwargs
             req = kwargs.get("req")
-        user = get_current_user(req)
+        # FastHTML injects session as 'sess' or 'session' parameter
+        sess = kwargs.get("sess") or kwargs.get("session")
+        user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
-        # Pass user as a keyword argument
         return f(req=req, user=user, **kwargs)
 
     return wrapper
@@ -226,7 +189,9 @@ def require_permission(required_role: str = "manager"):
             *args, req: Request = None, user: dict = None, club_id: int = None, **kwargs
         ):
             if not user:
-                user = get_current_user(req)
+                # FastHTML injects session as 'sess' or 'session' parameter
+                sess = kwargs.get("sess") or kwargs.get("session")
+                user = get_current_user(req, sess)
                 if not user:
                     return RedirectResponse("/login", status_code=303)
 

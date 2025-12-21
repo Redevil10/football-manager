@@ -22,7 +22,7 @@ def register_home_routes(rt, STYLE):
             get_recent_matches,
         )
 
-        # Check authentication
+        # Check authentication - FastHTML injects session as 'sess' parameter
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
