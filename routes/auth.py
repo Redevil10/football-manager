@@ -1,9 +1,9 @@
 # routes/auth.py - Authentication routes
 
-from fasthtml.common import *
-from fasthtml.common import Request, RedirectResponse
+from fasthtml.common import *  # noqa: F403, F405
+from fasthtml.common import RedirectResponse, Request
 
-from auth import login_user, logout_user, hash_password
+from auth import hash_password, login_user, logout_user
 from db.users import create_user, get_user_by_username
 
 

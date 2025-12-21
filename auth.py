@@ -3,9 +3,9 @@
 import hashlib
 import secrets
 from functools import wraps
-from typing import Optional, List
+from typing import List, Optional
 
-from fasthtml.common import Request, RedirectResponse
+from fasthtml.common import RedirectResponse, Request
 
 
 # Password hashing using SHA256 with salt (for production, consider bcrypt)
@@ -245,8 +245,8 @@ def can_user_edit_match(user: dict, match_id: int) -> bool:
     if user.get("is_superuser"):
         return True
     
-    from db.matches import get_match
     from db.club_leagues import get_clubs_in_league
+    from db.matches import get_match
     
     match = get_match(match_id)
     if not match:
