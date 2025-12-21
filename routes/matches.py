@@ -1,41 +1,44 @@
 # routes/matches.py - Match routes
 
 from fasthtml.common import *
+from fasthtml.common import RedirectResponse
 
+from auth import get_current_user, get_user_club_ids_from_request
 from db import (
-    get_all_matches,
-    get_match,
+    add_match_event,
+    add_match_player,
     create_match,
-    update_match,
-    delete_match,
-    get_last_match_by_league,
-    get_or_create_friendly_league,
-    get_match_teams,
     create_match_team,
-    update_match_team,
-    update_team_captain,
+    delete_match,
+    delete_match_event,
+    find_player_by_name_or_alias,
+    get_all_leagues,
+    get_all_matches,
+    get_all_players,
+    get_db,
+    get_last_match_by_league,
+    get_league,
+    get_match,
+    get_match_events,
     get_match_players,
     get_match_signup_players,
-    add_match_player,
-    update_match_player,
-    remove_match_player,
+    get_match_teams,
+    get_or_create_friendly_league,
     remove_all_match_signup_players,
-    get_match_events,
-    add_match_event,
-    delete_match_event,
-    get_db,
-    get_all_leagues,
-    find_player_by_name_or_alias,
-    get_all_players,
+    remove_match_player,
+    update_match,
+    update_match_player,
+    update_match_team,
+    update_team_captain,
 )
 from logic import (
     allocate_match_teams,
     calculate_player_overall,
 )
 from render import (
-    render_navbar,
     render_all_matches,
     render_match_detail,
+    render_navbar,
 )
 
 
@@ -43,9 +46,16 @@ def register_match_routes(rt, STYLE):
     """Register match-related routes"""
 
     @rt("/matches")
-    def matches_page():
+    def matches_page(req: Request = None, sess=None):
         """All matches page - shows all matches across all leagues"""
-        matches = get_all_matches()
+        from auth import get_current_user, get_user_club_ids_from_request
+
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        club_ids = get_user_club_ids_from_request(req, sess)
+        matches = get_all_matches(club_ids)
         return Html(
             Head(
                 Title("All Matches - Football Manager"),
@@ -53,14 +63,14 @@ def register_match_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(),
+                render_navbar(user),
                 Div(cls="container")(
                     H2("All Matches"),
                     P(
                         "View all matches across all leagues. Click on a match to see details.",
                         style="color: #666; margin-bottom: 20px;",
                     ),
-                    render_all_matches(matches),
+                    render_all_matches(matches, user),
                 ),
             ),
         )
@@ -68,13 +78,19 @@ def register_match_routes(rt, STYLE):
     # ============ MATCHES ============
 
     @rt("/create_match", methods=["GET"])
-    def create_match_page(league_id: str = None):
+    def create_match_page(league_id: str = None, req: Request = None, sess=None):
         """Create match page - can select league or use Friendly"""
-        print("Rendering create match page")
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         from db import get_last_created_match
 
-        leagues = get_all_leagues()
-        friendly_league_id = get_or_create_friendly_league()
+        club_ids = get_user_club_ids_from_request(req, sess)
+        leagues = get_all_leagues(club_ids) if club_ids else []
+        friendly_league_id = (
+            get_or_create_friendly_league(club_ids[0]) if club_ids else None
+        )
 
         # Filter out "Friendly" league from the list since we show it as "Friendly (Default)"
         other_leagues = [
@@ -105,7 +121,7 @@ def register_match_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(),
+                render_navbar(user),
                 Div(cls="container")(
                     H2("Create Match"),
                     Div(cls="container-white")(
@@ -121,13 +137,19 @@ def register_match_routes(rt, STYLE):
                                         value="",
                                         selected=(selected_league_id == ""),
                                     ),
-                                    Option(
-                                        "Friendly (Default)",
-                                        value=str(friendly_league_id),
-                                        selected=(
-                                            selected_league_id
-                                            == str(friendly_league_id)
-                                        ),
+                                    *(
+                                        [
+                                            Option(
+                                                "Friendly (Default)",
+                                                value=str(friendly_league_id),
+                                                selected=(
+                                                    selected_league_id
+                                                    == str(friendly_league_id)
+                                                ),
+                                            )
+                                        ]
+                                        if friendly_league_id
+                                        else []
                                     ),
                                     *[
                                         Option(
@@ -228,9 +250,13 @@ def register_match_routes(rt, STYLE):
                             ),
                             Hr(),
                             Div(style="margin-bottom: 15px;")(
-                                Div(style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;")(
+                                Div(
+                                    style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;"
+                                )(
                                     H3("Home Team", style="margin: 0; flex: 1;"),
-                                    Div(style="display: flex; align-items: center; gap: 5px;")(
+                                    Div(
+                                        style="display: flex; align-items: center; gap: 5px;"
+                                    )(
                                         Input(
                                             type="checkbox",
                                             name="allocate_team1",
@@ -274,9 +300,13 @@ def register_match_routes(rt, STYLE):
                             ),
                             Hr(),
                             Div(style="margin-bottom: 15px;")(
-                                Div(style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;")(
+                                Div(
+                                    style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;"
+                                )(
                                     H3("Away Team", style="margin: 0; flex: 1;"),
-                                    Div(style="display: flex; align-items: center; gap: 5px;")(
+                                    Div(
+                                        style="display: flex; align-items: center; gap: 5px;"
+                                    )(
                                         Input(
                                             type="checkbox",
                                             name="allocate_team2",
@@ -430,6 +460,7 @@ def register_match_routes(rt, STYLE):
     def api_get_last_match(league_id: int):
         """API endpoint to get last match info for prefilling"""
         import json
+
         from fasthtml.common import Response
 
         last_match = get_last_match_by_league(league_id)
@@ -486,49 +517,73 @@ def register_match_routes(rt, STYLE):
         )
 
     @rt("/create_match", methods=["POST"])
-    async def route_create_match(req: Request):
+    async def route_create_match(req: Request, sess=None):
         """Create a new match"""
-        print("Processing create match request...")
-        import sys
-
-        # Force flush to ensure output is visible
-        sys.stdout.flush()
-        sys.stderr.flush()
-
-        # Temporary debug: return debug info in response
-        debug_info = []
-        debug_info.append("=== CREATE MATCH REQUEST RECEIVED ===")
-        debug_info.append(f"Request method: {req.method}")
-        debug_info.append(f"Request URL: {req.url}")
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
 
         try:
-            print("=== CREATE MATCH REQUEST RECEIVED ===", flush=True)
-            print(f"Request method: {req.method}", flush=True)
-            print(f"Request URL: {req.url}", flush=True)
-
             form = await req.form()
-            debug_info.append(f"Form data received: {dict(form)}")
-            debug_info.append(f"Form type: {type(form)}")
-            print(f"Form data received: {dict(form)}", flush=True)
-            print(f"Form type: {type(form)}", flush=True)
 
             # Get league_id - use selected league or default to Friendly
             league_id_str = form.get("league_id", "").strip()
-            print(f"league_id_str from form: '{league_id_str}'")
             if league_id_str:
                 try:
                     league_id = int(league_id_str)
-                    print(f"Converted league_id_str to int: {league_id}")
-                except ValueError as e:
-                    print(
-                        f"Warning: Invalid league_id_str '{league_id_str}', using Friendly. Error: {e}"
-                    )
-                    league_id = get_or_create_friendly_league()
+                except ValueError:
+                    # Get user's first club for friendly league
+                    club_ids = get_user_club_ids_from_request(req, sess)
+                    if club_ids:
+                        league_id = get_or_create_friendly_league(club_ids[0])
+                    else:
+                        return RedirectResponse(
+                            "/matches?error=No+clubs+assigned", status_code=303
+                        )
             else:
-                print("No league_id provided, using Friendly")
-                league_id = get_or_create_friendly_league()
+                # Get user's first club for friendly league
+                club_ids = get_user_club_ids_from_request(req, sess)
+                if club_ids:
+                    league_id = get_or_create_friendly_league(club_ids[0])
+                else:
+                    return RedirectResponse(
+                        "/matches?error=No+clubs+assigned", status_code=303
+                    )
 
-            print(f"Final league_id: {league_id}")
+            # Check authorization and ensure user's club is in the league
+            if not user.get("is_superuser"):
+                from auth import check_club_permission
+                from db.club_leagues import add_club_to_league, is_club_in_league
+                from db.users import get_user_club_ids
+
+                # Get user's clubs where they are manager
+                user_club_ids = get_user_club_ids(user["id"])
+                manager_club_ids = [
+                    cid
+                    for cid in user_club_ids
+                    if check_club_permission(user, cid, "manager")
+                ]
+
+                if not manager_club_ids:
+                    return RedirectResponse(
+                        "/matches?error=You+must+be+a+manager+to+create+matches",
+                        status_code=303,
+                    )
+
+                # Check if any of user's manager clubs are in this league
+                club_in_league = any(
+                    is_club_in_league(cid, league_id) for cid in manager_club_ids
+                )
+
+                if not club_in_league:
+                    # For Friendly league, automatically add the first manager club
+                    league = get_league(league_id)
+                    if league and league.get("name", "").lower() == "friendly":
+                        # Use get_or_create_friendly_league which handles adding the club
+                        league_id = get_or_create_friendly_league(manager_club_ids[0])
+                    else:
+                        # For other leagues, add the first manager club to the league
+                        add_club_to_league(manager_club_ids[0], league_id)
 
             date = form.get("date", "").strip()
             start_time = form.get("start_time", "").strip()
@@ -540,36 +595,25 @@ def register_match_routes(rt, STYLE):
             # Ensure at least 1 team
             if not allocate_team1 and not allocate_team2:
                 allocate_team1 = True  # Default to team1 if both unchecked
-            print(f"allocate_team1: {allocate_team1}, allocate_team2: {allocate_team2}")
             max_players_per_team = form.get("max_players_per_team", "").strip()
             max_players = int(max_players_per_team) if max_players_per_team else None
 
             # Calculate num_teams for backward compatibility (can be removed later)
             num_teams = sum([allocate_team1, allocate_team2])
-            print(
-                f"Parsed values: league_id={league_id}, date='{date}', start_time='{start_time}', location='{location}', num_teams={num_teams}, max_players={max_players}"
-            )
 
             # Validate required fields
             if not date:
-                print(f"Error: Date is required")
                 return RedirectResponse(
                     "/create_match?error=date_required", status_code=303
                 )
             if not start_time:
-                print(f"Error: Start time is required")
                 return RedirectResponse(
                     "/create_match?error=start_time_required", status_code=303
                 )
             if not location:
-                print(f"Error: Location is required")
                 return RedirectResponse(
                     "/create_match?error=location_required", status_code=303
                 )
-
-            print(
-                f"Creating match with: league_id={league_id}, date={date}, start_time={start_time}, location={location}"
-            )
 
             # Create match first
             try:
@@ -582,21 +626,14 @@ def register_match_routes(rt, STYLE):
                     num_teams,
                     max_players,
                 )
-                print(f"create_match() returned: match_id={match_id}")
-            except Exception as e:
-                print(f"Error calling create_match(): {e}")
+            except Exception:
                 import traceback
 
                 traceback.print_exc()
                 return RedirectResponse("/create_match?error=db_error", status_code=303)
 
             if not match_id:
-                print(
-                    f"Error: Failed to create match. league_id={league_id}, date={date}, location={location}"
-                )
                 return RedirectResponse("/matches", status_code=303)
-
-            print(f"Created match {match_id} successfully")
 
             # Create teams with should_allocate flag
             team1_id = None
@@ -640,52 +677,32 @@ def register_match_routes(rt, STYLE):
 
             # Check if required teams were created successfully
             if allocate_team1 and not team1_id:
-                print(
-                    f"Error: Failed to create team1. team1_id={team1_id}"
-                )
                 # Try to get existing team
                 existing_teams = get_match_teams(match_id)
-                team1 = next(
-                    (t for t in existing_teams if t["team_number"] == 1), None
-                )
+                team1 = next((t for t in existing_teams if t["team_number"] == 1), None)
                 team1_id = team1["id"] if team1 else None
-                if not team1_id:
-                    print(
-                        f"Error: Could not create or find team1. Still redirecting to match page."
-                    )
-            
+
             if allocate_team2 and not team2_id:
-                print(
-                    f"Error: Failed to create team2. team2_id={team2_id}"
-                )
                 # Try to get existing team
                 existing_teams = get_match_teams(match_id)
-                team2 = next(
-                    (t for t in existing_teams if t["team_number"] == 2), None
-                )
+                team2 = next((t for t in existing_teams if t["team_number"] == 2), None)
                 team2_id = team2["id"] if team2 else None
-                if not team2_id:
-                    print(
-                        f"Error: Could not create or find team2. Still redirecting to match page."
-                    )
 
-            print(
-                f"Match {match_id} created successfully. Redirecting to /match/{match_id}"
-            )
-            # Ensure we redirect to match detail page
             return RedirectResponse(f"/match/{match_id}", status_code=303)
 
-        except Exception as e:
-            print(f"Error creating match: {e}", flush=True)
+        except Exception:
             import traceback
 
             traceback.print_exc()
-            print("=" * 50, flush=True)
             return RedirectResponse("/matches", status_code=303)
 
     @rt("/match/{match_id}")
-    def match_detail_page(match_id: int):
+    def match_detail_page(match_id: int, req: Request = None, sess=None):
         """Match detail page"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         match = get_match(match_id)
         if not match:
             return RedirectResponse("/leagues", status_code=303)
@@ -732,7 +749,7 @@ def register_match_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(),
+                render_navbar(user),
                 Div(cls="container")(
                     Div(id="match-content")(
                         render_match_detail(
@@ -743,6 +760,7 @@ def register_match_routes(rt, STYLE):
                             available_players_list,
                             match_player_ids,
                             signup_players=available_signup_players,
+                            user=user,
                         ),
                     ),
                 ),
@@ -750,8 +768,12 @@ def register_match_routes(rt, STYLE):
         )
 
     @rt("/allocate_match/{match_id}", methods=["POST"])
-    def route_allocate_match(match_id: int):
+    def route_allocate_match(match_id: int, req: Request = None, sess=None):
         """Allocate teams for a match"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         try:
             success, message = allocate_match_teams(match_id)
             if not success:
@@ -804,6 +826,7 @@ def register_match_routes(rt, STYLE):
                 available_players_list,
                 match_player_ids,
                 signup_players=available_signup_players,
+                user=user,
             )
         except Exception as e:
             print(f"Error in allocate_match: {e}")
@@ -815,8 +838,12 @@ def register_match_routes(rt, STYLE):
             )
 
     @rt("/reset_match_teams/{match_id}", methods=["POST"])
-    def route_reset_match_teams(match_id: int):
+    def route_reset_match_teams(match_id: int, req: Request = None, sess=None):
         """Reset teams for a match - remove all players from teams but keep them as signup"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         try:
             # Get all players assigned to teams for this match
             teams = get_match_teams(match_id)
@@ -870,6 +897,7 @@ def register_match_routes(rt, STYLE):
                 available_players_list,
                 match_player_ids,
                 signup_players=available_signup_players,
+                user=user,
             )
         except Exception as e:
             print(f"Error in reset_match_teams: {e}")
@@ -881,8 +909,18 @@ def register_match_routes(rt, STYLE):
             )
 
     @rt("/edit_match/{match_id}")
-    def edit_match_page(match_id: int):
+    def edit_match_page(match_id: int, req: Request = None, sess=None):
         """Edit match page"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization
+        from auth import can_user_edit_match
+
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
         from render import format_match_name
 
         match = get_match(match_id)
@@ -890,10 +928,15 @@ def register_match_routes(rt, STYLE):
             return RedirectResponse("/leagues", status_code=303)
 
         teams = get_match_teams(match_id)
-        leagues = get_all_leagues()
-        friendly_league_id = get_or_create_friendly_league()
+        club_ids = get_user_club_ids_from_request(req, sess)
+        leagues = get_all_leagues(club_ids) if club_ids else []
+
+        # For friendly league, we need a club_id - use first accessible club
+        friendly_league_id = None
+        if club_ids:
+            friendly_league_id = get_or_create_friendly_league(club_ids[0])
         current_league_id = match.get("league_id") or friendly_league_id
-        
+
         # Get should_allocate status from teams to determine checkbox states
         team1 = next((t for t in teams if t["team_number"] == 1), None)
         team2 = next((t for t in teams if t["team_number"] == 2), None)
@@ -912,7 +955,7 @@ def register_match_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(),
+                render_navbar(user),
                 Div(cls="container")(
                     H2(f"Edit {format_match_name(match)}"),
                     Div(cls="container-white")(
@@ -923,12 +966,19 @@ def register_match_routes(rt, STYLE):
                                     style="display: block; margin-bottom: 5px;",
                                 ),
                                 Select(
-                                    Option(
-                                        "Friendly (Default)",
-                                        value=str(friendly_league_id),
-                                        selected=(
-                                            current_league_id == friendly_league_id
-                                        ),
+                                    *(
+                                        [
+                                            Option(
+                                                "Friendly (Default)",
+                                                value=str(friendly_league_id),
+                                                selected=(
+                                                    current_league_id
+                                                    == friendly_league_id
+                                                ),
+                                            )
+                                        ]
+                                        if friendly_league_id
+                                        else []
                                     ),
                                     *[
                                         Option(
@@ -1012,9 +1062,13 @@ def register_match_routes(rt, STYLE):
                             Hr(),
                             # Home Team section - always show
                             Div(style="margin-bottom: 15px;")(
-                                Div(style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;")(
+                                Div(
+                                    style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;"
+                                )(
                                     H3("Home Team", style="margin: 0; flex: 1;"),
-                                    Div(style="display: flex; align-items: center; gap: 5px;")(
+                                    Div(
+                                        style="display: flex; align-items: center; gap: 5px;"
+                                    )(
                                         Input(
                                             type="checkbox",
                                             name="allocate_team1",
@@ -1046,7 +1100,11 @@ def register_match_routes(rt, STYLE):
                                     type="text",
                                     name="team1_name",
                                     value=next(
-                                        (t.get("team_name", "") for t in teams if t["team_number"] == 1),
+                                        (
+                                            t.get("team_name", "")
+                                            for t in teams
+                                            if t["team_number"] == 1
+                                        ),
                                         "Home Team",
                                     ),
                                     placeholder="Home Team",
@@ -1060,7 +1118,11 @@ def register_match_routes(rt, STYLE):
                                     type="text",
                                     name="team1_color",
                                     value=next(
-                                        (t.get("jersey_color", "") for t in teams if t["team_number"] == 1),
+                                        (
+                                            t.get("jersey_color", "")
+                                            for t in teams
+                                            if t["team_number"] == 1
+                                        ),
                                         "",
                                     ),
                                     placeholder="e.g., Blue, Red, White",
@@ -1075,7 +1137,11 @@ def register_match_routes(rt, STYLE):
                                     name="team1_score",
                                     value=str(
                                         next(
-                                            (t.get("score", 0) for t in teams if t["team_number"] == 1),
+                                            (
+                                                t.get("score", 0)
+                                                for t in teams
+                                                if t["team_number"] == 1
+                                            ),
                                             0,
                                         )
                                     ),
@@ -1086,9 +1152,13 @@ def register_match_routes(rt, STYLE):
                             Hr(),
                             # Away Team section - always show
                             Div(style="margin-bottom: 15px;")(
-                                Div(style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;")(
+                                Div(
+                                    style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;"
+                                )(
                                     H3("Away Team", style="margin: 0; flex: 1;"),
-                                    Div(style="display: flex; align-items: center; gap: 5px;")(
+                                    Div(
+                                        style="display: flex; align-items: center; gap: 5px;"
+                                    )(
                                         Input(
                                             type="checkbox",
                                             name="allocate_team2",
@@ -1120,7 +1190,11 @@ def register_match_routes(rt, STYLE):
                                     type="text",
                                     name="team2_name",
                                     value=next(
-                                        (t.get("team_name", "") for t in teams if t["team_number"] == 2),
+                                        (
+                                            t.get("team_name", "")
+                                            for t in teams
+                                            if t["team_number"] == 2
+                                        ),
                                         "Away Team",
                                     ),
                                     placeholder="Away Team",
@@ -1134,7 +1208,11 @@ def register_match_routes(rt, STYLE):
                                     type="text",
                                     name="team2_color",
                                     value=next(
-                                        (t.get("jersey_color", "") for t in teams if t["team_number"] == 2),
+                                        (
+                                            t.get("jersey_color", "")
+                                            for t in teams
+                                            if t["team_number"] == 2
+                                        ),
                                         "",
                                     ),
                                     placeholder="e.g., Blue, Red, White",
@@ -1149,7 +1227,11 @@ def register_match_routes(rt, STYLE):
                                     name="team2_score",
                                     value=str(
                                         next(
-                                            (t.get("score", 0) for t in teams if t["team_number"] == 2),
+                                            (
+                                                t.get("score", 0)
+                                                for t in teams
+                                                if t["team_number"] == 2
+                                            ),
                                             0,
                                         )
                                     ),
@@ -1179,8 +1261,18 @@ def register_match_routes(rt, STYLE):
         )
 
     @rt("/update_match/{match_id}", methods=["POST"])
-    async def route_update_match(match_id: int, req: Request):
+    async def route_update_match(match_id: int, req: Request, sess=None):
         """Update a match"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization
+        from auth import can_user_edit_match
+
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
         form = await req.form()
 
         # Get league_id - use selected league or default to Friendly
@@ -1188,7 +1280,14 @@ def register_match_routes(rt, STYLE):
         if league_id_str:
             league_id = int(league_id_str)
         else:
-            league_id = get_or_create_friendly_league()
+            # Get user's first club for friendly league
+            club_ids = get_user_club_ids_from_request(req, sess)
+            if club_ids:
+                league_id = get_or_create_friendly_league(club_ids[0])
+            else:
+                return RedirectResponse(
+                    "/matches?error=No+clubs+assigned", status_code=303
+                )
 
         date = form.get("date", "").strip()
         start_time = form.get("start_time", "").strip()
@@ -1226,13 +1325,25 @@ def register_match_routes(rt, STYLE):
             team1_score = int(team1_score_str) if team1_score_str else 0
         except ValueError:
             team1_score = 0
-        
+
         if team1_id:
             # Update existing team with should_allocate flag
-            update_match_team(int(team1_id), team1_name, team1_color, team1_score, should_allocate=1 if allocate_team1 else 0)
+            update_match_team(
+                int(team1_id),
+                team1_name,
+                team1_color,
+                team1_score,
+                should_allocate=1 if allocate_team1 else 0,
+            )
         else:
             # Create new team with should_allocate flag
-            create_match_team(match_id, 1, team1_name, team1_color, should_allocate=1 if allocate_team1 else 0)
+            create_match_team(
+                match_id,
+                1,
+                team1_name,
+                team1_color,
+                should_allocate=1 if allocate_team1 else 0,
+            )
 
         # Away Team (Team 2) - always update/create, set should_allocate based on checkbox
         team2_id = form.get("team2_id", "").strip()
@@ -1243,19 +1354,41 @@ def register_match_routes(rt, STYLE):
             team2_score = int(team2_score_str) if team2_score_str else 0
         except ValueError:
             team2_score = 0
-        
+
         if team2_id:
             # Update existing team with should_allocate flag
-            update_match_team(int(team2_id), team2_name, team2_color, team2_score, should_allocate=1 if allocate_team2 else 0)
+            update_match_team(
+                int(team2_id),
+                team2_name,
+                team2_color,
+                team2_score,
+                should_allocate=1 if allocate_team2 else 0,
+            )
         else:
             # Create new team with should_allocate flag
-            create_match_team(match_id, 2, team2_name, team2_color, should_allocate=1 if allocate_team2 else 0)
+            create_match_team(
+                match_id,
+                2,
+                team2_name,
+                team2_color,
+                should_allocate=1 if allocate_team2 else 0,
+            )
 
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
     @rt("/delete_match/{match_id}", methods=["POST"])
-    def route_delete_match(match_id: int):
+    def route_delete_match(match_id: int, req: Request = None, sess=None):
         """Delete a match"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization
+        from auth import can_user_edit_match
+
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
         match = get_match(match_id)
         if match:
             league_id = match.get("league_id")
@@ -1265,8 +1398,14 @@ def register_match_routes(rt, STYLE):
         return RedirectResponse("/leagues", status_code=303)
 
     @rt("/edit_match_team/{match_id}/{team_id}")
-    def edit_match_team_page(match_id: int, team_id: int):
+    def edit_match_team_page(
+        match_id: int, team_id: int, req: Request = None, sess=None
+    ):
         """Edit team roster page"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         from render import format_match_name
 
         match = get_match(match_id)
@@ -1296,7 +1435,7 @@ def register_match_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(),
+                render_navbar(user),
                 Div(cls="container")(
                     H2(
                         f"Edit Team Roster - {team.get('team_name') or 'Team ' + str(team.get('team_number', '?'))}"
@@ -1485,8 +1624,12 @@ def register_match_routes(rt, STYLE):
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
     @rt("/set_captain/{match_id}/{team_id}", methods=["POST"])
-    async def route_set_captain(match_id: int, team_id: int, req: Request):
+    async def route_set_captain(match_id: int, team_id: int, req: Request, sess=None):
         """Set team captain"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         form = await req.form()
         captain_id_str = form.get("captain_id", "").strip()
 
@@ -1540,7 +1683,8 @@ def register_match_routes(rt, STYLE):
             events,
             available_players_list,
             match_player_ids,
-            signup_players,
+            signup_players=signup_players,
+            user=user,
         )
 
     @rt("/add_match_players/{match_id}/{team_id}", methods=["POST"])
@@ -1581,8 +1725,12 @@ def register_match_routes(rt, STYLE):
         return RedirectResponse("/leagues", status_code=303)
 
     @rt("/add_match_event/{match_id}", methods=["GET"])
-    def add_match_event_page(match_id: int):
+    def add_match_event_page(match_id: int, req: Request = None, sess=None):
         """Add match event page"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         from render import format_match_name
 
         match = get_match(match_id)
@@ -1602,7 +1750,7 @@ def register_match_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(),
+                render_navbar(user),
                 Div(cls="container")(
                     H2(f"Add Event - {format_match_name(match)}"),
                     Div(cls="container-white")(
@@ -1752,8 +1900,12 @@ def register_match_routes(rt, STYLE):
         return RedirectResponse("/leagues", status_code=303)
 
     @rt("/import_match_players/{match_id}", methods=["GET"])
-    def import_match_players_page(match_id: int):
+    def import_match_players_page(match_id: int, req: Request = None, sess=None):
         """Import players page for a match"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         from render import format_match_name
 
         match = get_match(match_id)
@@ -1766,7 +1918,7 @@ def register_match_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(),
+                render_navbar(user),
                 Div(cls="container")(
                     H2(f"Import Players for {format_match_name(match)}"),
                     Div(cls="container-white")(
@@ -1854,8 +2006,12 @@ def register_match_routes(rt, STYLE):
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
     @rt("/add_match_player_manual/{match_id}", methods=["GET"])
-    def add_match_player_manual_page(match_id: int):
+    def add_match_player_manual_page(match_id: int, req: Request = None, sess=None):
         """Add player manually page for a match"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         from render import format_match_name
 
         match = get_match(match_id)
@@ -1876,7 +2032,7 @@ def register_match_routes(rt, STYLE):
                     Style(STYLE),
                 ),
                 Body(
-                    render_navbar(),
+                    render_navbar(user),
                     Div(cls="container")(
                         H2(f"Add Player to {format_match_name(match)}"),
                         Div(cls="container-white")(
@@ -1899,7 +2055,7 @@ def register_match_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(),
+                render_navbar(user),
                 Div(cls="container")(
                     H2(f"Add Player to {format_match_name(match)}"),
                     Div(cls="container-white")(
@@ -1951,52 +2107,27 @@ def register_match_routes(rt, STYLE):
     async def route_add_match_player_manual(match_id: int, req: Request):
         """Add player manually to a match"""
         try:
-            print(f"=== ADD PLAYER MANUAL REQUEST for match {match_id} ===", flush=True)
             form = await req.form()
-            print(f"Form data: {dict(form)}", flush=True)
-
             player_id_str = form.get("player_id", "0").strip()
-            print(f"player_id_str: '{player_id_str}'", flush=True)
 
             if not player_id_str or player_id_str == "0":
-                print("Error: No player_id provided", flush=True)
                 return RedirectResponse(f"/match/{match_id}", status_code=303)
 
             try:
                 player_id = int(player_id_str)
-            except ValueError as e:
-                print(f"Error: Invalid player_id '{player_id_str}': {e}", flush=True)
+            except ValueError:
                 return RedirectResponse(f"/match/{match_id}", status_code=303)
-
-            print(f"Adding player {player_id} to match {match_id}", flush=True)
 
             # Check if player already in match
             existing = get_match_players(match_id)
             if any(p["player_id"] == player_id for p in existing):
-                print(
-                    f"Warning: Player {player_id} already in match {match_id}",
-                    flush=True,
-                )
                 return RedirectResponse(f"/match/{match_id}", status_code=303)
 
-            result = add_match_player(
+            add_match_player(
                 match_id, player_id, team_id=None, position=None, is_starter=0
             )
-            print(f"add_match_player returned: {result}", flush=True)
 
-            if result:
-                print(
-                    f"Successfully added player {player_id} to match {match_id}",
-                    flush=True,
-                )
-            else:
-                print(
-                    f"Warning: add_match_player returned None for player {player_id}",
-                    flush=True,
-                )
-
-        except Exception as e:
-            print(f"Error in route_add_match_player_manual: {e}", flush=True)
+        except Exception:
             import traceback
 
             traceback.print_exc()

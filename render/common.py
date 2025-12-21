@@ -1,7 +1,8 @@
 # render/common.py - Common rendering functions
 
+from datetime import date, datetime
+
 from fasthtml.common import *
-from datetime import datetime, date
 
 from db import get_match_teams
 
@@ -28,13 +29,13 @@ def format_match_name(match):
 
         # Get teams
         teams = get_match_teams(match_id) if match_id else []
-        
+
         # Get team names and scores
         home_team_name = "Home Team"
         away_team_name = "Away Team"
         home_team_score = None
         away_team_score = None
-        
+
         for team in teams:
             team_number = team.get("team_number")
             team_name = team.get("team_name", "")
@@ -82,7 +83,9 @@ def is_match_completed(match):
         if match_date_obj == today and start_time:
             try:
                 now = datetime.now()
-                match_datetime = datetime.strptime(f"{match_date} {start_time}", "%Y-%m-%d %H:%M")
+                match_datetime = datetime.strptime(
+                    f"{match_date} {start_time}", "%Y-%m-%d %H:%M"
+                )
                 return match_datetime < now
             except (ValueError, TypeError):
                 # If we can't parse the time, assume not completed
@@ -115,15 +118,56 @@ def get_match_score_display(match_id):
     return ""
 
 
-def render_navbar():
+def render_navbar(user=None):
     """Render navigation bar"""
-    return Div(cls="navbar")(
+    nav_items = [
         H1("⚽ Football Manager"),
         A("Home", href="/"),
         A("Matches", href="/matches"),
         A("Players", href="/players"),
         A("Leagues", href="/leagues"),
-        A("Migration", href="/migration"),
+    ]
+
+    # Right side: user info and auth buttons
+    right_items = []
+    if user:
+        user_display = Span(
+            f"👤 {user['username']}", style="margin-right: 15px; color: #333;"
+        )
+        right_items.append(user_display)
+
+        if user.get("is_superuser"):
+            right_items.append(
+                Span(
+                    "⭐ Superuser",
+                    style="margin-right: 15px; color: gold; font-weight: bold;",
+                )
+            )
+
+        right_items.append(
+            A(
+                "Logout",
+                href="/logout",
+                style="padding: 5px 15px; background: #dc3545; color: white; text-decoration: none; border-radius: 4px;",
+            )
+        )
+    else:
+        right_items.append(
+            A(
+                "Login",
+                href="/login",
+                style="margin-left: auto; padding: 5px 15px; background: #007bff; color: white; text-decoration: none; border-radius: 4px;",
+            )
+        )
+
+    nav_items.extend(right_items)
+
+    return Div(
+        cls="navbar",
+        style="display: flex; align-items: center; justify-content: space-between;",
+    )(
+        Div(style="display: flex; align-items: center; gap: 20px;")(*nav_items[:5]),
+        Div(style="display: flex; align-items: center;")(*right_items),
     )
 
 
@@ -163,3 +207,21 @@ def render_attr_input(label, key, value):
             required=True,
         ),
     )
+
+
+def can_user_edit(user: dict, club_id: int = None) -> bool:
+    """Check if user can edit (manager or superuser)"""
+    if not user:
+        return False
+    if user.get("is_superuser"):
+        return True
+    if club_id is None:
+        return False
+    from auth import check_club_permission
+
+    return check_club_permission(user, club_id, "manager")
+
+
+def can_user_delete(user: dict, club_id: int = None) -> bool:
+    """Check if user can delete (manager or superuser)"""
+    return can_user_edit(user, club_id)  # Same permission as edit

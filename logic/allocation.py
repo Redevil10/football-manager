@@ -3,16 +3,16 @@
 import random
 
 from db import (
+    add_match_player,
     get_all_players,
-    update_player_team,
     get_match,
+    get_match_players,
     get_match_signup_players,
     get_match_teams,
-    get_match_players,
     update_match_player,
-    add_match_player,
+    update_player_team,
 )
-from logic.scoring import calculate_player_overall, calculate_overall_score
+from logic.scoring import calculate_overall_score, calculate_player_overall
 
 
 def allocate_teams():

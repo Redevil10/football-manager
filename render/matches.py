@@ -3,8 +3,8 @@
 from fasthtml.common import *
 
 from logic import calculate_overall_score
-from render.common import format_match_name, is_match_completed, get_match_score_display
-from render.players import render_player_table, render_match_available_players
+from render.common import format_match_name, get_match_score_display, is_match_completed
+from render.players import render_match_available_players, render_player_table
 
 
 def render_next_match(match, teams, match_players_dict):
@@ -191,7 +191,6 @@ def render_recent_matches(matches):
     for match in matches:
         match_date = match.get("date", "")
         start_time = match.get("start_time", "")
-        end_time = match.get("end_time", "")
         match_location = match.get("location", "")
         league_name = match.get("league_name", "Friendly")
 
@@ -236,17 +235,26 @@ def render_recent_matches(matches):
     return Div(*content)
 
 
-def render_all_matches(matches):
+def render_all_matches(matches, user=None):
     """Render all matches across all leagues"""
-    content = [
-        Div(cls="container-white", style="margin-bottom: 20px;")(
-            H3("Create New Match"),
-            A(
-                Button("Create Match", cls="btn-success"),
-                href="/create_match",
-            ),
-        ),
-    ]
+    from auth import can_user_edit_match
+
+    content = []
+
+    # Only show create button if user can create matches (manager or superuser)
+    if user:
+        # For now, allow if user is logged in (create_match route will check permissions)
+        can_create = True
+        if can_create:
+            content.append(
+                Div(cls="container-white", style="margin-bottom: 20px;")(
+                    H3("Create New Match"),
+                    A(
+                        Button("Create Match", cls="btn-success"),
+                        href="/create_match",
+                    ),
+                ),
+            )
 
     if not matches:
         content.append(
@@ -303,20 +311,26 @@ def render_all_matches(matches):
                             href=f"/match/{match['id']}",
                             style="text-decoration: none; flex: 1;",
                         ),
-                        Form(
-                            method="POST",
-                            action=f"/delete_match/{match['id']}",
-                            style="margin-left: 10px;",
-                            **{
-                                "onsubmit": "return confirm('你确定删除这场match吗？');"
-                            },
-                        )(
-                            Button(
-                                "Delete",
-                                cls="btn-danger",
-                                type="submit",
-                                style="padding: 5px 10px; font-size: 14px;",
-                            ),
+                        *(
+                            [
+                                Form(
+                                    method="POST",
+                                    action=f"/delete_match/{match['id']}",
+                                    style="margin-left: 10px;",
+                                    **{
+                                        "onsubmit": "return confirm('你确定删除这场match吗？');"
+                                    },
+                                )(
+                                    Button(
+                                        "Delete",
+                                        cls="btn-danger",
+                                        type="submit",
+                                        style="padding: 5px 10px; font-size: 14px;",
+                                    ),
+                                )
+                            ]
+                            if (user and can_user_edit_match(user, match["id"]))
+                            else []
                         ),
                     ),
                     (
@@ -555,7 +569,7 @@ def render_captain_selection(match_id, teams, match_players_dict, is_completed=F
             continue
 
         current_captain_id = team.get("captain_id")
-        team_name = team.get("team_name", f'Team {team.get("team_number", "?")}')
+        team_name = team.get("team_name", f"Team {team.get('team_number', '?')}")
 
         # Create options for captain selection
         options = [
@@ -605,12 +619,18 @@ def render_match_detail(
     all_players=None,
     match_player_ids=None,
     signup_players=None,
+    user=None,
 ):
     """Render detailed match information"""
+    from auth import can_user_edit_match
     from logic import calculate_overall_score
 
     # Check if match is completed
     is_completed = is_match_completed(match)
+
+    # Check permissions using match's league
+    can_edit = can_user_edit_match(user, match["id"]) if user else False
+    can_delete = can_edit  # Same permission as edit
 
     # Match info section
     # Get team scores
@@ -644,19 +664,41 @@ def render_match_detail(
                 if score_display
                 else ""
             ),
-            Div(cls="btn-group", style="margin-top: 10px;")(
-                A(
-                    Button("Edit Match", cls="btn-primary"),
-                    href=f"/edit_match/{match['id']}",
-                ),
-                Form(
-                    method="POST",
-                    action=f"/delete_match/{match['id']}",
-                    style="display: inline;",
-                    **{"onsubmit": "return confirm('你确定删除这场match吗？');"},
-                )(
-                    Button("Delete Match", cls="btn-danger", type="submit"),
-                ),
+            *(
+                [
+                    Div(cls="btn-group", style="margin-top: 10px;")(
+                        *(
+                            [
+                                A(
+                                    Button("Edit Match", cls="btn-primary"),
+                                    href=f"/edit_match/{match['id']}",
+                                )
+                            ]
+                            if can_edit
+                            else []
+                        ),
+                        *(
+                            [
+                                Form(
+                                    method="POST",
+                                    action=f"/delete_match/{match['id']}",
+                                    style="display: inline;",
+                                    **{
+                                        "onsubmit": "return confirm('你确定删除这场match吗？');"
+                                    },
+                                )(
+                                    Button(
+                                        "Delete Match", cls="btn-danger", type="submit"
+                                    ),
+                                )
+                            ]
+                            if can_delete
+                            else []
+                        ),
+                    )
+                ]
+                if (can_edit or can_delete)
+                else []
             ),
         ),
     ]

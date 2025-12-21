@@ -4,7 +4,7 @@ import json
 import random
 import sqlite3
 
-from config import TECHNICAL_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, GK_ATTRS
+from config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
 from db.connection import get_db
 
 
@@ -28,10 +28,17 @@ def generate_random_gk():
     return {key: random.randint(1, 20) for key in GK_ATTRS.keys()}
 
 
-def get_all_players():
-    """Get all players"""
+def get_all_players(club_ids=None):
+    """Get all players, optionally filtered by club_ids (if None, returns all)"""
     conn = get_db()
-    players = conn.execute("SELECT * FROM players ORDER BY created_at DESC").fetchall()
+    if club_ids is not None and len(club_ids) > 0:
+        placeholders = ",".join("?" * len(club_ids))
+        query = f"SELECT * FROM players WHERE club_id IN ({placeholders}) ORDER BY created_at DESC"
+        players = conn.execute(query, tuple(club_ids)).fetchall()
+    else:
+        players = conn.execute(
+            "SELECT * FROM players ORDER BY created_at DESC"
+        ).fetchall()
     conn.close()
 
     result = []
@@ -46,12 +53,17 @@ def get_all_players():
     return result
 
 
-def find_player_by_name_or_alias(name):
-    """Find player by name or alias"""
+def find_player_by_name_or_alias(name, club_ids=None):
+    """Find player by name or alias, optionally filtered by club_ids"""
     conn = get_db()
-    player = conn.execute(
-        "SELECT * FROM players WHERE name = ? OR alias = ?", (name, name)
-    ).fetchone()
+    if club_ids is not None and len(club_ids) > 0:
+        placeholders = ",".join("?" * len(club_ids))
+        query = f"SELECT * FROM players WHERE (name = ? OR alias = ?) AND club_id IN ({placeholders})"
+        player = conn.execute(query, (name, name) + tuple(club_ids)).fetchone()
+    else:
+        player = conn.execute(
+            "SELECT * FROM players WHERE name = ? OR alias = ?", (name, name)
+        ).fetchone()
     conn.close()
     if player:
         player_dict = dict(player)
@@ -63,7 +75,7 @@ def find_player_by_name_or_alias(name):
     return None
 
 
-def add_player(name, position_pref="", alias=None):
+def add_player(name, club_id, position_pref="", alias=None):
     """Add player with random attributes"""
     conn = get_db()
     try:
@@ -73,14 +85,17 @@ def add_player(name, position_pref="", alias=None):
         gk = json.dumps(generate_random_gk())
 
         conn.execute(
-            "INSERT INTO players (name, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (name, position_pref, alias, technical, mental, physical, gk),
+            "INSERT INTO players (name, club_id, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (name, club_id, position_pref, alias, technical, mental, physical, gk),
         )
         conn.commit()
+        player_id = conn.lastrowid
+        conn.close()
+        return player_id
     except sqlite3.IntegrityError:
-        print(f"Player {name} already exists")
-        pass
-    conn.close()
+        print(f"Player {name} already exists in this club")
+        conn.close()
+        return None
 
 
 def delete_player(player_id):

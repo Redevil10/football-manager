@@ -1,6 +1,6 @@
 # logic/import_logic.py - Player import logic
 
-from db import find_player_by_name_or_alias, add_player
+from db import add_player, find_player_by_name_or_alias
 
 
 def parse_signup_text(text):

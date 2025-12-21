@@ -2,33 +2,66 @@
 
 import sqlite3
 
+from db.club_leagues import get_league_ids_for_clubs
 from db.connection import get_db
 
 
-def get_all_leagues():
-    """Get all leagues"""
+def get_all_leagues(club_ids=None):
+    """Get all leagues, optionally filtered by club_ids (if None, returns all leagues)"""
     conn = get_db()
-    leagues = conn.execute("SELECT * FROM leagues ORDER BY created_at DESC").fetchall()
+    if club_ids is not None and len(club_ids) > 0:
+        # Get leagues that the clubs participate in
+        league_ids = get_league_ids_for_clubs(club_ids)
+        if league_ids:
+            placeholders = ",".join("?" * len(league_ids))
+            query = f"SELECT * FROM leagues WHERE id IN ({placeholders}) ORDER BY created_at DESC"
+            leagues = conn.execute(query, tuple(league_ids)).fetchall()
+        else:
+            leagues = []
+    else:
+        leagues = conn.execute(
+            "SELECT * FROM leagues ORDER BY created_at DESC"
+        ).fetchall()
     conn.close()
     return [dict(league) for league in leagues]
 
 
-def get_league(league_id):
-    """Get a league by ID"""
+def get_league(league_id, club_ids=None):
+    """Get a league by ID, optionally checking if user's clubs participate in it"""
     conn = get_db()
     league = conn.execute("SELECT * FROM leagues WHERE id = ?", (league_id,)).fetchone()
     conn.close()
-    return dict(league) if league else None
+
+    if not league:
+        return None
+
+    league_dict = dict(league)
+
+    # If club_ids provided, check if any of the clubs participate in this league
+    if club_ids is not None and len(club_ids) > 0:
+        from db.club_leagues import is_club_in_league
+
+        has_access = any(is_club_in_league(cid, league_id) for cid in club_ids)
+        if not has_access:
+            return None
+
+    return league_dict
 
 
-def get_or_create_friendly_league():
-    """Get or create the 'Friendly' league"""
+def get_or_create_friendly_league(club_id):
+    """Get or create the 'Friendly' league and add club to it"""
     conn = get_db()
     # Try to find existing Friendly league
     league = conn.execute("SELECT * FROM leagues WHERE name = 'Friendly'").fetchone()
+
     if league:
+        league_id = dict(league)["id"]
+        # Make sure club is in the league
+        from db.club_leagues import add_club_to_league
+
+        add_club_to_league(club_id, league_id)
         conn.close()
-        return dict(league)["id"]
+        return league_id
 
     # Create Friendly league if it doesn't exist
     cursor = conn.execute(
@@ -38,11 +71,17 @@ def get_or_create_friendly_league():
     league_id = cursor.lastrowid
     conn.commit()
     conn.close()
+
+    # Add club to the league
+    from db.club_leagues import add_club_to_league
+
+    add_club_to_league(club_id, league_id)
+
     return league_id
 
 
 def create_league(name, description=""):
-    """Create a new league"""
+    """Create a new league (independent entity, not tied to a club)"""
     conn = get_db()
     try:
         cursor = conn.execute(
@@ -59,21 +98,35 @@ def create_league(name, description=""):
         return None
 
 
-def update_league(league_id, name, description=""):
+def update_league(league_id, name=None, description=None):
     """Update a league"""
     conn = get_db()
-    try:
-        conn.execute(
-            "UPDATE leagues SET name = ?, description = ? WHERE id = ?",
-            (name, description, league_id),
-        )
-        conn.commit()
-        conn.close()
-        return True
-    except sqlite3.IntegrityError:
-        print(f"League {name} already exists")
-        conn.close()
-        return False
+    updates = []
+    params = []
+
+    if name is not None:
+        updates.append("name = ?")
+        params.append(name)
+    if description is not None:
+        updates.append("description = ?")
+        params.append(description)
+
+    if updates:
+        params.append(league_id)
+        try:
+            conn.execute(
+                f"UPDATE leagues SET {', '.join(updates)} WHERE id = ?",
+                params,
+            )
+            conn.commit()
+            conn.close()
+            return True
+        except sqlite3.IntegrityError:
+            print(f"League {name} already exists")
+            conn.close()
+            return False
+    conn.close()
+    return True
 
 
 def delete_league(league_id):

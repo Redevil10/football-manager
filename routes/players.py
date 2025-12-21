@@ -2,39 +2,39 @@
 
 from fasthtml.common import *
 
-from config import TECHNICAL_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, GK_ATTRS
+from auth import get_current_user, get_user_club_ids_from_request
+from config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
 from db import (
-    get_all_players,
-    add_player,
-    find_player_by_name_or_alias,
     delete_player,
+    find_player_by_name_or_alias,
+    get_all_players,
     reset_teams,
-    update_player_attrs,
-    update_player_name,
-    update_player_height_weight,
     swap_players,
+    update_player_attrs,
+    update_player_height_weight,
+    update_player_name,
 )
 from logic import (
-    calculate_player_overall,
-    calculate_technical_score,
-    calculate_mental_score,
-    calculate_physical_score,
-    calculate_gk_score,
-    set_technical_score,
-    set_mental_score,
-    set_physical_score,
-    set_gk_score,
-    set_overall_score,
     adjust_category_attributes_by_single_attr,
     allocate_teams,
+    calculate_gk_score,
+    calculate_mental_score,
+    calculate_physical_score,
+    calculate_player_overall,
+    calculate_technical_score,
+    import_players,
+    set_gk_score,
+    set_mental_score,
+    set_overall_score,
+    set_physical_score,
+    set_technical_score,
 )
-from logic import import_players
 from render import (
+    render_add_player_form,
     render_navbar,
+    render_player_detail_form,
     render_player_table,
     render_teams,
-    render_player_detail_form,
-    render_add_player_form,
 )
 
 
@@ -42,9 +42,14 @@ def register_player_routes(rt, STYLE):
     """Register player-related routes"""
 
     @rt("/players")
-    def players_page(error: str = None):
+    def players_page(req: Request = None, error: str = None, sess=None):
         """All players page"""
-        players = get_all_players()
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        club_ids = get_user_club_ids_from_request(req, sess)
+        players = get_all_players(club_ids)
         sorted_players = sorted(
             players, key=lambda x: calculate_player_overall(x), reverse=True
         )
@@ -56,26 +61,32 @@ def register_player_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(),
+                render_navbar(user),
                 Div(cls="container")(
                     H2(f"All Players ({len(players)})"),
-                    render_add_player_form(error),
-                    Div(cls="container-white")(render_player_table(sorted_players)),
+                    render_add_player_form(error) if user else "",
+                    Div(cls="container-white")(
+                        render_player_table(sorted_players, user)
+                    ),
                 ),
             ),
         )
 
     # not used currently
     @rt("/import")
-    def import_page():
+    def import_page(req: Request = None, sess=None):
         """Import players page"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         return Html(
             Head(
                 Title("Import Players - Football Manager"),
                 Style(STYLE),
             ),
             Body(
-                render_navbar(),
+                render_navbar(user),
                 Div(cls="container")(
                     H2("Import Players"),
                     Div(cls="container-white")(
@@ -98,13 +109,24 @@ def register_player_routes(rt, STYLE):
         )
 
     @rt("/player/{player_id}")
-    def player_detail(player_id: int):
+    def player_detail(player_id: int, req: Request = None, sess=None):
         """Player detail page"""
-        players = {p["id"]: p for p in get_all_players()}
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        club_ids = get_user_club_ids_from_request(req, sess)
+        players = {p["id"]: p for p in get_all_players(club_ids)}
         player = players.get(player_id)
 
         if not player:
-            return Html(Body(P("Player not found")))
+            return Html(
+                Head(Title("Player Not Found"), Style(STYLE)),
+                Body(
+                    render_navbar(user),
+                    Div(cls="container")(P("Player not found")),
+                ),
+            )
 
         return Html(
             Head(
@@ -112,7 +134,7 @@ def register_player_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(),
+                render_navbar(user),
                 Div(cls="container")(
                     A(
                         "← Back to Players",
@@ -120,7 +142,7 @@ def register_player_routes(rt, STYLE):
                         style="text-decoration: none; color: #0066cc;",
                     ),
                     H2(player["name"]),
-                    render_player_detail_form(player),
+                    render_player_detail_form(player, user),
                 ),
             ),
         )
@@ -132,8 +154,40 @@ def register_player_routes(rt, STYLE):
         return RedirectResponse("/", status_code=303)
 
     @rt("/add_player", methods=["POST"])
-    async def route_add_player(req: Request):
+    async def route_add_player(req: Request, sess=None):
         """Add single player"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check if user can create players (must be manager or superuser)
+        # Use the first club the user has manager access to
+        club_ids = get_user_club_ids_from_request(req, sess)
+        if not club_ids:
+            from urllib.parse import quote
+
+            return RedirectResponse(
+                f"/players?error={quote('No clubs assigned. Contact administrator.')}",
+                status_code=303,
+            )
+
+        # For now, use the first club the user has manager access to
+        from auth import check_club_permission
+
+        target_club_id = None
+        for club_id in club_ids:
+            if check_club_permission(user, club_id, "manager"):
+                target_club_id = club_id
+                break
+
+        if not target_club_id and not user.get("is_superuser"):
+            from urllib.parse import quote
+
+            return RedirectResponse(
+                f"/players?error={quote('You do not have permission to create players. Manager role required.')}",
+                status_code=303,
+            )
+
         try:
             form = await req.form()
             name = form.get("name", "").strip()
@@ -146,9 +200,9 @@ def register_player_routes(rt, STYLE):
                     status_code=303,
                 )
 
-            # Check if name matches an existing player's name or alias
+            # Check if name matches an existing player's name or alias (within the same club)
             existing_player = find_player_by_name_or_alias(name)
-            if existing_player:
+            if existing_player and existing_player.get("club_id") == target_club_id:
                 from urllib.parse import quote
 
                 if (
@@ -157,12 +211,15 @@ def register_player_routes(rt, STYLE):
                 ):
                     error_msg = f"Name '{name}' matches an existing player's alias (Player: {existing_player.get('name')})"
                 else:
-                    error_msg = f"Player name '{name}' already exists"
+                    error_msg = f"Player name '{name}' already exists in this club"
                 return RedirectResponse(
                     f"/players?error={quote(error_msg)}", status_code=303
                 )
 
-            add_player(name)
+            # Add player with club_id
+            from db.players import add_player
+
+            add_player(name, club_id=target_club_id)
             return RedirectResponse("/players", status_code=303)
         except Exception as e:
             print(f"Error adding player: {e}", flush=True)
@@ -177,8 +234,24 @@ def register_player_routes(rt, STYLE):
             )
 
     @rt("/update_player_name/{player_id}", methods=["POST"])
-    async def route_update_player_name(player_id: int, req: Request):
+    async def route_update_player_name(player_id: int, req: Request, sess=None):
         """Update player name and alias"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization
+        club_ids = get_user_club_ids_from_request(req, sess)
+        players = {p["id"]: p for p in get_all_players(club_ids)}
+        player = players.get(player_id)
+        if not player:
+            return RedirectResponse("/players", status_code=303)
+
+        from render.common import can_user_edit
+
+        if not can_user_edit(user, player.get("club_id")):
+            return RedirectResponse(f"/player/{player_id}", status_code=303)
+
         try:
             form = await req.form()
             name = form.get("name", "").strip()
@@ -193,8 +266,26 @@ def register_player_routes(rt, STYLE):
         return RedirectResponse(f"/player/{player_id}", status_code=303)
 
     @rt("/update_player_height_weight/{player_id}", methods=["POST"])
-    async def route_update_player_height_weight(player_id: int, req: Request):
+    async def route_update_player_height_weight(
+        player_id: int, req: Request, sess=None
+    ):
         """Update player height and weight"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization
+        club_ids = get_user_club_ids_from_request(req, sess)
+        players = {p["id"]: p for p in get_all_players(club_ids)}
+        player = players.get(player_id)
+        if not player:
+            return RedirectResponse("/players", status_code=303)
+
+        from render.common import can_user_edit
+
+        if not can_user_edit(user, player.get("club_id")):
+            return RedirectResponse(f"/player/{player_id}", status_code=303)
+
         try:
             form = await req.form()
             height = form.get("height", "").strip()
@@ -210,12 +301,23 @@ def register_player_routes(rt, STYLE):
         return RedirectResponse(f"/player/{player_id}", status_code=303)
 
     @rt("/update_player_scores/{player_id}", methods=["POST"])
-    async def route_update_player_scores(player_id: int, req: Request):
+    async def route_update_player_scores(player_id: int, req: Request, sess=None):
         """Update player category scores or overall score"""
-        players = {p["id"]: p for p in get_all_players()}
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization
+        club_ids = get_user_club_ids_from_request(req, sess)
+        players = {p["id"]: p for p in get_all_players(club_ids)}
         player = players.get(player_id)
 
         if not player:
+            return RedirectResponse(f"/player/{player_id}", status_code=303)
+
+        from render.common import can_user_edit
+
+        if not can_user_edit(user, player.get("club_id")):
             return RedirectResponse(f"/player/{player_id}", status_code=303)
 
         try:
@@ -266,13 +368,23 @@ def register_player_routes(rt, STYLE):
         return RedirectResponse(f"/player/{player_id}", status_code=303)
 
     @rt("/update_player/{player_id}", methods=["POST"])
-    async def route_update_player(player_id: int, req: Request):
+    async def route_update_player(player_id: int, req: Request, sess=None):
         """Update player attributes"""
-        # Get current player data as fallback
-        players = {p["id"]: p for p in get_all_players()}
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization
+        club_ids = get_user_club_ids_from_request(req, sess)
+        players = {p["id"]: p for p in get_all_players(club_ids)}
         player = players.get(player_id)
 
         if not player:
+            return RedirectResponse(f"/player/{player_id}", status_code=303)
+
+        from render.common import can_user_edit
+
+        if not can_user_edit(user, player.get("club_id")):
             return RedirectResponse(f"/player/{player_id}", status_code=303)
 
         # Get form data from multipart/form-data request
@@ -417,8 +529,25 @@ def register_player_routes(rt, STYLE):
         return RedirectResponse(f"/player/{player_id}", status_code=303)
 
     @rt("/delete_player/{player_id}", methods=["GET", "POST"])
-    def route_delete_player(player_id: int):
+    def route_delete_player(player_id: int, req: Request = None, sess=None):
         """Delete player"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization
+        club_ids = get_user_club_ids_from_request(req, sess)
+        players = {p["id"]: p for p in get_all_players(club_ids)}
+        player = players.get(player_id)
+
+        if not player:
+            return RedirectResponse("/players", status_code=303)
+
+        from render.common import can_user_delete
+
+        if not can_user_delete(user, player.get("club_id")):
+            return RedirectResponse(f"/player/{player_id}", status_code=303)
+
         delete_player(player_id)
         return RedirectResponse("/players", status_code=303)
 
