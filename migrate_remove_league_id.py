@@ -19,8 +19,8 @@ def migrate_db():
         # Check if league_id column exists
         cursor = conn.execute("PRAGMA table_info(players)")
         columns = [row[1] for row in cursor.fetchall()]
-        
-        if 'league_id' in columns:
+
+        if "league_id" in columns:
             # SQLite doesn't support DROP COLUMN directly, so we need to recreate the table
             # Step 1: Create new table without league_id
             conn.execute("""
@@ -43,7 +43,7 @@ def migrate_db():
                     UNIQUE(name, club_id)
                 )
             """)
-            
+
             # Step 2: Copy data (excluding league_id)
             conn.execute("""
                 INSERT INTO players_new 
@@ -54,22 +54,29 @@ def migrate_db():
                     club_id, technical_attrs, mental_attrs, physical_attrs, gk_attrs, created_at
                 FROM players
             """)
-            
+
             # Step 3: Drop old table
             conn.execute("DROP TABLE players")
-            
+
             # Step 4: Rename new table
             conn.execute("ALTER TABLE players_new RENAME TO players")
-            
+
             # Step 5: Recreate indexes
-            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_players_name_club ON players(name, club_id)")
-            
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_players_name_club ON players(name, club_id)"
+            )
+
             conn.commit()
             messages.append("Removed league_id column from players table")
             print("Removed league_id column from players table", flush=True)
         else:
-            messages.append("league_id column does not exist in players table (already removed)")
-            print("league_id column does not exist in players table (already removed)", flush=True)
+            messages.append(
+                "league_id column does not exist in players table (already removed)"
+            )
+            print(
+                "league_id column does not exist in players table (already removed)",
+                flush=True,
+            )
 
     except Exception as e:
         error_msg = f"Error during migration: {e}"
@@ -90,4 +97,3 @@ if __name__ == "__main__":
         print(msg)
     print("=" * 50)
     print("Migration finished!")
-

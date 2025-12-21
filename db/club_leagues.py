@@ -83,4 +83,3 @@ def is_club_in_league(club_id, league_id):
     ).fetchone()
     conn.close()
     return result is not None
-

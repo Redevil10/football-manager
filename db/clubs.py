@@ -51,14 +51,14 @@ def update_club(club_id, name=None, description=None):
     conn = get_db()
     updates = []
     params = []
-    
+
     if name is not None:
         updates.append("name = ?")
         params.append(name)
     if description is not None:
         updates.append("description = ?")
         params.append(description)
-    
+
     if updates:
         params.append(club_id)
         conn.execute(
@@ -75,4 +75,3 @@ def delete_club(club_id):
     conn.execute("DELETE FROM clubs WHERE id = ?", (club_id,))
     conn.commit()
     conn.close()
-

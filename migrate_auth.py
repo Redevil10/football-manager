@@ -28,7 +28,10 @@ def migrate_db():
             messages.append("Added club_id column to players table")
             print("Added club_id column to players table", flush=True)
         except sqlite3.OperationalError as e:
-            if "duplicate column name" in str(e).lower() or "already exists" in str(e).lower():
+            if (
+                "duplicate column name" in str(e).lower()
+                or "already exists" in str(e).lower()
+            ):
                 messages.append("club_id column already exists in players table")
                 print("club_id column already exists in players table", flush=True)
             else:
@@ -41,7 +44,10 @@ def migrate_db():
             messages.append("Added club_id column to leagues table")
             print("Added club_id column to leagues table", flush=True)
         except sqlite3.OperationalError as e:
-            if "duplicate column name" in str(e).lower() or "already exists" in str(e).lower():
+            if (
+                "duplicate column name" in str(e).lower()
+                or "already exists" in str(e).lower()
+            ):
                 messages.append("club_id column already exists in leagues table")
                 print("club_id column already exists in leagues table", flush=True)
             else:
@@ -49,12 +55,19 @@ def migrate_db():
 
         # Step 3: Check if default club exists, create if not
         default_club_name = "Concord FC"
-        club = conn.execute("SELECT id FROM clubs WHERE name = ?", (default_club_name,)).fetchone()
-        
+        club = conn.execute(
+            "SELECT id FROM clubs WHERE name = ?", (default_club_name,)
+        ).fetchone()
+
         if club:
             default_club_id = club["id"]
-            messages.append(f"Default club '{default_club_name}' already exists (ID: {default_club_id})")
-            print(f"Default club '{default_club_name}' already exists (ID: {default_club_id})", flush=True)
+            messages.append(
+                f"Default club '{default_club_name}' already exists (ID: {default_club_id})"
+            )
+            print(
+                f"Default club '{default_club_name}' already exists (ID: {default_club_id})",
+                flush=True,
+            )
         else:
             cursor = conn.execute(
                 "INSERT INTO clubs (name, description) VALUES (?, ?)",
@@ -62,8 +75,13 @@ def migrate_db():
             )
             default_club_id = cursor.lastrowid
             conn.commit()
-            messages.append(f"Created default club '{default_club_name}' (ID: {default_club_id})")
-            print(f"Created default club '{default_club_name}' (ID: {default_club_id})", flush=True)
+            messages.append(
+                f"Created default club '{default_club_name}' (ID: {default_club_id})"
+            )
+            print(
+                f"Created default club '{default_club_name}' (ID: {default_club_id})",
+                flush=True,
+            )
 
         # Step 4: Assign all players without club_id to default club
         players_updated = conn.execute(
@@ -99,7 +117,9 @@ def migrate_db():
         except sqlite3.OperationalError as e:
             if "already exists" in str(e).lower():
                 messages.append("Unique index on players(name, club_id) already exists")
-                print("Unique index on players(name, club_id) already exists", flush=True)
+                print(
+                    "Unique index on players(name, club_id) already exists", flush=True
+                )
             else:
                 # If there's a conflict, we need to handle duplicate names
                 # Find players with duplicate names in the same club
@@ -110,12 +130,20 @@ def migrate_db():
                        GROUP BY name, club_id
                        HAVING cnt > 1"""
                 ).fetchall()
-                
+
                 if duplicates:
-                    messages.append(f"Found {len(duplicates)} duplicate name/club combinations - manual cleanup needed")
-                    print(f"Warning: Found {len(duplicates)} duplicate name/club combinations", flush=True)
+                    messages.append(
+                        f"Found {len(duplicates)} duplicate name/club combinations - manual cleanup needed"
+                    )
+                    print(
+                        f"Warning: Found {len(duplicates)} duplicate name/club combinations",
+                        flush=True,
+                    )
                     for dup in duplicates:
-                        print(f"  - Name: {dup['name']}, Club ID: {dup['club_id']}, Count: {dup['cnt']}", flush=True)
+                        print(
+                            f"  - Name: {dup['name']}, Club ID: {dup['club_id']}, Count: {dup['cnt']}",
+                            flush=True,
+                        )
                 else:
                     # No duplicates, safe to create index
                     conn.execute(
@@ -134,7 +162,9 @@ def migrate_db():
         except sqlite3.OperationalError as e:
             if "already exists" in str(e).lower():
                 messages.append("Unique index on leagues(name, club_id) already exists")
-                print("Unique index on leagues(name, club_id) already exists", flush=True)
+                print(
+                    "Unique index on leagues(name, club_id) already exists", flush=True
+                )
 
     except Exception as e:
         error_msg = f"Error during migration: {e}"
@@ -155,4 +185,3 @@ if __name__ == "__main__":
         print(msg)
     print("=" * 50)
     print("Migration finished!")
-

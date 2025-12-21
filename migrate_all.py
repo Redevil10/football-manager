@@ -26,17 +26,17 @@ from migrate_remove_league_id import migrate_db as migrate_remove_league_id
 
 def migrate_all():
     """Run all migrations in the correct order
-    
+
     Returns:
         tuple: (success: bool, messages: list)
     """
     all_messages = []
-    
+
     print("=" * 70)
     print("COMPREHENSIVE DATABASE MIGRATION")
     print("=" * 70)
     print()
-    
+
     # Step 1: Authentication and club support
     print("Step 1/3: Adding authentication and club support...")
     print("-" * 70)
@@ -49,7 +49,7 @@ def migrate_all():
         print("\nMigration aborted. Please fix the error and try again.")
         return False, all_messages
     print()
-    
+
     # Step 2: Remove league_id from players
     print("Step 2/3: Removing league_id from players table...")
     print("-" * 70)
@@ -62,7 +62,7 @@ def migrate_all():
         print("\nMigration aborted. Please fix the error and try again.")
         return False, all_messages
     print()
-    
+
     # Step 3: Convert leagues to many-to-many
     print("Step 3/3: Converting leagues to many-to-many relationship...")
     print("-" * 70)
@@ -75,7 +75,7 @@ def migrate_all():
         print("\nMigration aborted. Please fix the error and try again.")
         return False, all_messages
     print()
-    
+
     # Summary
     print("=" * 70)
     print("MIGRATION SUMMARY")
@@ -92,11 +92,10 @@ def migrate_all():
     print("  2. Log in and start using the system")
     print("  3. Create additional clubs and assign users to them")
     print()
-    
+
     return True, all_messages
 
 
 if __name__ == "__main__":
     success, messages = migrate_all()
     sys.exit(0 if success else 1)
-

@@ -48,7 +48,10 @@ def register_club_routes(rt, STYLE):
                         H3("Create New Club"),
                         Form(
                             Div(cls="input-group", style="margin-bottom: 15px;")(
-                                Label("Club Name:", style="display: block; margin-bottom: 5px;"),
+                                Label(
+                                    "Club Name:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
                                 Input(
                                     type="text",
                                     name="name",
@@ -58,7 +61,10 @@ def register_club_routes(rt, STYLE):
                                 ),
                             ),
                             Div(cls="input-group", style="margin-bottom: 15px;")(
-                                Label("Description:", style="display: block; margin-bottom: 5px;"),
+                                Label(
+                                    "Description:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
                                 Textarea(
                                     name="description",
                                     placeholder="Description (optional)",
@@ -84,20 +90,26 @@ def register_club_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         if not user.get("is_superuser"):
-            return RedirectResponse("/clubs?error=Only+superusers+can+create+clubs", status_code=303)
+            return RedirectResponse(
+                "/clubs?error=Only+superusers+can+create+clubs", status_code=303
+            )
 
         form = await req.form()
         name = form.get("name", "").strip()
         description = form.get("description", "").strip()
 
         if not name:
-            return RedirectResponse("/clubs?error=Club+name+is+required", status_code=303)
+            return RedirectResponse(
+                "/clubs?error=Club+name+is+required", status_code=303
+            )
 
         club_id = create_club(name, description)
         if club_id:
             return RedirectResponse("/clubs", status_code=303)
         else:
-            return RedirectResponse("/clubs?error=Club+name+already+exists", status_code=303)
+            return RedirectResponse(
+                "/clubs?error=Club+name+already+exists", status_code=303
+            )
 
     @rt("/club/{club_id}")
     def club_detail_page(club_id: int, req: Request = None, sess=None):
@@ -148,7 +160,9 @@ def register_club_routes(rt, STYLE):
                                 method="POST",
                                 action=f"/delete_club/{club_id}",
                                 style="display: inline;",
-                                **{"onsubmit": "return confirm('Are you sure you want to delete this club?');"},
+                                **{
+                                    "onsubmit": "return confirm('Are you sure you want to delete this club?');"
+                                },
                             )(
                                 Button("Delete Club", cls="btn-danger", type="submit"),
                             ),
@@ -188,7 +202,10 @@ def register_club_routes(rt, STYLE):
                     Div(cls="container-white")(
                         Form(
                             Div(cls="input-group", style="margin-bottom: 15px;")(
-                                Label("Club Name:", style="display: block; margin-bottom: 5px;"),
+                                Label(
+                                    "Club Name:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
                                 Input(
                                     type="text",
                                     name="name",
@@ -198,7 +215,10 @@ def register_club_routes(rt, STYLE):
                                 ),
                             ),
                             Div(cls="input-group", style="margin-bottom: 15px;")(
-                                Label("Description:", style="display: block; margin-bottom: 5px;"),
+                                Label(
+                                    "Description:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
                                 Textarea(
                                     name="description",
                                     value=club.get("description", ""),
@@ -235,7 +255,9 @@ def register_club_routes(rt, STYLE):
         description = form.get("description", "").strip()
 
         if not name:
-            return RedirectResponse(f"/edit_club/{club_id}?error=Club+name+is+required", status_code=303)
+            return RedirectResponse(
+                f"/edit_club/{club_id}?error=Club+name+is+required", status_code=303
+            )
 
         update_club(club_id, name=name, description=description)
         return RedirectResponse(f"/club/{club_id}", status_code=303)
@@ -268,7 +290,9 @@ def register_club_routes(rt, STYLE):
         role = form.get("role", "viewer").strip()
 
         if not user_id_str or role not in ["viewer", "manager"]:
-            return RedirectResponse(f"/club/{club_id}?error=Invalid+parameters", status_code=303)
+            return RedirectResponse(
+                f"/club/{club_id}?error=Invalid+parameters", status_code=303
+            )
 
         try:
             user_id = int(user_id_str)
@@ -276,12 +300,19 @@ def register_club_routes(rt, STYLE):
             if success:
                 return RedirectResponse(f"/club/{club_id}", status_code=303)
             else:
-                return RedirectResponse(f"/club/{club_id}?error=User+already+in+club+or+invalid+user", status_code=303)
+                return RedirectResponse(
+                    f"/club/{club_id}?error=User+already+in+club+or+invalid+user",
+                    status_code=303,
+                )
         except ValueError:
-            return RedirectResponse(f"/club/{club_id}?error=Invalid+user+ID", status_code=303)
+            return RedirectResponse(
+                f"/club/{club_id}?error=Invalid+user+ID", status_code=303
+            )
 
     @rt("/remove_user_from_club/{club_id}/{user_id}", methods=["POST"])
-    def route_remove_user_from_club(club_id: int, user_id: int, req: Request = None, sess=None):
+    def route_remove_user_from_club(
+        club_id: int, user_id: int, req: Request = None, sess=None
+    ):
         """Remove user from club (superuser only)"""
         user = get_current_user(req, sess)
         if not user:
@@ -291,6 +322,7 @@ def register_club_routes(rt, STYLE):
             return RedirectResponse("/", status_code=303)
 
         from db.connection import get_db
+
         conn = get_db()
         conn.execute(
             "DELETE FROM user_clubs WHERE user_id = ? AND club_id = ?",
@@ -302,7 +334,9 @@ def register_club_routes(rt, STYLE):
         return RedirectResponse(f"/club/{club_id}", status_code=303)
 
     @rt("/update_user_club_role/{club_id}/{user_id}", methods=["POST"])
-    async def route_update_user_club_role(club_id: int, user_id: int, req: Request, sess=None):
+    async def route_update_user_club_role(
+        club_id: int, user_id: int, req: Request, sess=None
+    ):
         """Update user's role in a club (superuser only)"""
         user = get_current_user(req, sess)
         if not user:
@@ -315,9 +349,12 @@ def register_club_routes(rt, STYLE):
         role = form.get("role", "").strip()
 
         if role not in ["viewer", "manager"]:
-            return RedirectResponse(f"/club/{club_id}?error=Invalid+role", status_code=303)
+            return RedirectResponse(
+                f"/club/{club_id}?error=Invalid+role", status_code=303
+            )
 
         from db.connection import get_db
+
         conn = get_db()
         conn.execute(
             "UPDATE user_clubs SET role = ? WHERE user_id = ? AND club_id = ?",
@@ -333,7 +370,10 @@ def render_clubs_list(clubs, user=None):
     """Render list of clubs"""
     if not clubs:
         return Div(cls="container-white")(
-            P("No clubs yet. Create your first club!", style="text-align: center; color: #666;")
+            P(
+                "No clubs yet. Create your first club!",
+                style="text-align: center; color: #666;",
+            )
         )
 
     rows = []
@@ -347,7 +387,10 @@ def render_clubs_list(clubs, user=None):
                         style="color: #007bff; text-decoration: none; font-weight: bold;",
                     )
                 ),
-                Td(club.get("description", "")[:100] + ("..." if len(club.get("description", "")) > 100 else "")),
+                Td(
+                    club.get("description", "")[:100]
+                    + ("..." if len(club.get("description", "")) > 100 else "")
+                ),
                 Td(
                     A(
                         "View",
@@ -402,7 +445,12 @@ def render_club_members(club_id, club_members, user=None):
                             name="user_id",
                             required=True,
                             style="width: 100%; padding: 8px;",
-                        ) if available_users else P("All users are already members of this club.", style="color: #666;"),
+                        )
+                        if available_users
+                        else P(
+                            "All users are already members of this club.",
+                            style="color: #666;",
+                        ),
                     ),
                     Div(style="flex: 1;")(
                         Label("Role:", style="display: block; margin-bottom: 5px;"),
@@ -417,7 +465,9 @@ def render_club_members(club_id, club_members, user=None):
                     Div(
                         Button("Add Member", type="submit", cls="btn-success"),
                         style="padding-top: 20px;",
-                    ) if available_users else "",
+                    )
+                    if available_users
+                    else "",
                 ),
                 method="post",
                 action=f"/assign_user_to_club/{club_id}",
@@ -438,15 +488,27 @@ def render_club_members(club_id, club_members, user=None):
                     if member["is_superuser"]
                     else ""
                 )
-                role_select = Select(
-                    Option("Viewer", value="viewer", selected=(member["role"] == "viewer")),
-                    Option("Manager", value="manager", selected=(member["role"] == "manager")),
-                    name="role",
-                    **{
-                        "onchange": f"this.form.action='/update_user_club_role/{club_id}/{member['user_id']}'; this.form.submit();",
-                    },
-                    style="padding: 4px;",
-                ) if not member["is_superuser"] else Span("Superuser", style="color: #666;")
+                role_select = (
+                    Select(
+                        Option(
+                            "Viewer",
+                            value="viewer",
+                            selected=(member["role"] == "viewer"),
+                        ),
+                        Option(
+                            "Manager",
+                            value="manager",
+                            selected=(member["role"] == "manager"),
+                        ),
+                        name="role",
+                        **{
+                            "onchange": f"this.form.action='/update_user_club_role/{club_id}/{member['user_id']}'; this.form.submit();",
+                        },
+                        style="padding: 4px;",
+                    )
+                    if not member["is_superuser"]
+                    else Span("Superuser", style="color: #666;")
+                )
 
                 member_rows.append(
                     Tr(
@@ -468,7 +530,9 @@ def render_club_members(club_id, club_members, user=None):
                                     cls="btn-danger",
                                     style="padding: 4px 8px; font-size: 12px;",
                                 ),
-                            ) if not member["is_superuser"] else "",
+                            )
+                            if not member["is_superuser"]
+                            else "",
                         ),
                     )
                 )
@@ -493,7 +557,10 @@ def render_club_members(club_id, club_members, user=None):
     else:
         content.append(
             Div(cls="container-white")(
-                P("No members yet. Add members using the form above.", style="color: #666;")
+                P(
+                    "No members yet. Add members using the form above.",
+                    style="color: #666;",
+                )
             )
         )
 

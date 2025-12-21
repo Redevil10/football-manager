@@ -47,13 +47,13 @@ def migrate_db():
         # Check if leagues table has club_id column
         cursor = conn.execute("PRAGMA table_info(leagues)")
         columns = [row[1] for row in cursor.fetchall()]
-        
-        if 'club_id' in columns:
+
+        if "club_id" in columns:
             # Migrate existing relationships
             leagues_with_clubs = conn.execute(
                 "SELECT id, club_id FROM leagues WHERE club_id IS NOT NULL"
             ).fetchall()
-            
+
             migrated_count = 0
             for league in leagues_with_clubs:
                 league_id = league["id"]
@@ -67,11 +67,13 @@ def migrate_db():
                 except sqlite3.IntegrityError:
                     # Relationship already exists
                     pass
-            
+
             conn.commit()
             if migrated_count > 0:
                 messages.append(f"Migrated {migrated_count} league-club relationships")
-                print(f"Migrated {migrated_count} league-club relationships", flush=True)
+                print(
+                    f"Migrated {migrated_count} league-club relationships", flush=True
+                )
             else:
                 messages.append("No league-club relationships to migrate")
                 print("No league-club relationships to migrate", flush=True)
@@ -86,26 +88,31 @@ def migrate_db():
                  description TEXT,
                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
             """)
-            
+
             # Step 3b: Copy data (excluding club_id)
             conn.execute("""
                 INSERT INTO leagues_new (id, name, description, created_at)
                 SELECT id, name, description, created_at
                 FROM leagues
             """)
-            
+
             # Step 3c: Drop old table
             conn.execute("DROP TABLE leagues")
-            
+
             # Step 3d: Rename new table
             conn.execute("ALTER TABLE leagues_new RENAME TO leagues")
-            
+
             conn.commit()
             messages.append("Removed club_id column from leagues table")
             print("Removed club_id column from leagues table", flush=True)
         else:
-            messages.append("club_id column does not exist in leagues table (already removed)")
-            print("club_id column does not exist in leagues table (already removed)", flush=True)
+            messages.append(
+                "club_id column does not exist in leagues table (already removed)"
+            )
+            print(
+                "club_id column does not exist in leagues table (already removed)",
+                flush=True,
+            )
 
     except Exception as e:
         error_msg = f"Error during migration: {e}"
@@ -126,4 +133,3 @@ if __name__ == "__main__":
         print(msg)
     print("=" * 50)
     print("Migration finished!")
-

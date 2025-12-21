@@ -14,10 +14,11 @@ def register_auth_routes(rt, STYLE):
     def test_session_set(req: Request = None, sess: dict = None):
         """Test endpoint to set a value in session"""
         from auth import get_session_from_request
+
         sess = get_session_from_request(req) if req else {}
         sess["test_value"] = "Hello from session!"
-        sess["test_time"] = str(__import__('datetime').datetime.now())
-        
+        sess["test_time"] = str(__import__("datetime").datetime.now())
+
         return Html(
             Head(Title("Session Set Test"), Style(STYLE)),
             Body(
@@ -25,7 +26,10 @@ def register_auth_routes(rt, STYLE):
                     H2("Session Set Test"),
                     P(f"Set test_value in session: {sess.get('test_value')}"),
                     P(f"Session: {sess}"),
-                    A("Check /test_session to see if it persists", href="/test_session"),
+                    A(
+                        "Check /test_session to see if it persists",
+                        href="/test_session",
+                    ),
                 ),
             ),
         )
@@ -34,39 +38,46 @@ def register_auth_routes(rt, STYLE):
     def test_session(req: Request = None, sess: dict = None):
         """Test endpoint to check session handling"""
         from auth import get_session_from_request
-        
+
         session_info = {
             "sess_param": str(sess) if sess else "None",
             "sess_type": str(type(sess)) if sess else "None",
-            "req_has_scope": hasattr(req, 'scope') if req else False,
-            "req_has_state": hasattr(req, 'state') if req else False,
-            "req_has_session": hasattr(req, 'session') if req else False,
+            "req_has_scope": hasattr(req, "scope") if req else False,
+            "req_has_state": hasattr(req, "state") if req else False,
+            "req_has_session": hasattr(req, "session") if req else False,
         }
         if req:
-            if hasattr(req, 'scope'):
-                session_info["scope_keys"] = list(req.scope.keys()) if isinstance(req.scope, dict) else "Not a dict"
-                session_info["scope_session"] = req.scope.get('session', 'Not found')
-            if hasattr(req, 'state'):
+            if hasattr(req, "scope"):
+                session_info["scope_keys"] = (
+                    list(req.scope.keys())
+                    if isinstance(req.scope, dict)
+                    else "Not a dict"
+                )
+                session_info["scope_session"] = req.scope.get("session", "Not found")
+            if hasattr(req, "state"):
                 session_info["state_attrs"] = dir(req.state)
-            
+
             # Check cookies
-            if hasattr(req, 'cookies'):
+            if hasattr(req, "cookies"):
                 session_info["cookies"] = dict(req.cookies)
-            elif hasattr(req, 'headers'):
-                cookie_header = req.headers.get('cookie', 'Not found')
+            elif hasattr(req, "headers"):
+                cookie_header = req.headers.get("cookie", "Not found")
                 session_info["cookie_header"] = cookie_header
-        
+
         # Get session using our helper
         actual_session = get_session_from_request(req) if req else {}
         session_info["actual_session_from_helper"] = actual_session
-        session_info["user_id_in_session"] = actual_session.get('user_id')
-        
+        session_info["user_id_in_session"] = actual_session.get("user_id")
+
         return Html(
             Head(Title("Session Test"), Style(STYLE)),
             Body(
                 Div(cls="container")(
                     H2("Session Test"),
-                    Pre(str(session_info), style="background: #f0f0f0; padding: 20px; border-radius: 4px; white-space: pre-wrap; font-family: monospace;"),
+                    Pre(
+                        str(session_info),
+                        style="background: #f0f0f0; padding: 20px; border-radius: 4px; white-space: pre-wrap; font-family: monospace;",
+                    ),
                 ),
             ),
         )
@@ -75,7 +86,6 @@ def register_auth_routes(rt, STYLE):
     async def route_login(req: Request, sess=None):
         """Handle login form submission"""
         try:
-            
             form = await req.form()
             username = form.get("username", "").strip()
             password = form.get("password", "")
@@ -87,7 +97,7 @@ def register_auth_routes(rt, STYLE):
 
             # Try login
             login_success = login_user(req, username, password, sess)
-            
+
             if login_success:
                 return RedirectResponse("/", status_code=303)
             else:
@@ -96,6 +106,7 @@ def register_auth_routes(rt, STYLE):
                 )
         except Exception as e:
             import traceback
+
             error_detail = str(e)
             print(f"Login error: {error_detail}")
             print(traceback.format_exc())
@@ -162,7 +173,6 @@ def register_auth_routes(rt, STYLE):
                 ),
             ),
         )
-
 
     @rt("/logout")
     def route_logout(req: Request, sess=None):

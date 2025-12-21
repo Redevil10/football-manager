@@ -127,7 +127,7 @@ def render_navbar(user=None):
         A("Players", href="/players"),
         A("Leagues", href="/leagues"),
     ]
-    
+
     # Add Clubs link for superusers only
     if user and user.get("is_superuser"):
         nav_items.append(A("Clubs", href="/clubs"))
@@ -168,12 +168,14 @@ def render_navbar(user=None):
 
     # Calculate how many nav items to show (base items + optional clubs link)
     num_nav_items = len(nav_items) - len(right_items)
-    
+
     return Div(
         cls="navbar",
         style="display: flex; align-items: center; justify-content: space-between;",
     )(
-        Div(style="display: flex; align-items: center; gap: 20px;")(*nav_items[:num_nav_items]),
+        Div(style="display: flex; align-items: center; gap: 20px;")(
+            *nav_items[:num_nav_items]
+        ),
         Div(style="display: flex; align-items: center;")(*right_items),
     )
 
