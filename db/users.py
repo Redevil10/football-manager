@@ -23,6 +23,7 @@ def create_user(username, password_hash, password_salt, email=None, is_superuser
     except Exception as e:
         print(f"Failed to create user '{username}': {e}")
         import traceback
+
         traceback.print_exc()
         return None
     finally:
@@ -32,7 +33,9 @@ def create_user(username, password_hash, password_salt, email=None, is_superuser
 def get_user_by_username(username):
     """Get user by username"""
     conn = get_db()
-    user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    user = conn.execute(
+        "SELECT * FROM users WHERE username = ?", (username,)
+    ).fetchone()
     conn.close()
     return dict(user) if user else None
 
@@ -99,7 +102,8 @@ def get_user_club_role(user_id, club_id):
 def get_all_users():
     """Get all users (for admin purposes)"""
     conn = get_db()
-    users = conn.execute("SELECT id, username, email, is_superuser, created_at FROM users ORDER BY created_at DESC").fetchall()
+    users = conn.execute(
+        "SELECT id, username, email, is_superuser, created_at FROM users ORDER BY created_at DESC"
+    ).fetchall()
     conn.close()
     return [dict(user) for user in users]
-

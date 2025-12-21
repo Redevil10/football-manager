@@ -20,7 +20,7 @@ repos:
       - id: debug-statements
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version - latest as of 2024
+    # Ruff version
     rev: v0.14.10
     hooks:
       # Run ruff linter with import sorting enabled
