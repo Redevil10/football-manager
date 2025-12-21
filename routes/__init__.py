@@ -13,31 +13,76 @@ from config import *
 from db import init_db
 from styles import STYLE
 
-SECRET_KEY = os.environ.get("SECRET_KEY", secrets.token_urlsafe(32))
+# Use a persistent secret key for sessions
+# On Hugging Face Spaces, use environment variable if available, otherwise generate once
+# For production, set SECRET_KEY in environment variables
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    # Generate a secret key and store it (for persistence across restarts on HF Spaces)
+    # In production, this should be set via environment variable
+    SECRET_KEY = secrets.token_urlsafe(32)
+    print(f"Generated SECRET_KEY (set SECRET_KEY env var for persistence): {SECRET_KEY[:20]}...")
+
+# FastHTML's fast_app(secret_key=...) automatically handles sessions
+# According to FastHTML docs: "session acts like a dictionary and you can set and get values from it"
+# The session is automatically injected as a parameter to route handlers (e.g., 'session' or 'sess')
 app, rt = fast_app(secret_key=SECRET_KEY)
 
-# Explicitly add SessionMiddleware to ensure sessions persist
-# FastHTML may not add it automatically even with secret_key
+# Configure SessionMiddleware for Hugging Face Spaces
+# HF Spaces apps run in an iframe on a different domain, requiring special cookie settings
+# See: https://huggingface.co/docs/hub/en/spaces-cookie-limitations
 try:
     from starlette.middleware.sessions import SessionMiddleware
-
-    # Check existing middleware
-    middleware_found = False
-
+    from starlette.middleware.base import BaseHTTPMiddleware
+    
+    is_hf_space = os.environ.get("HF_TOKEN") is not None
+    
+    if is_hf_space:
+        # For cross-origin iframes, we MUST use same_site="none" AND secure=True
+        # same_site="none" requires the Secure flag, which requires https_only=True
+        same_site_setting = "none"
+        https_only_setting = True
+    else:
+        same_site_setting = "lax"
+        https_only_setting = False
+    
+    # FastHTML's fast_app(secret_key=...) automatically adds SessionMiddleware with default settings
+    # Those defaults (likely same_site="lax") don't work for Hugging Face Spaces iframes
+    # We need to remove it and add our own with the correct settings to avoid:
+    # 1. Having two SessionMiddleware instances (conflicts)
+    # 2. Using the wrong cookie settings (won't work in iframe)
     if hasattr(app, "user_middleware"):
-        for mw in app.user_middleware:
-            mw_name = type(mw).__name__
-            if "Session" in mw_name or "session" in mw_name.lower():
-                middleware_found = True
-                break
-
-    # Add SessionMiddleware only if not already present
-    if not middleware_found:
-        app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+        app.user_middleware = [
+            mw for mw in app.user_middleware
+            if not (hasattr(mw, "cls") and "Session" in str(mw.cls))
+        ]
+    
+    # Add middleware to detect HTTPS from proxy headers
+    # Needed for HF Spaces where the app sees HTTP internally but browser uses HTTPS
+    if is_hf_space:
+        class HTTPSDetectionMiddleware(BaseHTTPMiddleware):
+            """Ensure HTTPS is detected from X-Forwarded-Proto header"""
+            async def dispatch(self, request, call_next):
+                if request.headers.get("x-forwarded-proto") == "https":
+                    request.scope["scheme"] = "https"
+                return await call_next(request)
+        
+        app.add_middleware(HTTPSDetectionMiddleware)
+    
+    # Add SessionMiddleware with the correct configuration for our environment
+    # (HF Spaces needs same_site="none", local dev can use "lax")
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=SECRET_KEY,
+        same_site=same_site_setting,
+        https_only=https_only_setting,
+        max_age=86400 * 7,  # 7 days
+    )
+    
 except ImportError:
-    pass  # SessionMiddleware not available, FastHTML may handle sessions differently
-except Exception:
-    pass  # Error adding middleware, continue anyway
+    pass  # SessionMiddleware not available
+except Exception as e:
+    print(f"Warning: Error configuring SessionMiddleware: {e}")
 
 # Setup Hugging Face backup for persistent storage (only on Hugging Face Spaces)
 if os.environ.get("HF_TOKEN"):

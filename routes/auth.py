@@ -10,77 +10,6 @@ from db.users import create_user, get_user_by_username
 def register_auth_routes(rt, STYLE):
     """Register authentication-related routes"""
 
-    @rt("/test_session_set")
-    def test_session_set(req: Request = None, sess: dict = None):
-        """Test endpoint to set a value in session"""
-        from auth import get_session_from_request
-
-        sess = get_session_from_request(req) if req else {}
-        sess["test_value"] = "Hello from session!"
-        sess["test_time"] = str(__import__("datetime").datetime.now())
-
-        return Html(
-            Head(Title("Session Set Test"), Style(STYLE)),
-            Body(
-                Div(cls="container")(
-                    H2("Session Set Test"),
-                    P(f"Set test_value in session: {sess.get('test_value')}"),
-                    P(f"Session: {sess}"),
-                    A(
-                        "Check /test_session to see if it persists",
-                        href="/test_session",
-                    ),
-                ),
-            ),
-        )
-
-    @rt("/test_session")
-    def test_session(req: Request = None, sess: dict = None):
-        """Test endpoint to check session handling"""
-        from auth import get_session_from_request
-
-        session_info = {
-            "sess_param": str(sess) if sess else "None",
-            "sess_type": str(type(sess)) if sess else "None",
-            "req_has_scope": hasattr(req, "scope") if req else False,
-            "req_has_state": hasattr(req, "state") if req else False,
-            "req_has_session": hasattr(req, "session") if req else False,
-        }
-        if req:
-            if hasattr(req, "scope"):
-                session_info["scope_keys"] = (
-                    list(req.scope.keys())
-                    if isinstance(req.scope, dict)
-                    else "Not a dict"
-                )
-                session_info["scope_session"] = req.scope.get("session", "Not found")
-            if hasattr(req, "state"):
-                session_info["state_attrs"] = dir(req.state)
-
-            # Check cookies
-            if hasattr(req, "cookies"):
-                session_info["cookies"] = dict(req.cookies)
-            elif hasattr(req, "headers"):
-                cookie_header = req.headers.get("cookie", "Not found")
-                session_info["cookie_header"] = cookie_header
-
-        # Get session using our helper
-        actual_session = get_session_from_request(req) if req else {}
-        session_info["actual_session_from_helper"] = actual_session
-        session_info["user_id_in_session"] = actual_session.get("user_id")
-
-        return Html(
-            Head(Title("Session Test"), Style(STYLE)),
-            Body(
-                Div(cls="container")(
-                    H2("Session Test"),
-                    Pre(
-                        str(session_info),
-                        style="background: #f0f0f0; padding: 20px; border-radius: 4px; white-space: pre-wrap; font-family: monospace;",
-                    ),
-                ),
-            ),
-        )
 
     @rt("/login", methods=["POST"])
     async def route_login(req: Request, sess=None):
@@ -95,7 +24,6 @@ def register_auth_routes(rt, STYLE):
                     "/login?error=Please+provide+username+and+password", status_code=303
                 )
 
-            # Try login
             login_success = login_user(req, username, password, sess)
 
             if login_success:
@@ -170,6 +98,18 @@ def register_auth_routes(rt, STYLE):
                         method="post",
                         action="/login",
                     ),
+                    Hr(style="margin: 20px 0;"),
+                    Div(style="text-align: center;")(
+                        P(
+                            "First time setup?",
+                            style="margin-bottom: 10px; color: #666;",
+                        ),
+                        A(
+                            "Run Database Migration",
+                            href="/migration",
+                            style="display: inline-block; padding: 8px 16px; background: #17a2b8; color: white; text-decoration: none; border-radius: 4px;",
+                        ),
+                    ),
                 ),
             ),
         )
@@ -179,6 +119,114 @@ def register_auth_routes(rt, STYLE):
         """Logout user"""
         logout_user(req, sess)
         return RedirectResponse("/login", status_code=303)
+
+    @rt("/register", methods=["POST"])
+    async def route_register(req: Request, sess=None):
+        """Handle registration form submission"""
+        try:
+            print(f"Registration POST received. Method: {req.method}, URL: {req.url}")
+
+            # Check if users table exists
+            try:
+                from db.connection import get_db
+                conn = get_db()
+                conn.execute("SELECT 1 FROM users LIMIT 1")
+                conn.close()
+            except Exception as table_error:
+                error_msg = "Database not initialized. Please run migrations first at /migration"
+                print(f"Registration error: {error_msg} - {table_error}")
+                return RedirectResponse(
+                    f"/register?error={error_msg.replace(' ', '+')}", status_code=303
+                )
+
+            form = await req.form()
+            print(f"Form data: {dict(form)}")
+
+            username = form.get("username", "").strip()
+            email = form.get("email", "").strip() or None
+            password = form.get("password", "")
+            is_superuser = form.get("is_superuser") == "1"
+
+            print(
+                f"Parsed: username={username}, email={email}, is_superuser={is_superuser}, password_length={len(password)}"
+            )
+
+            if not username or not password:
+                return RedirectResponse(
+                    "/register?error=Please+provide+username+and+password",
+                    status_code=303,
+                )
+
+            # Check if user already exists
+            existing_user = get_user_by_username(username)
+            if existing_user:
+                print(f"User {username} already exists")
+                return RedirectResponse(
+                    "/register?error=Username+already+exists", status_code=303
+                )
+
+            password_hash, password_salt = hash_password(password)
+            print(f"Created password hash and salt for {username}")
+
+            user_id = create_user(
+                username, password_hash, password_salt, email, is_superuser
+            )
+            print(f"create_user returned: {user_id}")
+
+            if user_id:
+                print(f"User created successfully with ID: {user_id}")
+                
+                # Verify user was actually created by querying the database
+                verify_user = get_user_by_username(username)
+                if not verify_user:
+                    print(f"ERROR: User '{username}' was not found after creation!")
+                    return RedirectResponse(
+                        "/register?error=User+created+but+not+found+in+database",
+                        status_code=303,
+                    )
+                print(f"Verified: User '{username}' exists in database with ID {verify_user['id']}")
+                
+                # Auto-login after registration
+                if sess is None:
+                    sess = {}
+                login_success = login_user(req, username, password, sess)
+                print(f"Auto-login result: {login_success}")
+                if login_success:
+                    return RedirectResponse("/", status_code=303)
+                else:
+                    # User created but login failed - redirect to login page
+                    return RedirectResponse(
+                        "/login?error=User+created+but+login+failed+please+try+logging+in",
+                        status_code=303,
+                    )
+            else:
+                print("User creation failed - create_user returned None")
+                # Try to get more info about why it failed
+                try:
+                    from db.users import get_all_users
+                    all_users = get_all_users()
+                    print(f"Current users in database: {[u['username'] for u in all_users]}")
+                except Exception as e:
+                    print(f"Could not list users: {e}")
+                return RedirectResponse(
+                    "/register?error=Registration+failed+user+not+created+check+logs",
+                    status_code=303,
+                )
+        except Exception as e:
+            import traceback
+
+            error_detail = str(e)
+            print(f"Registration error: {error_detail}")
+            print(traceback.format_exc())
+            # Check if it's a table doesn't exist error
+            if "no such table" in error_detail.lower() or "users" in error_detail.lower():
+                error_msg = "Database not initialized. Please run migrations at /migration"
+                return RedirectResponse(
+                    f"/register?error={error_msg.replace(' ', '+')}", status_code=303
+                )
+            return RedirectResponse(
+                f"/register?error=Registration+failed:+{error_detail.replace(' ', '+')}", status_code=303
+            )
 
     @rt("/register")
     def register_page(req: Request = None):
@@ -193,6 +241,20 @@ def register_auth_routes(rt, STYLE):
 
                 query = parse_qs(str(req.url.query))
                 error = query.get("error", [None])[0]
+        
+        # Add link to verify users were created (for debugging)
+        debug_info = ""
+        try:
+            from db.users import get_all_users
+            users = get_all_users()
+            if users:
+                debug_info = P(
+                    f"Debug: Found {len(users)} user(s) in database",
+                    style="color: #666; font-size: 12px; margin-top: 10px;",
+                )
+        except Exception:
+            pass  # Ignore errors in debug info
+        
         return Html(
             Head(
                 Title("Register - Football Manager"),
@@ -251,70 +313,8 @@ def register_auth_routes(rt, STYLE):
                         method="POST",
                         action="/register",
                     ),
+                    debug_info,
                 ),
             ),
         )
 
-    @rt("/register", methods=["POST"])
-    async def route_register(req: Request, sess=None):
-        """Handle registration form submission"""
-        try:
-            print(f"Registration POST received. Method: {req.method}, URL: {req.url}")
-
-            form = await req.form()
-            print(f"Form data: {dict(form)}")
-
-            username = form.get("username", "").strip()
-            email = form.get("email", "").strip() or None
-            password = form.get("password", "")
-            is_superuser = form.get("is_superuser") == "1"
-
-            print(
-                f"Parsed: username={username}, email={email}, is_superuser={is_superuser}, password_length={len(password)}"
-            )
-
-            if not username or not password:
-                return RedirectResponse(
-                    "/register?error=Please+provide+username+and+password",
-                    status_code=303,
-                )
-
-            # Check if user already exists
-            existing_user = get_user_by_username(username)
-            if existing_user:
-                print(f"User {username} already exists")
-                return RedirectResponse(
-                    "/register?error=Username+already+exists", status_code=303
-                )
-
-            password_hash, password_salt = hash_password(password)
-            print(f"Created password hash and salt for {username}")
-
-            user_id = create_user(
-                username, password_hash, password_salt, email, is_superuser
-            )
-            print(f"create_user returned: {user_id}")
-
-            if user_id:
-                print(f"User created successfully with ID: {user_id}")
-                # Auto-login after registration
-                if sess is None:
-                    sess = {}
-                login_success = login_user(req, username, password, sess)
-                print(f"Auto-login result: {login_success}")
-                return RedirectResponse("/", status_code=303)
-            else:
-                print("User creation failed - create_user returned None")
-                return RedirectResponse(
-                    "/register?error=Registration+failed+user+not+created",
-                    status_code=303,
-                )
-        except Exception as e:
-            import traceback
-
-            error_detail = str(e)
-            print(f"Registration error: {error_detail}")
-            print(traceback.format_exc())
-            return RedirectResponse(
-                f"/register?error=Registration+failed:+{error_detail}", status_code=303
-            )
