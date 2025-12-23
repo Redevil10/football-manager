@@ -3,8 +3,19 @@
 from fasthtml.common import *  # noqa: F403, F405
 from fasthtml.common import RedirectResponse, Request
 
-from auth import get_current_user, hash_password, login_user, logout_user
-from db.users import create_user, get_user_by_username
+from auth import (
+    get_current_user,
+    hash_password,
+    login_user,
+    logout_user,
+    verify_password,
+)
+from db.users import (
+    create_user,
+    get_all_users,
+    get_user_by_username,
+    update_user_password,
+)
 
 
 def register_auth_routes(rt, STYLE):
@@ -23,14 +34,32 @@ def register_auth_routes(rt, STYLE):
                     "/login?error=Please+provide+username+and+password", status_code=303
                 )
 
-            login_success = login_user(req, username, password, sess)
+            # Check if user exists first
+            from db.users import get_user_by_username
 
-            if login_success:
+            user = get_user_by_username(username)
+
+            if not user:
+                return RedirectResponse("/login?error=Wrong+username", status_code=303)
+
+            # User exists, now check password
+            from auth import verify_password
+
+            if not verify_password(
+                password, user["password_hash"], user["password_salt"]
+            ):
+                return RedirectResponse("/login?error=Wrong+password", status_code=303)
+
+            # Password is correct, set session
+            if sess is None:
+                return RedirectResponse("/login?error=Session+error", status_code=303)
+
+            try:
+                sess["user_id"] = user["id"]
                 return RedirectResponse("/", status_code=303)
-            else:
-                return RedirectResponse(
-                    "/login?error=Invalid+username+or+password", status_code=303
-                )
+            except Exception as e:
+                print(f"Error setting session: {e}")
+                return RedirectResponse("/login?error=Session+error", status_code=303)
         except Exception as e:
             import traceback
 
@@ -76,6 +105,9 @@ def register_auth_routes(rt, STYLE):
                                 required=True,
                                 autocomplete="username",
                                 style="width: 100%; padding: 8px;",
+                                **{
+                                    "onkeydown": "if(event.key === 'Enter') { event.preventDefault(); this.form.submit(); }"
+                                },
                             ),
                         ),
                         Div(cls="input-group", style="margin-bottom: 15px;")(
@@ -86,6 +118,9 @@ def register_auth_routes(rt, STYLE):
                                 required=True,
                                 autocomplete="current-password",
                                 style="width: 100%; padding: 8px;",
+                                **{
+                                    "onkeydown": "if(event.key === 'Enter') { event.preventDefault(); this.form.submit(); }"
+                                },
                             ),
                         ),
                         Button(
@@ -109,15 +144,23 @@ def register_auth_routes(rt, STYLE):
 
     @rt("/register", methods=["POST"])
     async def route_register(req: Request, sess=None):
-        """Handle registration form submission - only accessible to superusers"""
+        """Handle registration form submission - accessible to superusers and managers"""
         user = get_current_user(req, sess)
 
         # Require authentication
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        # Require superuser status
-        if not user.get("is_superuser"):
+        # Require superuser or manager status
+        is_superuser = user.get("is_superuser", False)
+        is_manager = False
+        if not is_superuser:
+            from db.users import get_user_clubs
+
+            user_clubs = get_user_clubs(user["id"])
+            is_manager = any(club.get("role") == "manager" for club in user_clubs)
+
+        if not (is_superuser or is_manager):
             return RedirectResponse("/", status_code=303)
 
         try:
@@ -143,7 +186,9 @@ def register_auth_routes(rt, STYLE):
             username = form.get("username", "").strip()
             email = form.get("email", "").strip() or None
             password = form.get("password", "")
-            is_superuser = form.get("is_superuser") == "1"
+            is_superuser = (
+                form.get("is_superuser") == "1" if is_superuser else False
+            )  # Only superusers can create superusers
             role = form.get("role", "").strip()
             club_id_str = form.get("club_id", "").strip()
 
@@ -176,6 +221,16 @@ def register_auth_routes(rt, STYLE):
                     "/register?error=Invalid+club+ID",
                     status_code=303,
                 )
+
+            # For managers, verify they can assign users to this club
+            if not is_superuser:
+                from auth import check_club_permission
+
+                if not check_club_permission(user, club_id, "manager"):
+                    return RedirectResponse(
+                        "/register?error=You+can+only+create+users+for+clubs+you+manage",
+                        status_code=303,
+                    )
 
             # Check if user already exists
             existing_user = get_user_by_username(username)
@@ -222,19 +277,18 @@ def register_auth_routes(rt, STYLE):
                     )
                 print(f"Assigned user {user_id} to club {club_id} with role {role}")
 
-                # Auto-login after registration
-                if sess is None:
-                    sess = {}
-                login_success = login_user(req, username, password, sess)
-                print(f"Auto-login result: {login_success}")
-                if login_success:
-                    return RedirectResponse("/", status_code=303)
-                else:
-                    # User created but login failed - redirect to login page
-                    return RedirectResponse(
-                        "/login?error=User+created+but+login+failed+please+try+logging+in",
-                        status_code=303,
-                    )
+                # Auto-login after registration (only for superusers creating their own account)
+                # Managers creating users should redirect to users page
+                if is_superuser and sess is not None:
+                    login_success = login_user(req, username, password, sess)
+                    print(f"Auto-login result: {login_success}")
+                    if login_success:
+                        return RedirectResponse("/", status_code=303)
+
+                # Redirect to users page on success
+                return RedirectResponse(
+                    "/users?success=User+created+successfully", status_code=303
+                )
             else:
                 print("User creation failed - create_user returned None")
                 # Try to get more info about why it failed
@@ -275,15 +329,28 @@ def register_auth_routes(rt, STYLE):
 
     @rt("/register")
     def register_page(req: Request = None, sess=None):
-        """Registration page - only accessible to superusers"""
+        """Registration page - accessible to superusers and managers"""
         user = get_current_user(req, sess)
 
         # Require authentication
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        # Require superuser status
-        if not user.get("is_superuser"):
+        # Require superuser or manager status
+        is_superuser = user.get("is_superuser", False)
+        is_manager = False
+        user_club_ids = []
+        if not is_superuser:
+            from db.users import get_user_clubs
+
+            user_clubs = get_user_clubs(user["id"])
+            is_manager = any(club.get("role") == "manager" for club in user_clubs)
+            if is_manager:
+                user_club_ids = [
+                    club["id"] for club in user_clubs if club.get("role") == "manager"
+                ]
+
+        if not (is_superuser or is_manager):
             return RedirectResponse("/", status_code=303)
 
         # Get error from query params if present
@@ -297,10 +364,16 @@ def register_auth_routes(rt, STYLE):
                 query = parse_qs(str(req.url.query))
                 error = query.get("error", [None])[0]
 
-        # Get all clubs for the dropdown
-        from db.clubs import get_all_clubs
+        # Get clubs for the dropdown
+        from db.clubs import get_all_clubs, get_club
 
-        clubs = get_all_clubs()
+        if is_superuser:
+            clubs = get_all_clubs()
+        else:
+            # Managers can only see clubs they manage
+            clubs = [get_club(cid) for cid in user_club_ids if get_club(cid)]
+
+        from render.common import render_navbar
 
         return Html(
             Head(
@@ -308,6 +381,7 @@ def register_auth_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
+                render_navbar(user),
                 Div(cls="container", style="max-width: 400px; margin: 100px auto;")(
                     H2("Register"),
                     Form(
@@ -337,14 +411,16 @@ def register_auth_routes(rt, STYLE):
                                 style="width: 100%; padding: 8px;",
                             ),
                         ),
-                        Div(cls="input-group", style="margin-bottom: 15px;")(
+                        is_superuser
+                        and Div(cls="input-group", style="margin-bottom: 15px;")(
                             Label("Is Superuser:"),
                             Input(
                                 type="checkbox",
                                 name="is_superuser",
                                 value="1",
                             ),
-                        ),
+                        )
+                        or "",
                         Div(cls="input-group", style="margin-bottom: 15px;")(
                             Label("Role:"),
                             Select(
@@ -400,6 +476,242 @@ def register_auth_routes(rt, STYLE):
                         ),
                         method="POST",
                         action="/register",
+                    ),
+                ),
+            ),
+        )
+
+    @rt("/change-password", methods=["POST"])
+    async def route_change_password(req: Request, sess=None):
+        """Handle password change form submission"""
+        user = get_current_user(req, sess)
+
+        # Require authentication
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        try:
+            form = await req.form()
+            is_superuser = user.get("is_superuser", False)
+
+            # For superusers, they can change anyone's password
+            if is_superuser:
+                target_user_id_str = form.get("target_user_id", "").strip()
+                if not target_user_id_str:
+                    return RedirectResponse(
+                        "/change-password?error=Please+select+a+user", status_code=303
+                    )
+
+                try:
+                    target_user_id = int(target_user_id_str)
+                except ValueError:
+                    return RedirectResponse(
+                        "/change-password?error=Invalid+user+ID", status_code=303
+                    )
+
+                # Verify target user exists
+                from db.users import get_user_by_id
+
+                target_user = get_user_by_id(target_user_id)
+                if not target_user:
+                    return RedirectResponse(
+                        "/change-password?error=User+not+found", status_code=303
+                    )
+
+                # Superuser doesn't need to provide current password
+                new_password = form.get("new_password", "")
+                confirm_password = form.get("confirm_password", "")
+
+            else:
+                # Regular users can only change their own password
+                target_user_id = user["id"]
+                current_password = form.get("current_password", "")
+                new_password = form.get("new_password", "")
+                confirm_password = form.get("confirm_password", "")
+
+                # Verify current password
+                if not verify_password(
+                    current_password, user["password_hash"], user["password_salt"]
+                ):
+                    return RedirectResponse(
+                        "/change-password?error=Current+password+is+incorrect",
+                        status_code=303,
+                    )
+
+            # Validate new password
+            if not new_password:
+                return RedirectResponse(
+                    "/change-password?error=Please+provide+a+new+password",
+                    status_code=303,
+                )
+
+            if len(new_password) < 6:
+                return RedirectResponse(
+                    "/change-password?error=Password+must+be+at+least+6+characters",
+                    status_code=303,
+                )
+
+            if new_password != confirm_password:
+                return RedirectResponse(
+                    "/change-password?error=New+passwords+do+not+match", status_code=303
+                )
+
+            # Update password
+            password_hash, password_salt = hash_password(new_password)
+            success = update_user_password(target_user_id, password_hash, password_salt)
+
+            if success:
+                if is_superuser:
+                    return RedirectResponse(
+                        "/change-password?success=Password+changed+successfully",
+                        status_code=303,
+                    )
+                else:
+                    return RedirectResponse(
+                        "/change-password?success=Password+changed+successfully",
+                        status_code=303,
+                    )
+            else:
+                return RedirectResponse(
+                    "/change-password?error=Failed+to+update+password", status_code=303
+                )
+
+        except Exception as e:
+            import traceback
+
+            error_detail = str(e)
+            print(f"Change password error: {error_detail}")
+            print(traceback.format_exc())
+            return RedirectResponse(
+                f"/change-password?error=Password+change+failed:+{error_detail.replace(' ', '+')}",
+                status_code=303,
+            )
+
+    @rt("/change-password")
+    def change_password_page(req: Request = None, sess=None):
+        """Change password page"""
+        user = get_current_user(req, sess)
+
+        # Require authentication
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Get error/success from query params if present
+        error_msg = None
+        success_msg = None
+        target_user_id = None
+        if req:
+            if hasattr(req, "query_params"):
+                error_msg = req.query_params.get("error")
+                success_msg = req.query_params.get("success")
+                target_user_id = req.query_params.get("target_user_id")
+            elif hasattr(req, "url") and hasattr(req.url, "query"):
+                from urllib.parse import parse_qs
+
+                query = parse_qs(str(req.url.query))
+                error_msg = query.get("error", [None])[0]
+                success_msg = query.get("success", [None])[0]
+                target_user_id = query.get("target_user_id", [None])[0]
+
+        is_superuser = user.get("is_superuser", False)
+
+        # Get all users for superuser dropdown
+        all_users = []
+        if is_superuser:
+            all_users = get_all_users()
+
+        return Html(
+            Head(
+                Title("Change Password - Football Manager"),
+                Style(STYLE),
+            ),
+            Body(
+                Div(cls="container", style="max-width: 400px; margin: 100px auto;")(
+                    H2("Change Password"),
+                    error_msg
+                    and P(
+                        error_msg.replace("+", " "),
+                        style="color: red; margin-bottom: 15px; padding: 10px; background: #fee; border: 1px solid #fcc; border-radius: 4px;",
+                    )
+                    or "",
+                    success_msg
+                    and P(
+                        success_msg.replace("+", " "),
+                        style="color: green; margin-bottom: 15px; padding: 10px; background: #efe; border: 1px solid #cfc; border-radius: 4px;",
+                    )
+                    or "",
+                    Form(
+                        # For superusers: show user selector
+                        is_superuser
+                        and Div(cls="input-group", style="margin-bottom: 15px;")(
+                            Label("Select User:"),
+                            Select(
+                                Option(
+                                    "Select a user",
+                                    value="",
+                                    disabled=True,
+                                    selected=not target_user_id,
+                                ),
+                                *[
+                                    Option(
+                                        f"{u['username']} ({'Superuser' if u['is_superuser'] else 'User'})",
+                                        value=str(u["id"]),
+                                        selected=str(u["id"]) == str(target_user_id)
+                                        if target_user_id
+                                        else False,
+                                    )
+                                    for u in all_users
+                                ],
+                                name="target_user_id",
+                                required=True,
+                                style="width: 100%; padding: 8px;",
+                            ),
+                        )
+                        or "",
+                        # For regular users: show current password field
+                        not is_superuser
+                        and Div(cls="input-group", style="margin-bottom: 15px;")(
+                            Label("Current Password:"),
+                            Input(
+                                type="password",
+                                name="current_password",
+                                required=True,
+                                autocomplete="current-password",
+                                style="width: 100%; padding: 8px;",
+                            ),
+                        )
+                        or "",
+                        Div(cls="input-group", style="margin-bottom: 15px;")(
+                            Label("New Password:"),
+                            Input(
+                                type="password",
+                                name="new_password",
+                                required=True,
+                                autocomplete="new-password",
+                                style="width: 100%; padding: 8px;",
+                            ),
+                        ),
+                        Div(cls="input-group", style="margin-bottom: 15px;")(
+                            Label("Confirm New Password:"),
+                            Input(
+                                type="password",
+                                name="confirm_password",
+                                required=True,
+                                autocomplete="new-password",
+                                style="width: 100%; padding: 8px;",
+                            ),
+                        ),
+                        Button(
+                            "Change Password",
+                            type="submit",
+                            cls="btn-success",
+                            style="width: 100%;",
+                        ),
+                        method="POST",
+                        action="/change-password",
+                    ),
+                    Div(style="margin-top: 20px; text-align: center;")(
+                        A("Back to Home", href="/", style="color: #007bff;"),
                     ),
                 ),
             ),

@@ -84,12 +84,12 @@ def add_player(name, club_id, position_pref="", alias=None):
         physical = json.dumps(generate_random_physical())
         gk = json.dumps(generate_random_gk())
 
-        conn.execute(
+        cursor = conn.execute(
             "INSERT INTO players (name, club_id, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (name, club_id, position_pref, alias, technical, mental, physical, gk),
         )
+        player_id = cursor.lastrowid
         conn.commit()
-        player_id = conn.lastrowid
         conn.close()
         return player_id
     except sqlite3.IntegrityError:
