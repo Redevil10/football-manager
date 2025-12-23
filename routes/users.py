@@ -1,0 +1,821 @@
+# routes/users.py - User management routes
+
+from fasthtml.common import *  # noqa: F403, F405
+from fasthtml.common import RedirectResponse, Request
+
+from auth import get_current_user, get_user_accessible_club_ids
+from db.users import (
+    delete_user,
+    get_all_users,
+    get_user_by_id,
+    get_user_club_role,
+    get_user_clubs,
+    get_users_by_club_ids,
+    update_user,
+    update_user_club_role,
+    update_user_superuser_status,
+)
+from render.common import render_navbar
+
+
+def get_user_role_in_clubs(user):
+    """Get the highest role a user has across all their clubs.
+    Returns 'manager' if they're a manager in any club, otherwise 'viewer'"""
+    if user.get("is_superuser"):
+        return "superuser"
+
+    from db.users import get_user_clubs
+
+    user_clubs = get_user_clubs(user["id"])
+    for club in user_clubs:
+        if club.get("role") == "manager":
+            return "manager"
+    return "viewer"
+
+
+def can_user_edit_target_user(current_user, target_user):
+    """Check if current_user can edit target_user"""
+    # Superusers can edit anyone
+    if current_user.get("is_superuser"):
+        return True
+
+    # Users can edit themselves, but viewers cannot edit their own role
+    if current_user.get("id") == target_user.get("id"):
+        # Check if current user is a viewer (not manager, not superuser)
+        current_user_role = get_user_role_in_clubs(current_user)
+        if current_user_role == "viewer":
+            # Viewers can edit their own username/email but not their role
+            # This will be handled in the edit page - they can edit basic info but not roles
+            return True
+        return True
+
+    # Managers can edit viewers in their clubs
+    if get_user_role_in_clubs(current_user) == "manager":
+        # Check if target_user is a viewer in any of current_user's clubs
+        current_user_club_ids = get_user_accessible_club_ids(current_user)
+        target_user_clubs = get_user_clubs(target_user["id"])
+
+        for club in target_user_clubs:
+            if club["id"] in current_user_club_ids:
+                # Check if current_user is manager of this club
+                if get_user_club_role(current_user["id"], club["id"]) == "manager":
+                    # Check if target_user is a viewer (not manager, not superuser)
+                    if target_user.get("is_superuser"):
+                        return False  # Can't edit superusers
+                    target_role = get_user_club_role(target_user["id"], club["id"])
+                    if target_role == "viewer":
+                        return True
+
+    return False
+
+
+def can_user_delete_target_user(current_user, target_user):
+    """Check if current_user can delete target_user"""
+    # Can't delete yourself
+    if current_user.get("id") == target_user.get("id"):
+        return False
+
+    # Superusers can delete anyone (except themselves, handled above)
+    if current_user.get("is_superuser"):
+        return True
+
+    # Managers can delete viewers in their clubs
+    if get_user_role_in_clubs(current_user) == "manager":
+        # Check if target_user is a viewer in any of current_user's clubs
+        current_user_club_ids = get_user_accessible_club_ids(current_user)
+        target_user_clubs = get_user_clubs(target_user["id"])
+
+        for club in target_user_clubs:
+            if club["id"] in current_user_club_ids:
+                # Check if current_user is manager of this club
+                if get_user_club_role(current_user["id"], club["id"]) == "manager":
+                    # Check if target_user is a viewer (not manager, not superuser)
+                    if target_user.get("is_superuser"):
+                        return False  # Can't delete superusers
+                    target_role = get_user_club_role(target_user["id"], club["id"])
+                    if target_role == "viewer":
+                        return True
+
+    return False
+
+
+def can_user_change_role_in_club(current_user, target_user, club_id):
+    """Check if current_user can change target_user's role in club_id"""
+    # Superusers can change any role
+    if current_user.get("is_superuser"):
+        return True
+
+    # Can't change superuser roles (unless you're a superuser)
+    if target_user.get("is_superuser"):
+        return False
+
+    # Managers can change roles in clubs they manage
+    if get_user_role_in_clubs(current_user) == "manager":
+        # Check if current_user is manager of this club
+        if get_user_club_role(current_user["id"], club_id) == "manager":
+            # Check if target_user is in this club
+            target_role = get_user_club_role(target_user["id"], club_id)
+            if target_role in ["viewer", "manager"]:
+                return True
+
+    return False
+
+
+def get_visible_users_for_user(current_user):
+    """Get list of users visible to the current user based on their role"""
+    if current_user.get("is_superuser"):
+        # Superusers see all users
+        return get_all_users()
+
+    user_role = get_user_role_in_clubs(current_user)
+
+    if user_role == "viewer":
+        # Viewers only see themselves
+        return [current_user]
+
+    elif user_role == "manager":
+        # Managers see themselves + all users in their clubs (excluding superusers)
+        club_ids = get_user_accessible_club_ids(current_user)
+        club_users = get_users_by_club_ids(club_ids)
+
+        # Filter out superusers
+        club_users = [u for u in club_users if not u.get("is_superuser")]
+
+        # Make sure current user is included
+        user_ids = {u["id"] for u in club_users}
+        if current_user["id"] not in user_ids:
+            club_users.append(current_user)
+
+        return club_users
+
+    return []
+
+
+def render_users_list(users, current_user=None):
+    """Render list of users in a table"""
+    if not users:
+        return P("No users found.", style="color: #666; padding: 20px;")
+
+    rows = []
+    for user in users:
+        user_id = user["id"]
+        username = user["username"]
+        email = user.get("email") or "—"
+        is_superuser = user.get("is_superuser", 0)
+        created_at = user.get("created_at", "")
+
+        # Format created_at if available
+        created_display = created_at[:10] if created_at else "—"
+
+        # Determine role display
+        if is_superuser:
+            role_display = "⭐ Superuser"
+        else:
+            user_role = get_user_role_in_clubs(user)
+            if user_role == "manager":
+                role_display = "Manager"
+            elif user_role == "viewer":
+                role_display = "Viewer"
+            else:
+                role_display = "User"
+
+        # Check permissions
+        can_edit = can_user_edit_target_user(current_user, user)
+        can_delete = can_user_delete_target_user(current_user, user)
+
+        rows.append(
+            Tr(
+                Td(username),
+                Td(email),
+                Td(role_display),
+                Td(created_display),
+                Td(
+                    Div(cls="player-row-actions")(
+                        A(
+                            "View",
+                            href=f"/users/{user_id}",
+                            style="padding: 4px 8px; border-radius: 3px; text-decoration: none; font-size: 12px; color: white; background: #0066cc;",
+                        ),
+                        can_edit
+                        and A(
+                            "Edit",
+                            href=f"/users/{user_id}/edit",
+                            style="padding: 4px 8px; border-radius: 3px; text-decoration: none; font-size: 12px; color: white; background: #28a745;",
+                        )
+                        or "",
+                        can_delete
+                        and Form(
+                            method="POST",
+                            action=f"/users/{user_id}/delete",
+                            style="display: inline;",
+                            **{
+                                "onsubmit": f"return confirm('Are you sure you want to delete user {username}? This action cannot be undone.');"
+                            },
+                        )(
+                            Button(
+                                "Delete",
+                                type="submit",
+                                cls="btn-danger",
+                                style="padding: 4px 8px; font-size: 12px;",
+                            )
+                        )
+                        or "",
+                    )
+                ),
+            )
+        )
+
+    return Table(cls="player-table")(
+        Thead(
+            Tr(
+                Th("Username"),
+                Th("Email"),
+                Th("Role"),
+                Th("Created At"),
+                Th("Actions"),
+            )
+        ),
+        Tbody(*rows),
+    )
+
+
+def register_user_routes(rt, STYLE):
+    """Register all user management routes"""
+
+    @rt("/users")
+    def users_page(req: Request = None, sess=None):
+        """User management page - different views based on role"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Get error/success from query params if present
+        error_msg = None
+        success_msg = None
+        if req:
+            if hasattr(req, "query_params"):
+                error_msg = req.query_params.get("error")
+                success_msg = req.query_params.get("success")
+            elif hasattr(req, "url") and hasattr(req.url, "query"):
+                from urllib.parse import parse_qs
+
+                query = parse_qs(str(req.url.query))
+                error_msg = query.get("error", [None])[0]
+                success_msg = query.get("success", [None])[0]
+
+        user_role = get_user_role_in_clubs(user)
+        visible_users = get_visible_users_for_user(user)
+
+        # Determine if user can create new users
+        can_create = user.get("is_superuser") or user_role == "manager"
+
+        return Html(
+            Head(
+                Title("User - Football Manager"),
+                Style(STYLE),
+            ),
+            Body(
+                render_navbar(user),
+                Div(cls="container")(
+                    H2("User Management"),
+                    error_msg
+                    and P(
+                        error_msg.replace("+", " "),
+                        style="color: red; margin-bottom: 15px; padding: 10px; background: #fee; border: 1px solid #fcc; border-radius: 4px;",
+                    )
+                    or "",
+                    success_msg
+                    and P(
+                        success_msg.replace("+", " "),
+                        style="color: green; margin-bottom: 15px; padding: 10px; background: #efe; border: 1px solid #cfc; border-radius: 4px;",
+                    )
+                    or "",
+                    can_create
+                    and Div(cls="container-white", style="margin-bottom: 20px;")(
+                        H3("Create New User"),
+                        P(
+                            "Create a new user account and assign them to a club.",
+                            style="color: #666; margin-bottom: 15px;",
+                        ),
+                        A(
+                            "Create New User",
+                            href="/register",
+                            cls="btn-success",
+                            style="padding: 10px 20px; text-decoration: none; display: inline-block;",
+                        ),
+                    )
+                    or "",
+                    H3("Users"),
+                    render_users_list(visible_users, user),
+                ),
+            ),
+        )
+
+    @rt("/users/{user_id}")
+    def view_user_page(user_id: int, req: Request = None, sess=None):
+        """View user details"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Get error/success from query params if present
+        error_msg = None
+        success_msg = None
+        if req:
+            if hasattr(req, "query_params"):
+                error_msg = req.query_params.get("error")
+                success_msg = req.query_params.get("success")
+            elif hasattr(req, "url") and hasattr(req.url, "query"):
+                from urllib.parse import parse_qs
+
+                query = parse_qs(str(req.url.query))
+                error_msg = query.get("error", [None])[0]
+                success_msg = query.get("success", [None])[0]
+
+        target_user = get_user_by_id(user_id)
+        if not target_user:
+            return RedirectResponse("/users?error=User+not+found", status_code=303)
+
+        # Check if user can view this user
+        visible_users = get_visible_users_for_user(user)
+        if not any(u["id"] == user_id for u in visible_users):
+            return RedirectResponse("/users?error=Access+denied", status_code=303)
+
+        # Get user's clubs
+        user_clubs = get_user_clubs(user_id)
+
+        # Check permissions
+        can_edit = can_user_edit_target_user(user, target_user)
+        is_own_profile = user.get("id") == user_id
+
+        return Html(
+            Head(
+                Title(f"User: {target_user['username']} - Football Manager"),
+                Style(STYLE),
+            ),
+            Body(
+                render_navbar(user),
+                Div(cls="container")(
+                    H2(f"User: {target_user['username']}"),
+                    error_msg
+                    and P(
+                        error_msg.replace("+", " "),
+                        style="color: red; margin-bottom: 15px; padding: 10px; background: #fee; border: 1px solid #fcc; border-radius: 4px;",
+                    )
+                    or "",
+                    success_msg
+                    and P(
+                        success_msg.replace("+", " "),
+                        style="color: green; margin-bottom: 15px; padding: 10px; background: #efe; border: 1px solid #cfc; border-radius: 4px;",
+                    )
+                    or "",
+                    Div(cls="container-white")(
+                        H3("User Information"),
+                        Table(
+                            style="width: 100%; margin-bottom: 20px;",
+                        )(
+                            Tr(
+                                Td(
+                                    Strong("Username:"),
+                                    style="padding: 8px; width: 150px;",
+                                ),
+                                Td(target_user["username"], style="padding: 8px;"),
+                            ),
+                            Tr(
+                                Td(
+                                    Strong("Email:"),
+                                    style="padding: 8px;",
+                                ),
+                                Td(
+                                    target_user.get("email") or "—",
+                                    style="padding: 8px;",
+                                ),
+                            ),
+                            Tr(
+                                Td(
+                                    Strong("Role:"),
+                                    style="padding: 8px;",
+                                ),
+                                Td(
+                                    (
+                                        "⭐ Superuser"
+                                        if target_user.get("is_superuser")
+                                        else (
+                                            get_user_role_in_clubs(
+                                                target_user
+                                            ).capitalize()
+                                            if get_user_role_in_clubs(target_user)
+                                            else "User"
+                                        )
+                                    ),
+                                    style="padding: 8px;",
+                                ),
+                            ),
+                            Tr(
+                                Td(
+                                    Strong("Created At:"),
+                                    style="padding: 8px;",
+                                ),
+                                Td(
+                                    (
+                                        target_user.get("created_at", "—")[:10]
+                                        if target_user.get("created_at")
+                                        else "—"
+                                    ),
+                                    style="padding: 8px;",
+                                ),
+                            ),
+                        ),
+                        Div(cls="btn-group", style="margin-top: 20px;")(
+                            A(
+                                "Change Password",
+                                href=f"/change-password{'?target_user_id=' + str(user_id) if not is_own_profile and user.get('is_superuser') else ''}",
+                                cls="btn-success",
+                                style="padding: 10px 20px; text-decoration: none; display: inline-block;",
+                            ),
+                            can_edit
+                            and A(
+                                "Edit",
+                                href=f"/users/{user_id}/edit",
+                                cls="btn-success",
+                                style="padding: 10px 20px; text-decoration: none; display: inline-block;",
+                            )
+                            or "",
+                            A(
+                                "Back to Users",
+                                href="/users",
+                                cls="btn-secondary",
+                                style="padding: 10px 20px; text-decoration: none; display: inline-block;",
+                            ),
+                        ),
+                    ),
+                    Div(cls="container-white", style="margin-top: 20px;")(
+                        H3("Club Memberships"),
+                        (
+                            Table(cls="player-table")(
+                                Thead(
+                                    Tr(
+                                        Th("Club Name"),
+                                        Th("Role"),
+                                    )
+                                ),
+                                Tbody(
+                                    *[
+                                        Tr(
+                                            Td(club["name"]),
+                                            Td(
+                                                (
+                                                    # Check if current user can change this role
+                                                    Form(
+                                                        method="post",
+                                                        action=f"/users/{user_id}/change-role/{club['id']}",
+                                                        style="display: inline;",
+                                                    )(
+                                                        Select(
+                                                            Option(
+                                                                "Viewer",
+                                                                value="viewer",
+                                                                selected=(
+                                                                    club.get("role")
+                                                                    == "viewer"
+                                                                ),
+                                                            ),
+                                                            Option(
+                                                                "Manager",
+                                                                value="manager",
+                                                                selected=(
+                                                                    club.get("role")
+                                                                    == "manager"
+                                                                ),
+                                                            ),
+                                                            name="role",
+                                                            **{
+                                                                "onchange": "this.form.submit();",
+                                                            },
+                                                            style="padding: 4px 8px; border-radius: 3px;",
+                                                        ),
+                                                    )
+                                                    if can_user_change_role_in_club(
+                                                        user, target_user, club["id"]
+                                                    )
+                                                    else (
+                                                        club["role"].capitalize()
+                                                        if club.get("role")
+                                                        else "—"
+                                                    )
+                                                )
+                                            ),
+                                        )
+                                        for club in user_clubs
+                                    ]
+                                ),
+                            )
+                            if user_clubs
+                            else P(
+                                "This user is not assigned to any clubs.",
+                                style="color: #666; padding: 10px;",
+                            )
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    @rt("/users/{user_id}/edit", methods=["GET"])
+    def edit_user_page(user_id: int, req: Request = None, sess=None):
+        """Edit user details"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        target_user = get_user_by_id(user_id)
+        if not target_user:
+            return RedirectResponse("/users?error=User+not+found", status_code=303)
+
+        # Check if user can edit this user
+        if not can_user_edit_target_user(user, target_user):
+            return RedirectResponse("/users?error=Access+denied", status_code=303)
+
+        # Get user's clubs for role editing
+        target_user_clubs = get_user_clubs(user_id)
+
+        # Check permissions for role editing
+        is_superuser = user.get("is_superuser")
+        is_own_profile = user.get("id") == user_id
+        current_user_role = get_user_role_in_clubs(user)
+        can_edit_roles = is_superuser or (
+            current_user_role == "manager" and not is_own_profile
+        )
+        can_edit_superuser_status = is_superuser
+
+        # Viewers cannot edit their own role
+        if is_own_profile and current_user_role == "viewer":
+            can_edit_roles = False
+
+        # Filter clubs to only show those the current user can edit
+        editable_clubs = []
+        if can_edit_roles:
+            if is_superuser:
+                # Superusers can see all clubs
+                editable_clubs = target_user_clubs
+            else:
+                # For managers, only show clubs they manage
+                current_user_club_ids = get_user_accessible_club_ids(user)
+                editable_clubs = [
+                    club
+                    for club in target_user_clubs
+                    if club["id"] in current_user_club_ids
+                    and get_user_club_role(user["id"], club["id"]) == "manager"
+                ]
+
+        # Get error from query params if present
+        error_msg = None
+        if req:
+            if hasattr(req, "query_params"):
+                error_msg = req.query_params.get("error")
+            elif hasattr(req, "url") and hasattr(req.url, "query"):
+                from urllib.parse import parse_qs
+
+                query = parse_qs(str(req.url.query))
+                error_msg = query.get("error", [None])[0]
+
+        return Html(
+            Head(
+                Title(f"Edit User: {target_user['username']} - Football Manager"),
+                Style(STYLE),
+            ),
+            Body(
+                render_navbar(user),
+                Div(cls="container", style="max-width: 600px;")(
+                    H2(f"Edit User: {target_user['username']}"),
+                    error_msg
+                    and P(
+                        error_msg.replace("+", " "),
+                        style="color: red; margin-bottom: 15px; padding: 10px; background: #fee; border: 1px solid #fcc; border-radius: 4px;",
+                    )
+                    or "",
+                    Div(cls="container-white")(
+                        Form(
+                            Div(cls="input-group", style="margin-bottom: 15px;")(
+                                Label("Username:"),
+                                Input(
+                                    type="text",
+                                    value=target_user["username"],
+                                    disabled=True,
+                                    style="width: 100%; padding: 8px; background: #f5f5f5; cursor: not-allowed;",
+                                ),
+                                P(
+                                    "Username cannot be changed",
+                                    style="color: #666; font-size: 12px; margin-top: 5px; margin-bottom: 0;",
+                                ),
+                            ),
+                            Div(cls="input-group", style="margin-bottom: 15px;")(
+                                Label("Email:"),
+                                Input(
+                                    type="email",
+                                    name="email",
+                                    value=target_user.get("email") or "",
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                            ),
+                            # Superuser status (only superusers can edit)
+                            can_edit_superuser_status
+                            and Div(cls="input-group", style="margin-bottom: 15px;")(
+                                Label(
+                                    Div(
+                                        Input(
+                                            type="checkbox",
+                                            name="is_superuser",
+                                            value="1",
+                                            checked=bool(
+                                                target_user.get("is_superuser")
+                                            ),
+                                            style="margin-right: 8px;",
+                                        ),
+                                        "Superuser",
+                                        style="display: flex; align-items: center;",
+                                    ),
+                                ),
+                            )
+                            or "",
+                            # Club roles section (managers and superusers can edit)
+                            can_edit_roles
+                            and editable_clubs
+                            and Div(cls="input-group", style="margin-bottom: 15px;")(
+                                Label(
+                                    "Club Roles:",
+                                    style="display: block; margin-bottom: 10px; font-weight: bold;",
+                                ),
+                                *[
+                                    Div(
+                                        style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 8px; background: #f8f9fa; border-radius: 4px;",
+                                    )(
+                                        Span(club["name"], style="font-weight: 500;"),
+                                        Select(
+                                            Option(
+                                                "Viewer",
+                                                value="viewer",
+                                                selected=(club.get("role") == "viewer"),
+                                            ),
+                                            Option(
+                                                "Manager",
+                                                value="manager",
+                                                selected=(
+                                                    club.get("role") == "manager"
+                                                ),
+                                            ),
+                                            name=f"club_role_{club['id']}",
+                                            style="padding: 4px 8px; border-radius: 3px; min-width: 100px;",
+                                        ),
+                                    )
+                                    for club in editable_clubs
+                                ],
+                            )
+                            or "",
+                            Div(cls="btn-group")(
+                                Button(
+                                    "Save Changes", type="submit", cls="btn-success"
+                                ),
+                                A(
+                                    Button("Cancel", cls="btn-secondary"),
+                                    href=f"/users/{user_id}",
+                                ),
+                            ),
+                            method="post",
+                            action=f"/users/{user_id}/edit",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    @rt("/users/{user_id}/edit", methods=["POST"])
+    async def route_edit_user(user_id: int, req: Request, sess=None):
+        """Handle user edit form submission"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        target_user = get_user_by_id(user_id)
+        if not target_user:
+            return RedirectResponse("/users?error=User+not+found", status_code=303)
+
+        # Check if user can edit this user
+        if not can_user_edit_target_user(user, target_user):
+            return RedirectResponse("/users?error=Access+denied", status_code=303)
+
+        form = await req.form()
+        email = form.get("email", "").strip()
+
+        # Update user email only - username is not editable
+        update_user(user_id, username=None, email=email)
+
+        # Check permissions for role editing
+        is_superuser = user.get("is_superuser")
+        is_own_profile = user.get("id") == user_id
+        current_user_role = get_user_role_in_clubs(user)
+        can_edit_roles = is_superuser or (
+            current_user_role == "manager" and not is_own_profile
+        )
+        can_edit_superuser_status = is_superuser
+
+        # Viewers cannot edit their own role
+        if is_own_profile and current_user_role == "viewer":
+            can_edit_roles = False
+
+        # Update superuser status (only superusers can do this)
+        if can_edit_superuser_status:
+            is_superuser_value = form.get("is_superuser") == "1"
+            update_user_superuser_status(user_id, is_superuser_value)
+
+        # Update club roles (managers and superusers can do this)
+        if can_edit_roles:
+            target_user_clubs = get_user_clubs(user_id)
+            for club in target_user_clubs:
+                club_role_key = f"club_role_{club['id']}"
+                new_role = form.get(club_role_key, "").strip()
+                if new_role in ["viewer", "manager"]:
+                    # Check if current user can change this specific role
+                    if can_user_change_role_in_club(user, target_user, club["id"]):
+                        update_user_club_role(user_id, club["id"], new_role)
+
+        # Always redirect to user detail page after update (matching update_club pattern)
+        return RedirectResponse(
+            f"/users/{user_id}?success=User+updated+successfully", status_code=303
+        )
+
+    @rt("/users/{user_id}/delete", methods=["POST"])
+    def route_delete_user(user_id: int, req: Request = None, sess=None):
+        """Delete a user"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check if user can delete this user
+        target_user = get_user_by_id(user_id)
+        if not target_user:
+            return RedirectResponse("/users?error=User+not+found", status_code=303)
+
+        if not can_user_delete_target_user(user, target_user):
+            return RedirectResponse("/users?error=Access+denied", status_code=303)
+
+        # Delete the user
+        success = delete_user(user_id)
+        if success:
+            return RedirectResponse(
+                "/users?success=User+deleted+successfully", status_code=303
+            )
+        else:
+            return RedirectResponse(
+                "/users?error=Failed+to+delete+user", status_code=303
+            )
+
+    @rt("/users/{user_id}/change-role/{club_id}", methods=["POST"])
+    async def route_change_user_role(
+        user_id: int, club_id: int, req: Request, sess=None
+    ):
+        """Change a user's role in a club"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        target_user = get_user_by_id(user_id)
+        if not target_user:
+            return RedirectResponse("/users?error=User+not+found", status_code=303)
+
+        # Check if user can change this role
+        if not can_user_change_role_in_club(user, target_user, club_id):
+            return RedirectResponse(
+                f"/users/{user_id}?error=Access+denied", status_code=303
+            )
+
+        try:
+            form = await req.form()
+            role = form.get("role", "").strip()
+
+            if role not in ["viewer", "manager"]:
+                return RedirectResponse(
+                    f"/users/{user_id}?error=Invalid+role", status_code=303
+                )
+
+            # Update the role
+            success = update_user_club_role(user_id, club_id, role)
+            if success:
+                return RedirectResponse(
+                    f"/users/{user_id}?success=Role+updated+successfully",
+                    status_code=303,
+                )
+            else:
+                return RedirectResponse(
+                    f"/users/{user_id}?error=Failed+to+update+role", status_code=303
+                )
+        except Exception as e:
+            import traceback
+
+            error_detail = str(e)
+            print(f"Change role error: {error_detail}")
+            print(traceback.format_exc())
+            return RedirectResponse(
+                f"/users/{user_id}?error=Role+change+failed:+{error_detail.replace(' ', '+')}",
+                status_code=303,
+            )

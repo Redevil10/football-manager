@@ -132,6 +132,10 @@ def render_navbar(user=None):
     if user and user.get("is_superuser"):
         nav_items.append(A("Clubs", href="/clubs"))
 
+    # Add Users link for all authenticated users
+    if user:
+        nav_items.append(A("Users", href="/users"))
+
     # Right side: user info and auth buttons
     right_items = []
     if user:

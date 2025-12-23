@@ -99,6 +99,26 @@ def get_user_club_role(user_id, club_id):
     return result["role"] if result else None
 
 
+def update_user_club_role(user_id, club_id, role):
+    """Update a user's role in a club"""
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE user_clubs SET role = ? WHERE user_id = ? AND club_id = ?",
+            (role, user_id, club_id),
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Failed to update user club role: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return False
+    finally:
+        conn.close()
+
+
 def get_all_users():
     """Get all users (for admin purposes)"""
     conn = get_db()
@@ -107,3 +127,118 @@ def get_all_users():
     ).fetchall()
     conn.close()
     return [dict(user) for user in users]
+
+
+def update_user_password(user_id, password_hash, password_salt):
+    """Update a user's password"""
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
+            (password_hash, password_salt, user_id),
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Failed to update password for user ID {user_id}: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return False
+    finally:
+        conn.close()
+
+
+def delete_user(user_id):
+    """Delete a user and all associated records"""
+    conn = get_db()
+    try:
+        # Delete user_clubs associations (CASCADE should handle this, but being explicit)
+        conn.execute("DELETE FROM user_clubs WHERE user_id = ?", (user_id,))
+        # Delete the user
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Failed to delete user ID {user_id}: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return False
+    finally:
+        conn.close()
+
+
+def get_users_by_club_ids(club_ids):
+    """Get all users that belong to any of the given club IDs"""
+    if not club_ids:
+        return []
+
+    conn = get_db()
+    placeholders = ",".join("?" * len(club_ids))
+    users = conn.execute(
+        f"""SELECT DISTINCT u.id, u.username, u.email, u.is_superuser, u.created_at
+           FROM users u
+           JOIN user_clubs uc ON u.id = uc.user_id
+           WHERE uc.club_id IN ({placeholders})
+           ORDER BY u.created_at DESC""",
+        tuple(club_ids),
+    ).fetchall()
+    conn.close()
+    return [dict(user) for user in users]
+
+
+def update_user(user_id, username=None, email=None):
+    """Update user details (username and/or email)"""
+    conn = get_db()
+    try:
+        updates = []
+        params = []
+
+        if username is not None:
+            updates.append("username = ?")
+            params.append(username)
+
+        if email is not None:
+            updates.append("email = ?")
+            params.append(email)
+
+        if not updates:
+            return True  # Nothing to update
+
+        params.append(user_id)
+        query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
+        conn.execute(query, tuple(params))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError as e:
+        print(f"Failed to update user ID {user_id}: IntegrityError - {e}")
+        return False
+    except Exception as e:
+        print(f"Failed to update user ID {user_id}: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return False
+    finally:
+        conn.close()
+
+
+def update_user_superuser_status(user_id, is_superuser):
+    """Update a user's superuser status"""
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE users SET is_superuser = ? WHERE id = ?",
+            (1 if is_superuser else 0, user_id),
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Failed to update superuser status for user ID {user_id}: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return False
+    finally:
+        conn.close()
