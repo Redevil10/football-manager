@@ -14,14 +14,20 @@ Run this script once to migrate your database to the new schema.
 import os
 import sys
 
-# Add parent directory to path so we can import migration modules
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add parent directory to path so we can import config and other modules
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
 
-from migrate_auth import migrate_db as migrate_auth
-from migrate_club_leagues_many_to_many import (
+# Import migration modules from the same directory
+# These are in the same directory, so we can import directly
+# noqa: E402 - sys.path must be modified before these imports
+from migrations.migrate_auth import migrate_db as migrate_auth  # noqa: E402
+from migrations.migrate_club_leagues_many_to_many import (  # noqa: E402
     migrate_db as migrate_club_leagues_many_to_many,
 )
-from migrate_remove_league_id import migrate_db as migrate_remove_league_id
+from migrations.migrate_remove_league_id import (  # noqa: E402
+    migrate_db as migrate_remove_league_id,
+)
 
 
 def migrate_all():
