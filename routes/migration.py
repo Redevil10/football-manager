@@ -105,7 +105,7 @@ def register_migration_routes(rt, STYLE):
             import io
             from contextlib import redirect_stdout
 
-            from migrate_all import migrate_all
+            from migrations.migrate_all import migrate_all
 
             output_buffer = io.StringIO()
             with redirect_stdout(output_buffer):
