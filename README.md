@@ -44,7 +44,7 @@ A comprehensive web application for managing amateur football team rosters, allo
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Install dependencies (including dev dependencies for testing)
-uv sync --dev
+uv sync --extra dev
 
 # Run directly
 uv run python main.py
