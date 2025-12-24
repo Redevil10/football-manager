@@ -231,20 +231,25 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fasthtml-hf" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
     { name = "python-fasthtml" },
     { name = "uvicorn" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fasthtml-hf" },
-    { name = "pytest", specifier = ">=8.0.0" },
-    { name = "pytest-cov", specifier = ">=4.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "python-fasthtml" },
     { name = "uvicorn", specifier = ">=0.38.0" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "fsspec"
