@@ -23,3 +23,6 @@ dev = [
 # F405: may be undefined, or defined from star imports
 # All HTML components like P, Div, H2, etc. are exported from fasthtml.common
 ignore = ["F403", "F405"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core", "db", "logic", "render", "routes"]

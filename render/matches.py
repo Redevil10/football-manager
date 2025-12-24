@@ -2,6 +2,7 @@
 
 from fasthtml.common import *
 
+from core.auth import can_user_edit_match
 from logic import calculate_overall_score
 from render.common import format_match_name, get_match_score_display, is_match_completed
 from render.players import render_match_available_players, render_player_table
@@ -237,8 +238,6 @@ def render_recent_matches(matches):
 
 def render_all_matches(matches, user=None):
     """Render all matches across all leagues"""
-    from auth import can_user_edit_match
-
     content = []
 
     # Only show create button if user can create matches (manager or superuser)
@@ -356,8 +355,6 @@ def render_match_teams(
     match_id, teams, match_players_dict, is_completed=False, show_scores=True
 ):
     """Render match teams similar to home page render_teams"""
-    from logic import calculate_overall_score
-
     if not teams or len(teams) < 1:
         return Div(cls="container-white")(
             P("No teams allocated. Click 'Allocate Teams' to start.", cls="empty-state")
@@ -622,9 +619,6 @@ def render_match_detail(
     user=None,
 ):
     """Render detailed match information"""
-    from auth import can_user_edit_match
-    from logic import calculate_overall_score
-
     # Check if match is completed
     is_completed = is_match_completed(match)
 
