@@ -10,6 +10,12 @@ dependencies = [
     "fasthtml-hf",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+]
+
 [tool.ruff.lint]
 # Ignore F403 and F405 for star imports from fasthtml.common
 # FastHTML is designed to work with star imports (from fasthtml.common import *)

@@ -1,6 +1,6 @@
 # logic/scoring.py - Scoring calculation logic
 
-from config import (
+from core.config import (
     ATTRIBUTE_TO_CATEGORY_SCALE,
     CATEGORY_TO_ATTRIBUTE_SCALE,
     GK_ATTRS,

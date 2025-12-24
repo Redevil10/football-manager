@@ -3,7 +3,7 @@
 from fasthtml.common import *  # noqa: F403, F405
 from fasthtml.common import RedirectResponse, Request
 
-from auth import (
+from core.auth import (
     get_current_user,
     hash_password,
     login_user,
@@ -43,7 +43,7 @@ def register_auth_routes(rt, STYLE):
                 return RedirectResponse("/login?error=Wrong+username", status_code=303)
 
             # User exists, now check password
-            from auth import verify_password
+            from core.auth import verify_password
 
             if not verify_password(
                 password, user["password_hash"], user["password_salt"]
@@ -224,7 +224,7 @@ def register_auth_routes(rt, STYLE):
 
             # For managers, verify they can assign users to this club
             if not is_superuser:
-                from auth import check_club_permission
+                from core.auth import check_club_permission
 
                 if not check_club_permission(user, club_id, "manager"):
                     return RedirectResponse(

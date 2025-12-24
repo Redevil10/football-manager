@@ -2,7 +2,13 @@
 
 from fasthtml.common import *
 
-from config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, SCORE_RANGES, TECHNICAL_ATTRS
+from core.config import (
+    GK_ATTRS,
+    MENTAL_ATTRS,
+    PHYSICAL_ATTRS,
+    SCORE_RANGES,
+    TECHNICAL_ATTRS,
+)
 from logic import (
     calculate_gk_score,
     calculate_mental_score,

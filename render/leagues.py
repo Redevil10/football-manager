@@ -2,7 +2,7 @@
 
 from fasthtml.common import *
 
-from auth import can_user_edit_match
+from core.auth import can_user_edit_match
 from db import get_matches_by_league
 from render.common import format_match_name, get_match_score_display, is_match_completed
 

@@ -43,9 +43,27 @@ A comprehensive web application for managing amateur football team rosters, allo
 # Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
+# Install dependencies (including dev dependencies for testing)
+uv sync --dev
+
 # Run directly
 uv run python main.py
 ```
+
+### Running Tests
+
+```bash
+# Run all tests
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=. --cov-report=html
+
+# Run specific test file
+uv run pytest tests/test_scoring.py
+```
+
+See [tests/README.md](tests/README.md) for more testing information.
 
 ## Usage
 
@@ -91,17 +109,37 @@ The app runs on:
 - **Local**: `http://localhost:7860`
 - **Hugging Face Spaces**: `http://yourspace.hf.space` (port 7860)
 
+## Testing
+
+The project includes comprehensive unit tests:
+
+- **Scoring Logic** - Tests for player score calculations
+- **Authentication** - Tests for password hashing and verification
+- **Team Allocation** - Tests for team balancing algorithms
+
+Tests run automatically on GitHub Actions for all pushes and pull requests.
+
+## CI/CD
+
+GitHub Actions workflows are configured to:
+- Run tests on Python 3.13
+- Generate coverage reports
+- Upload coverage artifacts
+
+See [.github/workflows/README.md](.github/workflows/README.md) for workflow details.
+
 ## File Structure
 
 ```
 football-manager/
 ├── main.py          # Main FastHTML application
-├── db.py            # Database operations
-├── logic.py         # Business logic (team allocation, scoring)
-├── render.py        # HTML rendering functions
-├── config.py        # Configuration and constants
-├── styles.py        # CSS styles
-├── requirements.txt # Python dependencies
+├── db/              # Database operations
+├── logic/           # Business logic (team allocation, scoring)
+├── render/          # HTML rendering functions
+├── core/            # Core utilities (auth, config, styles)
+├── routes/          # Route handlers
+├── tests/           # Unit tests
+├── pyproject.toml   # Project configuration and dependencies
 ├── Dockerfile       # Docker configuration
 ├── config.ini       # fasthtml-hf configuration
 └── README.md        # This file

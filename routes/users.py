@@ -3,7 +3,7 @@
 from fasthtml.common import *  # noqa: F403, F405
 from fasthtml.common import RedirectResponse, Request
 
-from auth import get_current_user, get_user_accessible_club_ids
+from core.auth import get_current_user, get_user_accessible_club_ids
 from db.users import (
     delete_user,
     get_all_users,
