@@ -2,8 +2,8 @@
 
 from fasthtml.common import *
 
-from auth import get_current_user, get_user_club_ids_from_request
-from config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
+from core.auth import get_current_user, get_user_club_ids_from_request
+from core.config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
 from db import (
     delete_player,
     find_player_by_name_or_alias,

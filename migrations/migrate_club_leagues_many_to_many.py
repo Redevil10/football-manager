@@ -11,7 +11,7 @@ This is idempotent - safe to run multiple times.
 
 import sqlite3
 
-from config import DB_PATH
+from core.config import DB_PATH
 
 
 def migrate_db():

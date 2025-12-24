@@ -3,7 +3,7 @@
 from fasthtml.common import *
 from fasthtml.common import RedirectResponse
 
-from auth import get_current_user, get_user_club_ids_from_request
+from core.auth import get_current_user, get_user_club_ids_from_request
 from db import (
     add_match_event,
     add_match_player,
@@ -48,7 +48,7 @@ def register_match_routes(rt, STYLE):
     @rt("/matches")
     def matches_page(req: Request = None, sess=None):
         """All matches page - shows all matches across all leagues"""
-        from auth import get_current_user, get_user_club_ids_from_request
+        from core.auth import get_current_user, get_user_club_ids_from_request
 
         user = get_current_user(req, sess)
         if not user:
@@ -552,7 +552,7 @@ def register_match_routes(rt, STYLE):
 
             # Check authorization and ensure user's club is in the league
             if not user.get("is_superuser"):
-                from auth import check_club_permission
+                from core.auth import check_club_permission
                 from db.club_leagues import add_club_to_league, is_club_in_league
                 from db.users import get_user_club_ids
 
@@ -916,7 +916,7 @@ def register_match_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         # Check authorization
-        from auth import can_user_edit_match
+        from core.auth import can_user_edit_match
 
         if not can_user_edit_match(user, match_id):
             return RedirectResponse(f"/match/{match_id}", status_code=303)
@@ -1268,7 +1268,7 @@ def register_match_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         # Check authorization
-        from auth import can_user_edit_match
+        from core.auth import can_user_edit_match
 
         if not can_user_edit_match(user, match_id):
             return RedirectResponse(f"/match/{match_id}", status_code=303)
@@ -1384,7 +1384,7 @@ def register_match_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         # Check authorization
-        from auth import can_user_edit_match
+        from core.auth import can_user_edit_match
 
         if not can_user_edit_match(user, match_id):
             return RedirectResponse(f"/match/{match_id}", status_code=303)

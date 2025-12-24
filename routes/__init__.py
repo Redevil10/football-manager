@@ -1,14 +1,13 @@
 # routes/__init__.py - Route registration
 
-import os
 import secrets
 
 from fasthtml.common import fast_app
 from fasthtml_hf import setup_hf_backup
 
-from config import *
+from core.config import *
+from core.styles import STYLE
 from db import init_db
-from styles import STYLE
 
 # Use a persistent secret key for sessions
 # On Hugging Face Spaces, use environment variable if available, otherwise generate once

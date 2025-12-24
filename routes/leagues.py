@@ -2,7 +2,7 @@
 
 from fasthtml.common import *
 
-from auth import get_current_user, get_user_club_ids_from_request
+from core.auth import get_current_user, get_user_club_ids_from_request
 from db import (
     create_league,
     delete_league,

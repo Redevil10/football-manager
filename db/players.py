@@ -4,7 +4,7 @@ import json
 import random
 import sqlite3
 
-from config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
+from core.config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
 from db.connection import get_db
 
 

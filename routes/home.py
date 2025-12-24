@@ -3,7 +3,7 @@
 from fasthtml.common import *
 from fasthtml.common import Request
 
-from auth import get_current_user, get_user_club_ids_from_request
+from core.auth import get_current_user, get_user_club_ids_from_request
 from db import (
     get_next_matches_by_all_leagues,
 )

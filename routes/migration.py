@@ -2,7 +2,7 @@
 
 from fasthtml.common import *
 
-from auth import get_current_user
+from core.auth import get_current_user
 from render import render_navbar
 
 
