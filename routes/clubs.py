@@ -8,8 +8,14 @@ from db import (
     create_club,
     delete_club,
     get_all_clubs,
+    get_all_leagues,
     get_club,
     update_club,
+)
+from db.club_leagues import (
+    add_club_to_league,
+    get_leagues_for_club,
+    remove_club_from_league,
 )
 from db.users import (
     add_user_to_club,
@@ -140,6 +146,10 @@ def register_club_routes(rt, STYLE):
                 }
             )
 
+        # Get leagues for this club (for superuser management)
+        leagues_for_club = get_leagues_for_club(club_id)
+        all_leagues = get_all_leagues(club_ids=None)
+
         return Html(
             Head(
                 Title(f"{club['name']} - Football Manager"),
@@ -171,6 +181,12 @@ def register_club_routes(rt, STYLE):
                     Div(cls="container-white", style="margin-top: 20px;")(
                         H3("Club Members"),
                         render_club_members(club_id, club_members, user),
+                    ),
+                    Div(cls="container-white", style="margin-top: 20px;")(
+                        H3("Leagues"),
+                        render_club_leagues(
+                            club_id, leagues_for_club, all_leagues, user
+                        ),
                     ),
                 ),
             ),
@@ -363,6 +379,48 @@ def register_club_routes(rt, STYLE):
         conn.commit()
         conn.close()
 
+        return RedirectResponse(f"/club/{club_id}", status_code=303)
+
+    @rt("/add_club_to_league_from_club/{club_id}", methods=["POST"])
+    async def route_add_club_to_league_from_club(club_id: int, req: Request, sess=None):
+        """Add a club to a league (superuser only) - from club page"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        if not user.get("is_superuser"):
+            return RedirectResponse("/", status_code=303)
+
+        form = await req.form()
+        league_id_str = form.get("league_id", "").strip()
+
+        if not league_id_str:
+            return RedirectResponse(
+                f"/club/{club_id}?error=League+ID+required", status_code=303
+            )
+
+        try:
+            league_id = int(league_id_str)
+            add_club_to_league(club_id, league_id)
+            return RedirectResponse(f"/club/{club_id}", status_code=303)
+        except ValueError:
+            return RedirectResponse(
+                f"/club/{club_id}?error=Invalid+league+ID", status_code=303
+            )
+
+    @rt("/remove_club_from_league_from_club/{club_id}/{league_id}", methods=["POST"])
+    def route_remove_club_from_league_from_club(
+        club_id: int, league_id: int, req: Request = None, sess=None
+    ):
+        """Remove a club from a league (superuser only) - from club page"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        if not user.get("is_superuser"):
+            return RedirectResponse("/", status_code=303)
+
+        remove_club_from_league(club_id, league_id)
         return RedirectResponse(f"/club/{club_id}", status_code=303)
 
 
@@ -559,6 +617,116 @@ def render_club_members(club_id, club_members, user=None):
             Div(cls="container-white")(
                 P(
                     "No members yet. Add members using the form above.",
+                    style="color: #666;",
+                )
+            )
+        )
+
+    return Div(*content)
+
+
+def render_club_leagues(club_id, leagues_for_club, all_leagues, user=None):
+    """Render leagues for a club with management UI (superuser only)"""
+    # Get leagues not yet assigned to this club
+    league_ids_for_club = {league["id"] for league in leagues_for_club}
+    available_leagues = [
+        league for league in all_leagues if league["id"] not in league_ids_for_club
+    ]
+
+    content = [
+        # Add league form
+        Div(cls="container-white", style="margin-bottom: 20px;")(
+            H4("Add Club to League"),
+            Form(
+                Div(style="display: flex; gap: 10px; align-items: flex-end;")(
+                    Div(style="flex: 1;")(
+                        Label("League:", style="display: block; margin-bottom: 5px;"),
+                        Select(
+                            *[
+                                Option(league["name"], value=str(league["id"]))
+                                for league in available_leagues
+                            ],
+                            name="league_id",
+                            required=True,
+                            style="width: 100%; padding: 8px;",
+                        )
+                        if available_leagues
+                        else P(
+                            "This club is already in all leagues.",
+                            style="color: #666;",
+                        ),
+                    ),
+                    Div(
+                        Button("Add to League", type="submit", cls="btn-success"),
+                        style="padding-top: 20px;",
+                    )
+                    if available_leagues
+                    else "",
+                ),
+                method="post",
+                action=f"/add_club_to_league_from_club/{club_id}",
+            ),
+        ),
+    ]
+
+    # Leagues table
+    if leagues_for_club:
+        league_rows = []
+        for league in leagues_for_club:
+            league_rows.append(
+                Tr(
+                    Td(
+                        A(
+                            league["name"],
+                            href=f"/league/{league['id']}",
+                            style="color: #007bff; text-decoration: none; font-weight: bold;",
+                        )
+                    ),
+                    Td(
+                        league.get("description", "")[:100]
+                        + ("..." if len(league.get("description", "")) > 100 else "")
+                    ),
+                    Td(
+                        Form(
+                            method="POST",
+                            action=f"/remove_club_from_league_from_club/{club_id}/{league['id']}",
+                            style="display: inline;",
+                            **{
+                                "onsubmit": "return confirm('Remove this club from the league?');",
+                            },
+                        )(
+                            Button(
+                                "Remove",
+                                type="submit",
+                                cls="btn-danger",
+                                style="padding: 4px 8px; font-size: 12px;",
+                            ),
+                        )
+                    ),
+                )
+            )
+
+        content.append(
+            Div(cls="container-white")(
+                H4("Leagues This Club Participates In"),
+                Table(
+                    Thead(
+                        Tr(
+                            Th("League Name", style="text-align: left;"),
+                            Th("Description", style="text-align: left;"),
+                            Th("Actions", style="text-align: left;"),
+                        )
+                    ),
+                    Tbody(*league_rows),
+                    style="width: 100%;",
+                ),
+            )
+        )
+    else:
+        content.append(
+            Div(cls="container-white")(
+                P(
+                    "This club is not in any leagues yet. Add leagues using the form above.",
                     style="color: #666;",
                 )
             )

@@ -87,6 +87,7 @@ def register_match_routes(rt, STYLE):
         from db import get_last_created_match
 
         club_ids = get_user_club_ids_from_request(req, sess)
+        # Show only leagues where user's clubs participate
         leagues = get_all_leagues(club_ids) if club_ids else []
         friendly_league_id = (
             get_or_create_friendly_league(club_ids[0]) if club_ids else None
@@ -929,6 +930,7 @@ def register_match_routes(rt, STYLE):
 
         teams = get_match_teams(match_id)
         club_ids = get_user_club_ids_from_request(req, sess)
+        # Show only leagues where user's clubs participate
         leagues = get_all_leagues(club_ids) if club_ids else []
 
         # For friendly league, we need a club_id - use first accessible club
