@@ -12,6 +12,8 @@ short_description: Manage football teams, allocate players, track matches
 
 # ⚽ Football Manager
 
+[![codecov](https://codecov.io/github/Redevil10/football-manager/graph/badge.svg?token=WNC4Z8DSH0)](https://codecov.io/gh/Redevil10/football-manager)
+
 A comprehensive web application for managing amateur football team rosters, allocating players into balanced teams, and tracking match history.
 
 ## Features
