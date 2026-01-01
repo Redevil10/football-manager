@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from fasthtml.common import *
 
+from core.auth import check_club_permission
 from db import get_match_teams
 
 
@@ -230,7 +231,6 @@ def can_user_edit(user: dict, club_id: int = None) -> bool:
         return True
     if club_id is None:
         return False
-    from auth import check_club_permission
 
     return check_club_permission(user, club_id, "manager")
 

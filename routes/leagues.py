@@ -2,7 +2,11 @@
 
 from fasthtml.common import *
 
-from core.auth import get_current_user, get_user_club_ids_from_request
+from core.auth import (
+    can_user_edit_league,
+    get_current_user,
+    get_user_club_ids_from_request,
+)
 from db import (
     create_league,
     delete_league,
@@ -171,8 +175,6 @@ def register_league_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         # Check authorization
-        from auth import can_user_edit_league
-
         if not can_user_edit_league(user, league_id):
             return RedirectResponse(f"/league/{league_id}", status_code=303)
 

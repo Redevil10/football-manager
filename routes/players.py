@@ -2,7 +2,11 @@
 
 from fasthtml.common import *
 
-from core.auth import get_current_user, get_user_club_ids_from_request
+from core.auth import (
+    check_club_permission,
+    get_current_user,
+    get_user_club_ids_from_request,
+)
 from core.config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
 from db import (
     delete_player,
@@ -148,10 +152,28 @@ def register_player_routes(rt, STYLE):
         )
 
     @rt("/import_players", methods=["POST"])
-    def route_import_players(signup_text: str):
+    async def route_import_players(req: Request, sess=None):
         """Import players"""
-        import_players(signup_text)
-        return RedirectResponse("/", status_code=303)
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        form = await req.form()
+        signup_text = form.get("signup_text", "").strip()
+
+        if signup_text:
+            # Get user's club IDs to determine which club to assign players to
+            club_ids = get_user_club_ids_from_request(req, sess)
+            if not club_ids:
+                return RedirectResponse(
+                    "/players?error=No+clubs+assigned+to+user", status_code=303
+                )
+
+            # Use the first club the user has access to
+            club_id = club_ids[0]
+            import_players(signup_text, club_id)
+
+        return RedirectResponse("/players", status_code=303)
 
     @rt("/add_player", methods=["POST"])
     async def route_add_player(req: Request, sess=None):
@@ -172,7 +194,6 @@ def register_player_routes(rt, STYLE):
             )
 
         # For now, use the first club the user has manager access to
-        from auth import check_club_permission
 
         target_club_id = None
         for club_id in club_ids:
