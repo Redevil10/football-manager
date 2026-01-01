@@ -7,9 +7,22 @@ from db.connection import get_db
 
 
 def get_all_leagues(club_ids=None):
-    """Get all leagues, optionally filtered by club_ids (if None, returns all leagues)"""
+    """Get all leagues, optionally filtered by club_ids
+
+    Args:
+        club_ids: If None, returns all leagues. If empty list [], returns empty list.
+                 If list with IDs, returns leagues for those clubs.
+    """
     conn = get_db()
-    if club_ids is not None and len(club_ids) > 0:
+    if club_ids is None:
+        # No filter - return all leagues (for superusers)
+        leagues = conn.execute(
+            "SELECT * FROM leagues ORDER BY created_at DESC"
+        ).fetchall()
+    elif len(club_ids) == 0:
+        # Empty list - user has no clubs, return empty
+        leagues = []
+    else:
         # Get leagues that the clubs participate in
         league_ids = get_league_ids_for_clubs(club_ids)
         if league_ids:
@@ -18,10 +31,6 @@ def get_all_leagues(club_ids=None):
             leagues = conn.execute(query, tuple(league_ids)).fetchall()
         else:
             leagues = []
-    else:
-        leagues = conn.execute(
-            "SELECT * FROM leagues ORDER BY created_at DESC"
-        ).fetchall()
     conn.close()
     return [dict(league) for league in leagues]
 
