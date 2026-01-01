@@ -77,7 +77,6 @@ def render_leagues_list(leagues, user=None):
 
 def render_league_matches(league, matches, user=None):
     """Render matches for a league"""
-    from auth import can_user_edit_league
 
     match_count = len(matches) if matches else 0
     can_edit_league = can_user_edit_league(user, league["id"]) if user else False

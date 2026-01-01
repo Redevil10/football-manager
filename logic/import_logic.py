@@ -22,8 +22,16 @@ def parse_signup_text(text):
     return player_names
 
 
-def import_players(text):
-    """Import players from signup text"""
+def import_players(text, club_id):
+    """Import players from signup text
+
+    Args:
+        text: Signup text containing player names
+        club_id: ID of the club to assign players to
+
+    Returns:
+        Number of players imported
+    """
     player_names = parse_signup_text(text)
     imported = 0
 
@@ -31,7 +39,7 @@ def import_players(text):
         # Check if player exists by name or alias
         existing_player = find_player_by_name_or_alias(name)
         if not existing_player:
-            add_player(name)
+            add_player(name, club_id)
             imported += 1
 
     return imported

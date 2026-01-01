@@ -1961,16 +1961,32 @@ def register_match_routes(rt, STYLE):
         )
 
     @rt("/import_match_players/{match_id}", methods=["POST"])
-    async def route_import_match_players(match_id: int, req: Request):
+    async def route_import_match_players(match_id: int, req: Request, sess=None):
         """Import players for a match"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         form = await req.form()
         signup_text = form.get("signup_text", "").strip()
 
         if signup_text:
+            from core.auth import get_user_club_ids_from_request
             from logic import import_players, parse_signup_text
 
+            # Get user's club IDs to determine which club to assign players to
+            club_ids = get_user_club_ids_from_request(req, sess)
+            if not club_ids:
+                return RedirectResponse(
+                    f"/match/{match_id}?error=No+clubs+assigned+to+user",
+                    status_code=303,
+                )
+
+            # Use the first club the user has access to
+            club_id = club_ids[0]
+
             # Import players to database (if they don't exist)
-            imported_count = import_players(signup_text)
+            imported_count = import_players(signup_text, club_id)
             print(f"Imported {imported_count} new players from signup text")
 
             # Parse signup text to get player names
