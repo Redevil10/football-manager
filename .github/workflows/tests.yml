@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [ main, develop ]
   workflow_dispatch:  # Allow manual triggering
 
 jobs:
@@ -46,10 +46,11 @@ jobs:
         retention-days: 30
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       if: matrix.python-version == '3.13'
       with:
         file: ./coverage.xml
         flags: unittests
         name: codecov-umbrella
+        token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: false  # Don't fail CI if coverage upload fails
