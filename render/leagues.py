@@ -2,14 +2,13 @@
 
 from fasthtml.common import *
 
-from core.auth import can_user_edit_match
+from core.auth import can_user_edit_league, can_user_edit_match
 from db import get_matches_by_league
 from render.common import format_match_name, get_match_score_display, is_match_completed
 
 
 def render_leagues_list(leagues, user=None):
     """Render list of leagues"""
-    from auth import can_user_edit_league
 
     if not leagues:
         return Div(cls="container-white")(
@@ -62,12 +61,14 @@ def render_leagues_list(leagues, user=None):
                         else []
                     ),
                 ),
-                P(
-                    league.get("description", ""),
-                    style="margin: 5px 0 0 0; color: #666;",
-                )
-                if league.get("description")
-                else "",
+                (
+                    P(
+                        league.get("description", ""),
+                        style="margin: 5px 0 0 0; color: #666;",
+                    )
+                    if league.get("description")
+                    else ""
+                ),
             )
         )
 
@@ -177,15 +178,19 @@ def render_league_matches(league, matches, user=None):
                             else []
                         ),
                     ),
-                    P(" | ".join(match_info), style="margin: 5px 0; color: #666;")
-                    if match_info
-                    else "",
-                    P(
-                        score_display,
-                        style="margin: 5px 0; font-weight: bold; color: #0066cc;",
-                    )
-                    if score_display
-                    else "",
+                    (
+                        P(" | ".join(match_info), style="margin: 5px 0; color: #666;")
+                        if match_info
+                        else ""
+                    ),
+                    (
+                        P(
+                            score_display,
+                            style="margin: 5px 0; font-weight: bold; color: #0066cc;",
+                        )
+                        if score_display
+                        else ""
+                    ),
                 )
             )
     else:
@@ -194,6 +199,121 @@ def render_league_matches(league, matches, user=None):
                 P(
                     "No matches yet. Create your first match!",
                     style="text-align: center; color: #666;",
+                )
+            )
+        )
+
+    return Div(*content)
+
+
+def render_league_clubs(league_id, clubs_in_league, all_clubs, user=None):
+    """Render clubs in a league with management UI (superuser only)"""
+
+    # Get clubs not yet in this league
+    club_ids_in_league = {club["id"] for club in clubs_in_league}
+    available_clubs = [
+        club for club in all_clubs if club["id"] not in club_ids_in_league
+    ]
+
+    content = [
+        # Add club form
+        Div(cls="container-white", style="margin-bottom: 20px;")(
+            H4("Add Club to League"),
+            Form(
+                Div(style="display: flex; gap: 10px; align-items: flex-end;")(
+                    Div(style="flex: 1;")(
+                        Label("Club:", style="display: block; margin-bottom: 5px;"),
+                        (
+                            Select(
+                                *[
+                                    Option(club["name"], value=str(club["id"]))
+                                    for club in available_clubs
+                                ],
+                                name="club_id",
+                                required=True,
+                                style="width: 100%; padding: 8px;",
+                            )
+                            if available_clubs
+                            else P(
+                                "All clubs are already in this league.",
+                                style="color: #666;",
+                            )
+                        ),
+                    ),
+                    (
+                        Div(
+                            Button("Add Club", type="submit", cls="btn-success"),
+                            style="padding-top: 20px;",
+                        )
+                        if available_clubs
+                        else ""
+                    ),
+                ),
+                method="post",
+                action=f"/add_club_to_league/{league_id}",
+            ),
+        ),
+    ]
+
+    # Clubs table
+    if clubs_in_league:
+        club_rows = []
+        for club in clubs_in_league:
+            club_rows.append(
+                Tr(
+                    Td(
+                        A(
+                            club["name"],
+                            href=f"/club/{club['id']}",
+                            style="color: #007bff; text-decoration: none; font-weight: bold;",
+                        )
+                    ),
+                    Td(
+                        club.get("description", "")[:100]
+                        + ("..." if len(club.get("description", "")) > 100 else "")
+                    ),
+                    Td(
+                        Form(
+                            method="POST",
+                            action=f"/remove_club_from_league/{league_id}/{club['id']}",
+                            style="display: inline;",
+                            **{
+                                "onsubmit": "return confirm('Remove this club from the league?');",
+                            },
+                        )(
+                            Button(
+                                "Remove",
+                                type="submit",
+                                cls="btn-danger",
+                                style="padding: 4px 8px; font-size: 12px;",
+                            ),
+                        )
+                    ),
+                )
+            )
+
+        content.append(
+            Div(cls="container-white")(
+                H4("Clubs in This League"),
+                Table(
+                    Thead(
+                        Tr(
+                            Th("Club Name", style="text-align: left;"),
+                            Th("Description", style="text-align: left;"),
+                            Th("Actions", style="text-align: left;"),
+                        )
+                    ),
+                    Tbody(*club_rows),
+                    style="width: 100%;",
+                ),
+            )
+        )
+    else:
+        content.append(
+            Div(cls="container-white")(
+                P(
+                    "No clubs in this league yet. Add clubs using the form above.",
+                    style="color: #666;",
                 )
             )
         )
