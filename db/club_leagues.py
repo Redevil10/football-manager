@@ -1,12 +1,23 @@
 # db/club_leagues.py - Club-League relationship operations
 
+import logging
 import sqlite3
 
 from db.connection import get_db
 
+logger = logging.getLogger(__name__)
+
 
 def add_club_to_league(club_id, league_id):
-    """Add a club to a league"""
+    """Add a club to a league.
+
+    Args:
+        club_id: ID of the club
+        league_id: ID of the league
+
+    Returns:
+        bool: True on success, False on error (club already in league, etc.)
+    """
     conn = get_db()
     try:
         conn.execute(
@@ -14,23 +25,57 @@ def add_club_to_league(club_id, league_id):
             (club_id, league_id),
         )
         conn.commit()
+        logger.debug(f"Club {club_id} added to league {league_id}")
         return True
-    except sqlite3.IntegrityError:
-        # Already exists
+    except sqlite3.IntegrityError as e:
+        conn.rollback()
+        logger.warning(
+            f"Failed to add club {club_id} to league {league_id}: Club already in league - {e}"
+        )
+        return False
+    except Exception as e:
+        conn.rollback()
+        logger.error(
+            f"Failed to add club {club_id} to league {league_id}: {e}", exc_info=True
+        )
         return False
     finally:
         conn.close()
 
 
 def remove_club_from_league(club_id, league_id):
-    """Remove a club from a league"""
+    """Remove a club from a league.
+
+    Args:
+        club_id: ID of the club
+        league_id: ID of the league
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    conn.execute(
-        "DELETE FROM club_leagues WHERE club_id = ? AND league_id = ?",
-        (club_id, league_id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.execute(
+            "DELETE FROM club_leagues WHERE club_id = ? AND league_id = ?",
+            (club_id, league_id),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(
+                f"Remove club from league: Club {club_id} not in league {league_id}"
+            )
+            return False
+        logger.debug(f"Club {club_id} removed from league {league_id}")
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(
+            f"Failed to remove club {club_id} from league {league_id}: {e}",
+            exc_info=True,
+        )
+        return False
+    finally:
+        conn.close()
 
 
 def get_clubs_in_league(league_id):

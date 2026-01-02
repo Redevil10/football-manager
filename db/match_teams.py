@@ -21,7 +21,19 @@ def get_match_teams(match_id):
 def create_match_team(
     match_id, team_number, team_name, jersey_color, should_allocate=1
 ):
-    """Create a team for a match"""
+    """Create a team for a match.
+
+    Args:
+        match_id: ID of the match
+        team_number: Team number (1, 2, etc.)
+        team_name: Name of the team
+        jersey_color: Jersey color
+        should_allocate: Whether to allocate players (default: 1)
+
+    Returns:
+        int: Team ID on success
+        None: On error
+    """
     conn = get_db()
     try:
         cursor = conn.execute(
@@ -53,7 +65,9 @@ def create_match_team(
             if result:
                 team_id = result[0]
 
-        conn.close()
+        logger.debug(
+            f"Match team created/updated: team_id={team_id}, match_id={match_id}, team_number={team_number}"
+        )
         return team_id
     except Exception as e:
         conn.rollback()
@@ -61,57 +75,119 @@ def create_match_team(
             f"Error creating match team (match_id={match_id}, team_number={team_number}): {e}",
             exc_info=True,
         )
-        conn.close()
         return None
+    finally:
+        conn.close()
 
 
 def update_match_team(
     team_id, team_name, jersey_color, score=None, captain_id=None, should_allocate=None
 ):
-    """Update a match team"""
+    """Update a match team.
+
+    Args:
+        team_id: ID of the team to update
+        team_name: New team name
+        jersey_color: New jersey color
+        score: New score (optional)
+        captain_id: New captain ID (optional)
+        should_allocate: Whether to allocate players (optional)
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    # Build update query dynamically based on which fields are provided
-    updates = []
-    params = []
+    try:
+        # Build update query dynamically based on which fields are provided
+        updates = []
+        params = []
 
-    updates.append("team_name = ?")
-    params.append(team_name)
-    updates.append("jersey_color = ?")
-    params.append(jersey_color)
+        updates.append("team_name = ?")
+        params.append(team_name)
+        updates.append("jersey_color = ?")
+        params.append(jersey_color)
 
-    if score is not None:
-        updates.append("score = ?")
-        params.append(score)
+        if score is not None:
+            updates.append("score = ?")
+            params.append(score)
 
-    if captain_id is not None:
-        updates.append("captain_id = ?")
-        params.append(captain_id)
+        if captain_id is not None:
+            updates.append("captain_id = ?")
+            params.append(captain_id)
 
-    if should_allocate is not None:
-        updates.append("should_allocate = ?")
-        params.append(should_allocate)
+        if should_allocate is not None:
+            updates.append("should_allocate = ?")
+            params.append(should_allocate)
 
-    params.append(team_id)
-    query = f"UPDATE match_teams SET {', '.join(updates)} WHERE id = ?"
-    conn.execute(query, params)
-    conn.commit()
-    conn.close()
+        params.append(team_id)
+        cursor = conn.execute(
+            f"UPDATE match_teams SET {', '.join(updates)} WHERE id = ?", tuple(params)
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(f"Update match team: No team found with ID {team_id}")
+            return False
+        logger.debug(f"Match team {team_id} updated successfully")
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to update match team {team_id}: {e}", exc_info=True)
+        return False
+    finally:
+        conn.close()
 
 
 def update_team_captain(team_id, captain_id):
-    """Update team captain"""
+    """Update team captain.
+
+    Args:
+        team_id: ID of the team
+        captain_id: ID of the captain player
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    conn.execute(
-        "UPDATE match_teams SET captain_id = ? WHERE id = ?",
-        (captain_id, team_id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.execute(
+            "UPDATE match_teams SET captain_id = ? WHERE id = ?",
+            (captain_id, team_id),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(f"Update team captain: No team found with ID {team_id}")
+            return False
+        logger.debug(f"Team {team_id} captain updated to {captain_id}")
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to update team {team_id} captain: {e}", exc_info=True)
+        return False
+    finally:
+        conn.close()
 
 
 def delete_match_team(team_id):
-    """Delete a match team"""
+    """Delete a match team.
+
+    Args:
+        team_id: ID of the team to delete
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    conn.execute("DELETE FROM match_teams WHERE id = ?", (team_id,))
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.execute("DELETE FROM match_teams WHERE id = ?", (team_id,))
+        conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(f"Delete match team: No team found with ID {team_id}")
+            return False
+        logger.info(f"Match team {team_id} deleted successfully")
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to delete match team {team_id}: {e}", exc_info=True)
+        return False
+    finally:
+        conn.close()

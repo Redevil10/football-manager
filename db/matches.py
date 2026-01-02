@@ -1,11 +1,15 @@
 # db/matches.py - Match database operations
 
+import logging
+import sqlite3
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from db.club_leagues import get_league_ids_for_clubs, is_club_in_league
 from db.connection import get_db
 from db.leagues import get_all_leagues, get_or_create_friendly_league
+
+logger = logging.getLogger(__name__)
 
 
 def _build_match_query_with_league(
@@ -350,7 +354,7 @@ def create_match(
         int: The ID of the created match
 
     Raises:
-        ValueError: If input validation fails
+        ValueError: If input validation fails or database error occurs
     """
     # Input validation
     if not league_id:
@@ -382,7 +386,16 @@ def create_match(
         )
         match_id = cursor.lastrowid
         conn.commit()
+        logger.info(f"Match created successfully with ID: {match_id}")
         return match_id
+    except sqlite3.IntegrityError as e:
+        conn.rollback()
+        logger.warning(f"Failed to create match: IntegrityError - {e}")
+        raise ValueError(f"Failed to create match: {e}")
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to create match: {e}", exc_info=True)
+        raise
     finally:
         conn.close()
 
@@ -396,7 +409,7 @@ def update_match(
     location: str,
     num_teams: int,
     max_players_per_team: Optional[int],
-) -> None:
+) -> bool:
     """Update a match
 
     Args:
@@ -430,7 +443,7 @@ def update_match(
 
     conn = get_db()
     try:
-        conn.execute(
+        cursor = conn.execute(
             "UPDATE matches SET league_id = ?, date = ?, start_time = ?, end_time = ?, location = ?, num_teams = ?, max_players_per_team = ? WHERE id = ?",
             (
                 league_id,
@@ -444,6 +457,19 @@ def update_match(
             ),
         )
         conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(f"Update match: No match found with ID {match_id}")
+            return False
+        logger.debug(f"Match {match_id} updated successfully")
+        return True
+    except sqlite3.IntegrityError as e:
+        conn.rollback()
+        logger.warning(f"Failed to update match {match_id}: IntegrityError - {e}")
+        return False
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to update match {match_id}: {e}", exc_info=True)
+        return False
     finally:
         conn.close()
 
@@ -468,15 +494,27 @@ def get_last_match_by_league(league_id: int) -> Optional[Dict[str, Any]]:
         conn.close()
 
 
-def delete_match(match_id: int) -> None:
-    """Delete a match (cascade deletes teams, players, events)
+def delete_match(match_id: int) -> bool:
+    """Delete a match (cascade deletes teams, players, events).
 
     Args:
         match_id: The ID of the match to delete
+
+    Returns:
+        bool: True on success, False on error
     """
     conn = get_db()
     try:
-        conn.execute("DELETE FROM matches WHERE id = ?", (match_id,))
+        cursor = conn.execute("DELETE FROM matches WHERE id = ?", (match_id,))
         conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(f"Delete match: No match found with ID {match_id}")
+            return False
+        logger.info(f"Match {match_id} deleted successfully")
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to delete match {match_id}: {e}", exc_info=True)
+        return False
     finally:
         conn.close()

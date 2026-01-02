@@ -92,7 +92,16 @@ def get_or_create_friendly_league(club_id):
 
 
 def create_league(name, description=""):
-    """Create a new league (independent entity, not tied to a club)"""
+    """Create a new league (independent entity, not tied to a club).
+
+    Args:
+        name: Name of the league
+        description: Optional description of the league
+
+    Returns:
+        int: League ID on success
+        None: On error (duplicate name, database error, etc.)
+    """
     conn = get_db()
     try:
         cursor = conn.execute(
@@ -101,50 +110,92 @@ def create_league(name, description=""):
         )
         league_id = cursor.lastrowid
         conn.commit()
-        conn.close()
+        logger.info(f"League '{name}' created successfully with ID: {league_id}")
         return league_id
-    except sqlite3.IntegrityError:
+    except sqlite3.IntegrityError as e:
         conn.rollback()
-        logger.warning(f"League {name} already exists")
-        conn.close()
+        logger.warning(
+            f"Failed to create league '{name}': League name already exists or constraint violated - {e}"
+        )
         return None
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to create league '{name}': {e}", exc_info=True)
+        return None
+    finally:
+        conn.close()
 
 
 def update_league(league_id, name=None, description=None):
-    """Update a league"""
+    """Update a league.
+
+    Args:
+        league_id: ID of the league to update
+        name: New name (optional)
+        description: New description (optional)
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    updates = []
-    params = []
+    try:
+        updates = []
+        params = []
 
-    if name is not None:
-        updates.append("name = ?")
-        params.append(name)
-    if description is not None:
-        updates.append("description = ?")
-        params.append(description)
+        if name is not None:
+            updates.append("name = ?")
+            params.append(name)
+        if description is not None:
+            updates.append("description = ?")
+            params.append(description)
 
-    if updates:
+        if not updates:
+            return True  # Nothing to update
+
         params.append(league_id)
-        try:
-            conn.execute(
-                f"UPDATE leagues SET {', '.join(updates)} WHERE id = ?",
-                params,
-            )
-            conn.commit()
-            conn.close()
-            return True
-        except sqlite3.IntegrityError:
-            conn.rollback()
-            logger.warning(f"League {name} already exists (update failed)")
-            conn.close()
+        cursor = conn.execute(
+            f"UPDATE leagues SET {', '.join(updates)} WHERE id = ?",
+            tuple(params),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(f"Update league: No league found with ID {league_id}")
             return False
-    conn.close()
-    return True
+        logger.debug(f"League {league_id} updated successfully")
+        return True
+    except sqlite3.IntegrityError as e:
+        conn.rollback()
+        logger.warning(f"Failed to update league {league_id}: IntegrityError - {e}")
+        return False
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to update league {league_id}: {e}", exc_info=True)
+        return False
+    finally:
+        conn.close()
 
 
 def delete_league(league_id):
-    """Delete a league (cascade deletes matches)"""
+    """Delete a league (cascade deletes matches).
+
+    Args:
+        league_id: ID of the league to delete
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    conn.execute("DELETE FROM leagues WHERE id = ?", (league_id,))
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.execute("DELETE FROM leagues WHERE id = ?", (league_id,))
+        conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(f"Delete league: No league found with ID {league_id}")
+            return False
+        logger.info(f"League {league_id} deleted successfully")
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to delete league {league_id}: {e}", exc_info=True)
+        return False
+    finally:
+        conn.close()
