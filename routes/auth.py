@@ -11,10 +11,17 @@ from core.auth import (
     logout_user,
     verify_password,
 )
+from core.config import USER_ROLES, VALID_ROLES
+from core.validation import (
+    validate_in_list,
+    validate_non_empty_string,
+    validate_required_int,
+)
 from db.users import (
     create_user,
     get_all_users,
     get_user_by_username,
+    get_user_clubs,
     update_user_password,
 )
 
@@ -200,37 +207,39 @@ def register_auth_routes(rt, STYLE):
                 f"Parsed registration: username={username}, email={email}, is_superuser={is_superuser}, role={role}, club_id={club_id_str}"
             )
 
-            if not username or not password:
+            # Validate username
+            is_valid, error_msg = validate_non_empty_string(username, "Username")
+            if not is_valid:
                 return RedirectResponse(
-                    "/register?error=Please+provide+username+and+password",
-                    status_code=303,
+                    f"/register?error={error_msg.replace(' ', '+')}", status_code=303
                 )
 
-            if not role or role not in ["viewer", "manager"]:
+            # Validate password
+            is_valid, error_msg = validate_non_empty_string(password, "Password")
+            if not is_valid:
                 return RedirectResponse(
-                    "/register?error=Please+select+a+valid+role",
-                    status_code=303,
+                    f"/register?error={error_msg.replace(' ', '+')}", status_code=303
                 )
 
-            if not club_id_str:
+            # Validate role
+            is_valid, error_msg = validate_in_list(role, VALID_ROLES, "Role")
+            if not is_valid:
                 return RedirectResponse(
-                    "/register?error=Please+select+a+club",
-                    status_code=303,
+                    f"/register?error={error_msg.replace(' ', '+')}", status_code=303
                 )
 
-            try:
-                club_id = int(club_id_str)
-            except ValueError:
+            # Validate and parse club_id
+            club_id, error_msg = validate_required_int(club_id_str, "Club ID")
+            if error_msg:
                 return RedirectResponse(
-                    "/register?error=Invalid+club+ID",
-                    status_code=303,
+                    f"/register?error={error_msg.replace(' ', '+')}", status_code=303
                 )
 
             # For managers, verify they can assign users to this club
             if not is_superuser:
                 from core.auth import check_club_permission
 
-                if not check_club_permission(user, club_id, "manager"):
+                if not check_club_permission(user, club_id, USER_ROLES["MANAGER"]):
                     return RedirectResponse(
                         "/register?error=You+can+only+create+users+for+clubs+you+manage",
                         status_code=303,
@@ -344,13 +353,15 @@ def register_auth_routes(rt, STYLE):
         is_manager = False
         user_club_ids = []
         if not is_superuser:
-            from db.users import get_user_clubs
-
             user_clubs = get_user_clubs(user["id"])
-            is_manager = any(club.get("role") == "manager" for club in user_clubs)
+            is_manager = any(
+                club.get("role") == USER_ROLES["MANAGER"] for club in user_clubs
+            )
             if is_manager:
                 user_club_ids = [
-                    club["id"] for club in user_clubs if club.get("role") == "manager"
+                    club["id"]
+                    for club in user_clubs
+                    if club.get("role") == USER_ROLES["MANAGER"]
                 ]
 
         if not (is_superuser or is_manager):
@@ -433,8 +444,8 @@ def register_auth_routes(rt, STYLE):
                                     disabled=True,
                                     selected=True,
                                 ),
-                                Option("Viewer", value="viewer"),
-                                Option("Manager", value="manager"),
+                                Option("Viewer", value=USER_ROLES["VIEWER"]),
+                                Option("Manager", value=USER_ROLES["MANAGER"]),
                                 name="role",
                                 required=True,
                                 style="width: 100%; padding: 8px;",

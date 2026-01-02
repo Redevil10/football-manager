@@ -3,6 +3,8 @@
 from fasthtml.common import *  # noqa: F403, F405
 
 from core.auth import get_current_user
+from core.config import USER_ROLES, VALID_ROLES
+from core.validation import validate_in_list, validate_required_int
 from db import (
     create_club,
     delete_club,
@@ -16,6 +18,7 @@ from db.club_leagues import (
     get_leagues_for_club,
     remove_club_from_league,
 )
+from db.connection import get_db
 from db.users import (
     add_user_to_club,
     get_all_users,
@@ -302,26 +305,29 @@ def register_club_routes(rt, STYLE):
 
         form = await req.form()
         user_id_str = form.get("user_id", "").strip()
-        role = form.get("role", "viewer").strip()
+        role = form.get("role", USER_ROLES["VIEWER"]).strip()
 
-        if not user_id_str or role not in ["viewer", "manager"]:
+        # Validate user_id
+        user_id, error_msg = validate_required_int(user_id_str, "User ID")
+        if error_msg:
             return RedirectResponse(
-                f"/club/{club_id}?error=Invalid+parameters", status_code=303
+                f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
             )
 
-        try:
-            user_id = int(user_id_str)
-            success = add_user_to_club(user_id, club_id, role)
-            if success:
-                return RedirectResponse(f"/club/{club_id}", status_code=303)
-            else:
-                return RedirectResponse(
-                    f"/club/{club_id}?error=User+already+in+club+or+invalid+user",
-                    status_code=303,
-                )
-        except ValueError:
+        # Validate role
+        is_valid, error_msg = validate_in_list(role, VALID_ROLES, "Role")
+        if not is_valid:
             return RedirectResponse(
-                f"/club/{club_id}?error=Invalid+user+ID", status_code=303
+                f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
+            )
+
+        success = add_user_to_club(user_id, club_id, role)
+        if success:
+            return RedirectResponse(f"/club/{club_id}", status_code=303)
+        else:
+            return RedirectResponse(
+                f"/club/{club_id}?error=User+already+in+club+or+invalid+user",
+                status_code=303,
             )
 
     @rt("/remove_user_from_club/{club_id}/{user_id}", methods=["POST"])
@@ -363,12 +369,12 @@ def register_club_routes(rt, STYLE):
         form = await req.form()
         role = form.get("role", "").strip()
 
-        if role not in ["viewer", "manager"]:
+        # Validate role
+        is_valid, error_msg = validate_in_list(role, VALID_ROLES, "Role")
+        if not is_valid:
             return RedirectResponse(
-                f"/club/{club_id}?error=Invalid+role", status_code=303
+                f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
             )
-
-        from db.connection import get_db
 
         conn = get_db()
         conn.execute(
@@ -514,8 +520,8 @@ def render_club_members(club_id, club_members, user=None):
                     Div(style="flex: 1;")(
                         Label("Role:", style="display: block; margin-bottom: 5px;"),
                         Select(
-                            Option("Viewer", value="viewer"),
-                            Option("Manager", value="manager"),
+                            Option("Viewer", value=USER_ROLES["VIEWER"]),
+                            Option("Manager", value=USER_ROLES["MANAGER"]),
                             name="role",
                             required=True,
                             style="width: 100%; padding: 8px;",
@@ -553,13 +559,13 @@ def render_club_members(club_id, club_members, user=None):
                     Select(
                         Option(
                             "Viewer",
-                            value="viewer",
-                            selected=(member["role"] == "viewer"),
+                            value=USER_ROLES["VIEWER"],
+                            selected=(member["role"] == USER_ROLES["VIEWER"]),
                         ),
                         Option(
                             "Manager",
-                            value="manager",
-                            selected=(member["role"] == "manager"),
+                            value=USER_ROLES["MANAGER"],
+                            selected=(member["role"] == USER_ROLES["MANAGER"]),
                         ),
                         name="role",
                         **{

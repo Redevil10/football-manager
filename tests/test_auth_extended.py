@@ -13,6 +13,7 @@ from core.auth import (
     login_user,
     logout_user,
 )
+from core.config import USER_ROLES
 
 
 class TestGetSessionFromRequest:
@@ -302,51 +303,51 @@ class TestCheckClubPermission:
         """Test that superuser has manager permission"""
         user = {"id": 1, "is_superuser": True}
 
-        result = check_club_permission(user, 1, "manager")
+        result = check_club_permission(user, 1, USER_ROLES["MANAGER"])
 
         assert result is True
 
     @patch("core.auth.get_user_club_role")
     def test_manager_has_manager_permission(self, mock_get_role):
         """Test that manager has manager permission"""
-        mock_get_role.return_value = "manager"
+        mock_get_role.return_value = USER_ROLES["MANAGER"]
 
         user = {"id": 1, "is_superuser": False}
 
-        result = check_club_permission(user, 1, "manager")
+        result = check_club_permission(user, 1, USER_ROLES["MANAGER"])
 
         assert result is True
 
     @patch("core.auth.get_user_club_role")
     def test_viewer_no_manager_permission(self, mock_get_role):
         """Test that viewer doesn't have manager permission"""
-        mock_get_role.return_value = "viewer"
+        mock_get_role.return_value = USER_ROLES["VIEWER"]
 
         user = {"id": 1, "is_superuser": False}
 
-        result = check_club_permission(user, 1, "manager")
+        result = check_club_permission(user, 1, USER_ROLES["MANAGER"])
 
         assert result is False
 
     @patch("core.auth.get_user_club_role")
     def test_viewer_has_viewer_permission(self, mock_get_role):
         """Test that viewer has viewer permission"""
-        mock_get_role.return_value = "viewer"
+        mock_get_role.return_value = USER_ROLES["VIEWER"]
 
         user = {"id": 1, "is_superuser": False}
 
-        result = check_club_permission(user, 1, "viewer")
+        result = check_club_permission(user, 1, USER_ROLES["VIEWER"])
 
         assert result is True
 
     @patch("core.auth.get_user_club_role")
     def test_manager_has_viewer_permission(self, mock_get_role):
         """Test that manager has viewer permission"""
-        mock_get_role.return_value = "manager"
+        mock_get_role.return_value = USER_ROLES["MANAGER"]
 
         user = {"id": 1, "is_superuser": False}
 
-        result = check_club_permission(user, 1, "viewer")
+        result = check_club_permission(user, 1, USER_ROLES["VIEWER"])
 
         assert result is True
 
@@ -357,7 +358,7 @@ class TestCheckClubPermission:
 
         user = {"id": 1, "is_superuser": False}
 
-        result = check_club_permission(user, 1, "manager")
+        result = check_club_permission(user, 1, USER_ROLES["MANAGER"])
 
         assert result is False
 
