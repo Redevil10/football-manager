@@ -35,7 +35,7 @@ def register_auth_routes(rt, STYLE):
 
     @rt("/login", methods=["POST"])
     async def route_login(req: Request, sess=None):
-        """Handle login form submission"""
+        """Handle login form submission."""
         try:
             form = await req.form()
             username = form.get("username", "").strip()
@@ -46,32 +46,20 @@ def register_auth_routes(rt, STYLE):
                     "/login?error=Please+provide+username+and+password", status_code=303
                 )
 
-            # Check if user exists first
-            from db.users import get_user_by_username
-
-            user = get_user_by_username(username)
-
-            if not user:
-                return RedirectResponse("/login?error=Wrong+username", status_code=303)
-
-            # User exists, now check password
-            from core.auth import verify_password
-
-            if not verify_password(
-                password, user["password_hash"], user["password_salt"]
-            ):
-                return RedirectResponse("/login?error=Wrong+password", status_code=303)
-
-            # Password is correct, set session
-            if sess is None:
-                return RedirectResponse("/login?error=Session+error", status_code=303)
-
-            try:
-                sess["user_id"] = user["id"]
+            # Use login_user() which handles password verification and session setup
+            if login_user(req, username, password, sess):
                 return RedirectResponse("/", status_code=303)
-            except Exception as e:
-                logger.error(f"Error setting session during login: {e}", exc_info=True)
-                return RedirectResponse("/login?error=Session+error", status_code=303)
+            else:
+                # Check if user exists to provide better error message
+                user = get_user_by_username(username)
+                if not user:
+                    return RedirectResponse(
+                        "/login?error=Wrong+username", status_code=303
+                    )
+                else:
+                    return RedirectResponse(
+                        "/login?error=Wrong+password", status_code=303
+                    )
         except Exception as e:
             error_detail = str(e)
             logger.error(f"Login error: {error_detail}", exc_info=True)
