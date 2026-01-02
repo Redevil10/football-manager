@@ -1,7 +1,13 @@
 """Unit tests for match database operations"""
 
+from datetime import date, timedelta
+
 import pytest
 
+from db.club_leagues import add_club_to_league
+from db.clubs import create_club
+from db.connection import get_db
+from db.leagues import create_league, get_all_leagues
 from db.matches import (
     create_match,
     delete_match,
@@ -23,8 +29,6 @@ from db.matches import (
 @pytest.fixture
 def sample_league(temp_db):
     """Create a sample league"""
-    from db.leagues import create_league
-
     league_id = create_league("Test League")
     return league_id
 
@@ -32,8 +36,6 @@ def sample_league(temp_db):
 @pytest.fixture
 def sample_club(temp_db):
     """Create a sample club"""
-    from db.clubs import create_club
-
     club_id = create_club("Test Club")
     return club_id
 
@@ -193,8 +195,6 @@ class TestGetNextMatch:
     def test_get_next_match(self, temp_db, sample_league):
         """Test getting next match"""
         # Create future match
-        from datetime import date, timedelta
-
         future_date = (date.today() + timedelta(days=7)).isoformat()
         create_match(
             league_id=sample_league,
@@ -221,8 +221,6 @@ class TestGetNextMatchByLeague:
 
     def test_get_next_match_by_league(self, temp_db, sample_league):
         """Test getting next match for a league"""
-        from datetime import date, timedelta
-
         future_date = (date.today() + timedelta(days=7)).isoformat()
         create_match(
             league_id=sample_league,
@@ -244,8 +242,6 @@ class TestGetLastCompletedMatch:
 
     def test_get_last_completed_match(self, temp_db, sample_league):
         """Test getting last completed match"""
-        from datetime import date, timedelta
-
         past_date = (date.today() - timedelta(days=1)).isoformat()
         create_match(
             league_id=sample_league,
@@ -300,6 +296,60 @@ class TestGetRecentMatches:
         matches = get_recent_matches(limit=5)
 
         assert len(matches) >= 0  # May be filtered by date logic
+
+    def test_get_recent_matches_with_club_filter(
+        self, temp_db, sample_league, sample_club
+    ):
+        """Test getting recent matches filtered by club"""
+        add_club_to_league(sample_club, sample_league)
+
+        # Create matches
+        create_match(
+            league_id=sample_league,
+            date="2024-01-15",
+            start_time="10:00:00",
+            end_time=None,
+            location="Field 1",
+            num_teams=2,
+        )
+
+        matches = get_recent_matches(limit=5, club_ids=[sample_club])
+
+        assert isinstance(matches, list)
+
+    def test_get_recent_matches_empty_club_list(self, temp_db, sample_league):
+        """Test getting recent matches with empty club_ids list"""
+        create_match(
+            league_id=sample_league,
+            date="2024-01-15",
+            start_time="10:00:00",
+            end_time=None,
+            location="Field 1",
+            num_teams=2,
+        )
+
+        matches = get_recent_matches(limit=5, club_ids=[])
+
+        # Empty club_ids should return empty list
+        assert matches == []
+
+    def test_get_recent_matches_with_limit(self, temp_db, sample_league):
+        """Test getting recent matches with custom limit"""
+        # Create multiple matches
+        for i in range(10):
+            create_match(
+                league_id=sample_league,
+                date="2024-01-15",
+                start_time="10:00:00",
+                end_time=None,
+                location=f"Field {i}",
+                num_teams=2,
+            )
+
+        matches = get_recent_matches(limit=3)
+
+        # Should return at most limit matches (excluding next match)
+        assert len(matches) <= 3
 
 
 class TestUpdateMatch:
@@ -423,8 +473,6 @@ class TestSaveMatchInfo:
 
     def test_save_match_info_creates_friendly_league(self, temp_db, sample_club):
         """Test that save_match_info creates Friendly league if needed"""
-        from db.leagues import get_all_leagues
-
         save_match_info("2024-01-15", "10:00:00", "Test Field", sample_club)
 
         # Verify Friendly league was created
@@ -438,8 +486,6 @@ class TestSaveMatchInfo:
         self, temp_db, sample_club
     ):
         """Test that save_match_info deletes old matches without league_id"""
-        from db.connection import get_db
-
         # Create a match without league_id (if schema allows)
         conn = get_db()
         try:

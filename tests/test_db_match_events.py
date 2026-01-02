@@ -2,15 +2,17 @@
 
 import pytest
 
+from db.clubs import create_club
+from db.leagues import create_league
 from db.match_events import add_match_event, delete_match_event, get_match_events
+from db.match_teams import create_match_team
+from db.matches import create_match
+from db.players import add_player
 
 
 @pytest.fixture
 def sample_match(temp_db):
     """Create a sample match"""
-    from db.leagues import create_league
-    from db.matches import create_match
-
     league_id = create_league("Test League")
     match_id = create_match(
         league_id=league_id,
@@ -26,10 +28,6 @@ def sample_match(temp_db):
 @pytest.fixture
 def sample_team_and_player(temp_db, sample_match):
     """Create sample team and player"""
-    from db.clubs import create_club
-    from db.match_teams import create_match_team
-    from db.players import add_player
-
     club_id = create_club("Test Club")
     player_id = add_player("Player 1", club_id)
     team_id = create_match_team(sample_match, 1, "Team A", "Red")

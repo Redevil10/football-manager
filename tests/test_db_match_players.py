@@ -2,6 +2,9 @@
 
 import pytest
 
+from db.clubs import create_club
+from db.connection import get_db
+from db.leagues import create_league
 from db.match_players import (
     add_match_player,
     get_match_players,
@@ -11,14 +14,14 @@ from db.match_players import (
     swap_match_players,
     update_match_player,
 )
+from db.match_teams import create_match_team
+from db.matches import create_match
+from db.players import add_player
 
 
 @pytest.fixture
 def sample_match(temp_db):
     """Create a sample match"""
-    from db.leagues import create_league
-    from db.matches import create_match
-
     league_id = create_league("Test League")
     match_id = create_match(
         league_id=league_id,
@@ -34,9 +37,6 @@ def sample_match(temp_db):
 @pytest.fixture
 def sample_players(temp_db):
     """Create sample players"""
-    from db.clubs import create_club
-    from db.players import add_player
-
     club_id = create_club("Test Club")
     player1_id = add_player("Player 1", club_id)
     player2_id = add_player("Player 2", club_id)
@@ -46,8 +46,6 @@ def sample_players(temp_db):
 @pytest.fixture
 def sample_teams(temp_db, sample_match):
     """Create sample teams for a match"""
-    from db.match_teams import create_match_team
-
     team1_id = create_match_team(sample_match, 1, "Team A", "Red")
     team2_id = create_match_team(sample_match, 2, "Team B", "Blue")
     return {"team1_id": team1_id, "team2_id": team2_id}
@@ -200,8 +198,6 @@ class TestUpdateMatchPlayer:
         update_match_player(match_player_id, position="Defender")
 
         # Verify update
-        from db.connection import get_db
-
         conn = get_db()
         result = conn.execute(
             "SELECT position FROM match_players WHERE id = ?", (match_player_id,)
@@ -241,8 +237,6 @@ class TestUpdateMatchPlayer:
         update_match_player(match_player_id, is_starter=1)
 
         # Verify update
-        from db.connection import get_db
-
         conn = get_db()
         result = conn.execute(
             "SELECT is_starter FROM match_players WHERE id = ?", (match_player_id,)
@@ -263,8 +257,6 @@ class TestUpdateMatchPlayer:
         update_match_player(match_player_id, rating=8.5)
 
         # Verify update
-        from db.connection import get_db
-
         conn = get_db()
         result = conn.execute(
             "SELECT rating FROM match_players WHERE id = ?", (match_player_id,)

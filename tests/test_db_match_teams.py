@@ -2,6 +2,8 @@
 
 import pytest
 
+from db.clubs import create_club
+from db.leagues import create_league
 from db.match_teams import (
     create_match_team,
     delete_match_team,
@@ -9,14 +11,13 @@ from db.match_teams import (
     update_match_team,
     update_team_captain,
 )
+from db.matches import create_match
+from db.players import add_player
 
 
 @pytest.fixture
 def sample_match(temp_db):
     """Create a sample match"""
-    from db.leagues import create_league
-    from db.matches import create_match
-
     league_id = create_league("Test League")
     match_id = create_match(
         league_id=league_id,
@@ -117,9 +118,6 @@ class TestUpdateMatchTeam:
 
     def test_update_match_team_captain(self, temp_db, sample_match):
         """Test updating team captain"""
-        from db.clubs import create_club
-        from db.players import add_player
-
         club_id = create_club("Test Club")
         player_id = add_player("Captain", club_id)
 
@@ -149,9 +147,6 @@ class TestUpdateTeamCaptain:
 
     def test_update_team_captain(self, temp_db, sample_match):
         """Test updating team captain"""
-        from db.clubs import create_club
-        from db.players import add_player
-
         club_id = create_club("Test Club")
         player_id = add_player("Captain", club_id)
 
@@ -212,9 +207,6 @@ class TestUpdateMatchTeamEdgeCases:
 
     def test_update_match_team_all_optional_fields(self, temp_db, sample_match):
         """Test updating all optional fields at once"""
-        from db.clubs import create_club
-        from db.players import add_player
-
         club_id = create_club("Test Club")
         player_id = add_player("Captain", club_id)
 
@@ -255,9 +247,6 @@ class TestUpdateMatchTeamEdgeCases:
 
     def test_update_match_team_captain_to_none(self, temp_db, sample_match):
         """Test updating captain to None (clearing captain)"""
-        from db.clubs import create_club
-        from db.players import add_player
-
         club_id = create_club("Test Club")
         player_id = add_player("Captain", club_id)
 
@@ -285,9 +274,6 @@ class TestUpdateTeamCaptainEdgeCases:
 
     def test_update_team_captain_multiple_times(self, temp_db, sample_match):
         """Test updating captain multiple times"""
-        from db.clubs import create_club
-        from db.players import add_player
-
         club_id = create_club("Test Club")
         player1_id = add_player("Captain 1", club_id)
         player2_id = add_player("Captain 2", club_id)
