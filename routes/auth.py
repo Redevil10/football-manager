@@ -12,6 +12,8 @@ from core.auth import (
     verify_password,
 )
 from core.config import USER_ROLES, VALID_ROLES
+from core.error_handling import handle_route_error
+from core.exceptions import NotFoundError, PermissionError, ValidationError
 from core.validation import (
     validate_in_list,
     validate_non_empty_string,
@@ -240,20 +242,12 @@ def register_auth_routes(rt, STYLE):
                 from core.auth import check_club_permission
 
                 if not check_club_permission(user, club_id, USER_ROLES["MANAGER"]):
-                    return RedirectResponse(
-                        "/register?error=You+can+only+create+users+for+clubs+you+manage",
-                        status_code=303,
-                    )
+                    raise PermissionError("create users", f"club {club_id}")
 
             # Check if user already exists
             existing_user = get_user_by_username(username)
             if existing_user:
-                logger.warning(
-                    f"Registration attempt with existing username: {username}"
-                )
-                return RedirectResponse(
-                    "/register?error=Username+already+exists", status_code=303
-                )
+                raise ValidationError("username", "Username already exists")
 
             password_hash, password_salt = hash_password(password)
             logger.debug(f"Created password hash for user: {username}")
@@ -305,21 +299,10 @@ def register_auth_routes(rt, STYLE):
                     "/users?success=User+created+successfully", status_code=303
                 )
             else:
-                logger.error("User creation failed - create_user returned None")
-                # Try to get more info about why it failed
-                try:
-                    from db.users import get_all_users
-
-                    all_users = get_all_users()
-                    logger.debug(
-                        f"Current users in database: {[u['username'] for u in all_users]}"
-                    )
-                except Exception as e:
-                    logger.error(f"Could not list users: {e}", exc_info=True)
-                return RedirectResponse(
-                    "/register?error=Registration+failed+user+not+created+check+logs",
-                    status_code=303,
-                )
+                # User creation failed - likely duplicate username
+                raise ValueError("User creation failed - username may already exist")
+        except (ValidationError, PermissionError, NotFoundError) as e:
+            return handle_route_error(e, "/register")
         except Exception as e:
             error_detail = str(e)
             logger.error(f"Registration error: {error_detail}", exc_info=True)
@@ -334,10 +317,7 @@ def register_auth_routes(rt, STYLE):
                 return RedirectResponse(
                     f"/register?error={error_msg.replace(' ', '+')}", status_code=303
                 )
-            return RedirectResponse(
-                f"/register?error=Registration+failed:+{error_detail.replace(' ', '+')}",
-                status_code=303,
-            )
+            return handle_route_error(e, "/register")
 
     @rt("/register")
     def register_page(req: Request = None, sess=None):

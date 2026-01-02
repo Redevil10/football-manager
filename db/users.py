@@ -207,8 +207,12 @@ def delete_user(user_id):
         # Delete user_clubs associations (CASCADE should handle this, but being explicit)
         conn.execute("DELETE FROM user_clubs WHERE user_id = ?", (user_id,))
         # Delete the user
-        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        cursor = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(f"Delete user: No user found with ID {user_id}")
+            return False
+        logger.info(f"User ID {user_id} deleted successfully")
         return True
     except Exception as e:
         conn.rollback()
@@ -238,7 +242,16 @@ def get_users_by_club_ids(club_ids):
 
 
 def update_user(user_id, username=None, email=None):
-    """Update user details (username and/or email)"""
+    """Update user details (username and/or email).
+
+    Args:
+        user_id: ID of the user to update
+        username: New username (optional)
+        email: New email (optional)
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
     try:
         updates = []
@@ -256,9 +269,14 @@ def update_user(user_id, username=None, email=None):
             return True  # Nothing to update
 
         params.append(user_id)
-        query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
-        conn.execute(query, tuple(params))
+        cursor = conn.execute(
+            f"UPDATE users SET {', '.join(updates)} WHERE id = ?", tuple(params)
+        )
         conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(f"Update user: No user found with ID {user_id}")
+            return False
+        logger.debug(f"User {user_id} updated successfully")
         return True
     except sqlite3.IntegrityError as e:
         conn.rollback()

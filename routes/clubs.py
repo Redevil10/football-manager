@@ -4,6 +4,7 @@ from fasthtml.common import *  # noqa: F403, F405
 
 from core.auth import get_current_user
 from core.config import USER_ROLES, VALID_ROLES
+from core.error_handling import handle_db_result, handle_route_error
 from core.validation import validate_in_list, validate_required_int
 from db import (
     create_club,
@@ -321,14 +322,16 @@ def register_club_routes(rt, STYLE):
                 f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
             )
 
-        success = add_user_to_club(user_id, club_id, role)
-        if success:
-            return RedirectResponse(f"/club/{club_id}", status_code=303)
-        else:
-            return RedirectResponse(
-                f"/club/{club_id}?error=User+already+in+club+or+invalid+user",
-                status_code=303,
+        try:
+            success = add_user_to_club(user_id, club_id, role)
+            return handle_db_result(
+                success,
+                f"/club/{club_id}",
+                error_message="User already in club or invalid user",
+                check_false=True,
             )
+        except Exception as e:
+            return handle_route_error(e, f"/club/{club_id}")
 
     @rt("/remove_user_from_club/{club_id}/{user_id}", methods=["POST"])
     def route_remove_user_from_club(

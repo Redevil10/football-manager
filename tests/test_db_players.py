@@ -2,9 +2,6 @@
 
 import json
 
-import pytest
-
-from db.connection import init_db
 from db.players import (
     add_player,
     delete_player,
@@ -21,21 +18,6 @@ from db.players import (
     update_player_name,
     update_player_team,
 )
-
-
-@pytest.fixture
-def temp_db(monkeypatch, temp_db_path):
-    """Create a temporary database for testing"""
-    import core.config
-    import db.connection
-
-    monkeypatch.setattr(core.config, "DB_PATH", temp_db_path)
-    monkeypatch.setattr(db.connection, "DB_PATH", temp_db_path)
-
-    # Initialize the database
-    init_db()
-    yield temp_db_path
-    # Cleanup is handled by temp_db_path fixture
 
 
 class TestGenerateRandomAttrs:

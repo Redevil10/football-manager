@@ -19,21 +19,6 @@ from db.matches import (
 
 
 @pytest.fixture
-def temp_db(monkeypatch, temp_db_path):
-    """Create a temporary database for testing"""
-    import core.config
-    import db.connection
-
-    monkeypatch.setattr(core.config, "DB_PATH", temp_db_path)
-    monkeypatch.setattr(db.connection, "DB_PATH", temp_db_path)
-
-    from db.connection import init_db
-
-    init_db()
-    yield temp_db_path
-
-
-@pytest.fixture
 def sample_league(temp_db):
     """Create a sample league"""
     from db.leagues import create_league
