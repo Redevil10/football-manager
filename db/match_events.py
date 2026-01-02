@@ -1,14 +1,22 @@
 # db/match_events.py - Match event database operations
 
 import logging
+from typing import Optional
 
 from db.connection import get_db
 
 logger = logging.getLogger(__name__)
 
 
-def get_match_events(match_id):
-    """Get all events for a match"""
+def get_match_events(match_id: int) -> list[dict]:
+    """Get all events for a match.
+
+    Args:
+        match_id: ID of the match
+
+    Returns:
+        list[dict]: List of event dictionaries
+    """
     conn = get_db()
     events = conn.execute(
         """SELECT e.*, p.name as player_name, mt.team_name
@@ -24,8 +32,13 @@ def get_match_events(match_id):
 
 
 def add_match_event(
-    match_id, event_type, player_id=None, team_id=None, minute=None, description=""
-):
+    match_id: int,
+    event_type: str,
+    player_id: Optional[int] = None,
+    team_id: Optional[int] = None,
+    minute: Optional[int] = None,
+    description: str = "",
+) -> Optional[int]:
     """Add an event to a match (goal, assist, etc.).
 
     Args:
@@ -62,7 +75,7 @@ def add_match_event(
         conn.close()
 
 
-def delete_match_event(event_id):
+def delete_match_event(event_id: int) -> bool:
     """Delete a match event.
 
     Args:

@@ -2,13 +2,20 @@
 
 import logging
 import sqlite3
+from typing import Optional
 
 from db.connection import get_db
 
 logger = logging.getLogger(__name__)
 
 
-def create_user(username, password_hash, password_salt, email=None, is_superuser=False):
+def create_user(
+    username: str,
+    password_hash: str,
+    password_salt: str,
+    email: Optional[str] = None,
+    is_superuser: bool = False,
+) -> Optional[int]:
     """Create a new user.
 
     Args:
@@ -45,8 +52,15 @@ def create_user(username, password_hash, password_salt, email=None, is_superuser
         conn.close()
 
 
-def get_user_by_username(username):
-    """Get user by username"""
+def get_user_by_username(username: str) -> Optional[dict]:
+    """Get user by username.
+
+    Args:
+        username: Username to search for
+
+    Returns:
+        dict: User dictionary if found, None otherwise
+    """
     conn = get_db()
     user = conn.execute(
         "SELECT * FROM users WHERE username = ?", (username,)
@@ -55,16 +69,30 @@ def get_user_by_username(username):
     return dict(user) if user else None
 
 
-def get_user_by_id(user_id):
-    """Get user by ID"""
+def get_user_by_id(user_id: int) -> Optional[dict]:
+    """Get user by ID.
+
+    Args:
+        user_id: ID of the user
+
+    Returns:
+        dict: User dictionary if found, None otherwise
+    """
     conn = get_db()
     user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     conn.close()
     return dict(user) if user else None
 
 
-def get_user_clubs(user_id):
-    """Get all clubs for a user with their roles"""
+def get_user_clubs(user_id: int) -> list[dict]:
+    """Get all clubs for a user with their roles.
+
+    Args:
+        user_id: ID of the user
+
+    Returns:
+        list[dict]: List of club dictionaries with role information
+    """
     conn = get_db()
     clubs = conn.execute(
         """SELECT c.*, uc.role
@@ -77,8 +105,15 @@ def get_user_clubs(user_id):
     return [dict(club) for club in clubs]
 
 
-def get_user_club_ids(user_id):
-    """Get list of club IDs the user has access to"""
+def get_user_club_ids(user_id: int) -> list[int]:
+    """Get list of club IDs the user has access to.
+
+    Args:
+        user_id: ID of the user
+
+    Returns:
+        list[int]: List of club IDs
+    """
     conn = get_db()
     club_ids = conn.execute(
         "SELECT club_id FROM user_clubs WHERE user_id = ?", (user_id,)
@@ -87,7 +122,7 @@ def get_user_club_ids(user_id):
     return [row["club_id"] for row in club_ids]
 
 
-def add_user_to_club(user_id, club_id, role):
+def add_user_to_club(user_id: int, club_id: int, role: str) -> bool:
     """Add user to a club with a specific role.
 
     Args:
@@ -123,8 +158,16 @@ def add_user_to_club(user_id, club_id, role):
         conn.close()
 
 
-def get_user_club_role(user_id, club_id):
-    """Get user's role for a specific club"""
+def get_user_club_role(user_id: int, club_id: int) -> Optional[str]:
+    """Get user's role for a specific club.
+
+    Args:
+        user_id: ID of the user
+        club_id: ID of the club
+
+    Returns:
+        str: Role if found, None otherwise
+    """
     conn = get_db()
     result = conn.execute(
         "SELECT role FROM user_clubs WHERE user_id = ? AND club_id = ?",
@@ -134,7 +177,7 @@ def get_user_club_role(user_id, club_id):
     return result["role"] if result else None
 
 
-def update_user_club_role(user_id, club_id, role):
+def update_user_club_role(user_id: int, club_id: int, role: str) -> bool:
     """Update a user's role in a club.
 
     Args:
@@ -170,8 +213,12 @@ def update_user_club_role(user_id, club_id, role):
         conn.close()
 
 
-def get_all_users():
-    """Get all users (for admin purposes)"""
+def get_all_users() -> list[dict]:
+    """Get all users (for admin purposes).
+
+    Returns:
+        list[dict]: List of all user dictionaries
+    """
     conn = get_db()
     users = conn.execute(
         "SELECT id, username, email, is_superuser, created_at FROM users ORDER BY created_at DESC"
@@ -180,8 +227,17 @@ def get_all_users():
     return [dict(user) for user in users]
 
 
-def update_user_password(user_id, password_hash, password_salt):
-    """Update a user's password"""
+def update_user_password(user_id: int, password_hash: str, password_salt: str) -> bool:
+    """Update a user's password.
+
+    Args:
+        user_id: ID of the user
+        password_hash: New password hash
+        password_salt: New password salt
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
     try:
         conn.execute(
@@ -200,8 +256,15 @@ def update_user_password(user_id, password_hash, password_salt):
         conn.close()
 
 
-def delete_user(user_id):
-    """Delete a user and all associated records"""
+def delete_user(user_id: int) -> bool:
+    """Delete a user and all associated records.
+
+    Args:
+        user_id: ID of the user to delete
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
     try:
         # Delete user_clubs associations (CASCADE should handle this, but being explicit)
@@ -222,8 +285,15 @@ def delete_user(user_id):
         conn.close()
 
 
-def get_users_by_club_ids(club_ids):
-    """Get all users that belong to any of the given club IDs"""
+def get_users_by_club_ids(club_ids: list[int]) -> list[dict]:
+    """Get all users that belong to any of the given club IDs.
+
+    Args:
+        club_ids: List of club IDs
+
+    Returns:
+        list[dict]: List of user dictionaries
+    """
     if not club_ids:
         return []
 
@@ -241,7 +311,9 @@ def get_users_by_club_ids(club_ids):
     return [dict(user) for user in users]
 
 
-def update_user(user_id, username=None, email=None):
+def update_user(
+    user_id: int, username: Optional[str] = None, email: Optional[str] = None
+) -> bool:
     """Update user details (username and/or email).
 
     Args:
@@ -290,8 +362,16 @@ def update_user(user_id, username=None, email=None):
         conn.close()
 
 
-def update_user_superuser_status(user_id, is_superuser):
-    """Update a user's superuser status"""
+def update_user_superuser_status(user_id: int, is_superuser: bool) -> bool:
+    """Update a user's superuser status.
+
+    Args:
+        user_id: ID of the user
+        is_superuser: Whether the user should be a superuser
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
     try:
         conn.execute(

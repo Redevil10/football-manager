@@ -105,12 +105,18 @@ def verify_password(password: str, password_hash: str, salt: str = None) -> bool
         return False
 
 
-def get_session_from_request(req: Request):
-    """Get session dict from request
+def get_session_from_request(req: Request) -> dict:
+    """Get session dict from request.
 
     NOTE: In FastHTML, sessions are typically accessed via the 'session' parameter
     injected into route handlers. This function is a fallback for cases where we
     need to access the session from the request object directly.
+
+    Args:
+        req: FastHTML Request object
+
+    Returns:
+        dict: Session dictionary (empty dict if session not found)
     """
     if req is None:
         return {}
@@ -132,7 +138,7 @@ def get_session_from_request(req: Request):
 
 
 def login_user(req: Request, username: str, password: str, sess: dict = None) -> bool:
-    """Attempt to login a user. Returns True if successful, False otherwise.
+    """Attempt to login a user.
 
     Automatically migrates old SHA256 passwords to bcrypt on successful login.
 
@@ -141,6 +147,9 @@ def login_user(req: Request, username: str, password: str, sess: dict = None) ->
         username: Username to login
         password: Password to verify
         sess: Session dict (automatically injected by FastHTML if sessions enabled)
+
+    Returns:
+        bool: True if login successful, False otherwise
     """
     user = get_user_by_username(username)
     if not user:
@@ -183,8 +192,13 @@ def login_user(req: Request, username: str, password: str, sess: dict = None) ->
     return False
 
 
-def logout_user(req: Request, sess: dict = None):
-    """Logout the current user"""
+def logout_user(req: Request, sess: dict = None) -> None:
+    """Logout the current user by removing user_id from session.
+
+    Args:
+        req: FastHTML Request object
+        sess: Session dict (automatically injected by FastHTML if sessions enabled)
+    """
     # FastHTML injects session as a parameter - use it if provided
     if sess is not None and isinstance(sess, dict):
         sess.pop("user_id", None)
@@ -196,10 +210,17 @@ def logout_user(req: Request, sess: dict = None):
 
 
 def get_current_user(req: Request, sess: dict = None) -> Optional[dict]:
-    """Get current logged-in user from session
+    """Get current logged-in user from session.
 
     In FastHTML, the session is injected as a parameter. If sess is provided,
     use it directly. Otherwise, try to get it from the request.
+
+    Args:
+        req: FastHTML Request object
+        sess: Session dict (automatically injected by FastHTML if sessions enabled)
+
+    Returns:
+        dict: User dictionary if logged in, None otherwise
     """
     if sess is not None and isinstance(sess, dict):
         user_id = sess.get("user_id")
@@ -217,7 +238,17 @@ def get_current_user(req: Request, sess: dict = None) -> Optional[dict]:
 
 
 def get_user_accessible_club_ids(user: dict) -> List[int]:
-    """Get list of club IDs the user can access"""
+    """Get list of club IDs the user can access.
+
+    Superusers can access all clubs. Regular users can only access clubs
+    they are members of.
+
+    Args:
+        user: User dictionary
+
+    Returns:
+        List[int]: List of club IDs the user can access
+    """
     if user.get("is_superuser"):
         # Superuser can access all clubs
 
@@ -228,7 +259,18 @@ def get_user_accessible_club_ids(user: dict) -> List[int]:
 
 
 def check_club_access(user: dict, club_id: int) -> bool:
-    """Check if user has access to a specific club"""
+    """Check if user has access to a specific club.
+
+    Superusers have access to all clubs. Regular users must be members
+    of the club to have access.
+
+    Args:
+        user: User dictionary
+        club_id: ID of the club to check
+
+    Returns:
+        bool: True if user has access, False otherwise
+    """
     if user.get("is_superuser"):
         return True
 
@@ -266,7 +308,18 @@ def check_club_permission(user: dict, club_id: int, required_role: str = None) -
 
 
 def require_auth(f):
-    """Decorator to require authentication"""
+    """Decorator to require authentication.
+
+    If the user is not authenticated, redirects to the login page.
+    If authenticated, passes the user dictionary as a 'user' parameter
+    to the decorated function.
+
+    Args:
+        f: Function to decorate
+
+    Returns:
+        Decorated function that requires authentication
+    """
 
     @wraps(f)
     def wrapper(req: Request = None, **kwargs):
@@ -283,14 +336,21 @@ def require_auth(f):
 
 
 def require_permission(required_role: str = None):
-    """Decorator factory to require specific permission
+    """Decorator factory to require specific permission.
+
+    Creates a decorator that requires the user to have a specific role
+    (manager or viewer) for a club. If club_id is provided in the function
+    arguments, checks permission for that club. Otherwise, checks if user
+    has the required role in any club.
 
     Args:
         required_role: Required role (defaults to USER_ROLES["MANAGER"])
+
+    Returns:
+        Decorator function that requires the specified permission
     """
     if required_role is None:
         required_role = USER_ROLES["MANAGER"]
-    """Decorator factory to require specific permission"""
 
     def decorator(f):
         @wraps(f)

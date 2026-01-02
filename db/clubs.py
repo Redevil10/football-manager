@@ -2,13 +2,14 @@
 
 import logging
 import sqlite3
+from typing import Optional
 
 from db.connection import get_db
 
 logger = logging.getLogger(__name__)
 
 
-def create_club(name, description=""):
+def create_club(name: str, description: str = "") -> Optional[int]:
     """Create a new club.
 
     Args:
@@ -43,31 +44,51 @@ def create_club(name, description=""):
         conn.close()
 
 
-def get_club(club_id):
-    """Get a club by ID"""
+def get_club(club_id: int) -> Optional[dict]:
+    """Get a club by ID.
+
+    Args:
+        club_id: ID of the club
+
+    Returns:
+        dict: Club dictionary if found, None otherwise
+    """
     conn = get_db()
     club = conn.execute("SELECT * FROM clubs WHERE id = ?", (club_id,)).fetchone()
     conn.close()
     return dict(club) if club else None
 
 
-def get_club_by_name(name):
-    """Get a club by name"""
+def get_club_by_name(name: str) -> Optional[dict]:
+    """Get a club by name.
+
+    Args:
+        name: Name of the club
+
+    Returns:
+        dict: Club dictionary if found, None otherwise
+    """
     conn = get_db()
     club = conn.execute("SELECT * FROM clubs WHERE name = ?", (name,)).fetchone()
     conn.close()
     return dict(club) if club else None
 
 
-def get_all_clubs():
-    """Get all clubs"""
+def get_all_clubs() -> list[dict]:
+    """Get all clubs.
+
+    Returns:
+        list[dict]: List of all club dictionaries
+    """
     conn = get_db()
     clubs = conn.execute("SELECT * FROM clubs ORDER BY created_at DESC").fetchall()
     conn.close()
     return [dict(club) for club in clubs]
 
 
-def update_club(club_id, name=None, description=None):
+def update_club(
+    club_id: int, name: Optional[str] = None, description: Optional[str] = None
+) -> bool:
     """Update club information.
 
     Args:
@@ -116,7 +137,7 @@ def update_club(club_id, name=None, description=None):
         conn.close()
 
 
-def delete_club(club_id):
+def delete_club(club_id: int) -> bool:
     """Delete a club.
 
     Args:

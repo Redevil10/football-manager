@@ -2,6 +2,7 @@
 
 import logging
 import sqlite3
+from typing import Optional
 
 from db.club_leagues import (
     add_club_to_league,
@@ -13,7 +14,7 @@ from db.connection import get_db
 logger = logging.getLogger(__name__)
 
 
-def get_all_leagues(club_ids=None):
+def get_all_leagues(club_ids: Optional[list[int]] = None) -> list[dict]:
     """Get all leagues, optionally filtered by club_ids
 
     Args:
@@ -42,8 +43,16 @@ def get_all_leagues(club_ids=None):
     return [dict(league) for league in leagues]
 
 
-def get_league(league_id, club_ids=None):
-    """Get a league by ID, optionally checking if user's clubs participate in it"""
+def get_league(league_id: int, club_ids: Optional[list[int]] = None) -> Optional[dict]:
+    """Get a league by ID, optionally checking if user's clubs participate in it.
+
+    Args:
+        league_id: ID of the league
+        club_ids: Optional list of club IDs to check access
+
+    Returns:
+        dict: League dictionary if found and accessible, None otherwise
+    """
     conn = get_db()
     league = conn.execute("SELECT * FROM leagues WHERE id = ?", (league_id,)).fetchone()
     conn.close()
@@ -62,8 +71,15 @@ def get_league(league_id, club_ids=None):
     return league_dict
 
 
-def get_or_create_friendly_league(club_id):
-    """Get or create the 'Friendly' league and add club to it"""
+def get_or_create_friendly_league(club_id: int) -> int:
+    """Get or create the 'Friendly' league and add club to it.
+
+    Args:
+        club_id: ID of the club to add to the Friendly league
+
+    Returns:
+        int: League ID of the Friendly league
+    """
     conn = get_db()
     # Try to find existing Friendly league
     league = conn.execute("SELECT * FROM leagues WHERE name = 'Friendly'").fetchone()
@@ -91,7 +107,7 @@ def get_or_create_friendly_league(club_id):
     return league_id
 
 
-def create_league(name, description=""):
+def create_league(name: str, description: str = "") -> Optional[int]:
     """Create a new league (independent entity, not tied to a club).
 
     Args:
@@ -126,7 +142,9 @@ def create_league(name, description=""):
         conn.close()
 
 
-def update_league(league_id, name=None, description=None):
+def update_league(
+    league_id: int, name: Optional[str] = None, description: Optional[str] = None
+) -> bool:
     """Update a league.
 
     Args:
@@ -175,7 +193,7 @@ def update_league(league_id, name=None, description=None):
         conn.close()
 
 
-def delete_league(league_id):
+def delete_league(league_id: int) -> bool:
     """Delete a league (cascade deletes matches).
 
     Args:

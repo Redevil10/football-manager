@@ -4,6 +4,7 @@ import json
 import logging
 import random
 import sqlite3
+from typing import Optional
 
 from core.config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
 from db.connection import get_db
@@ -11,27 +12,43 @@ from db.connection import get_db
 logger = logging.getLogger(__name__)
 
 
-def generate_random_attrs():
-    """Generate random attributes (1-20 scale)"""
+def generate_random_attrs() -> dict[str, int]:
+    """Generate random attributes (1-20 scale).
+
+    Returns:
+        dict[str, int]: Dictionary of technical attributes with random values (1-20)
+    """
     return {key: random.randint(1, 20) for key in TECHNICAL_ATTRS.keys()}
 
 
-def generate_random_mental():
-    """Generate random mental attributes"""
+def generate_random_mental() -> dict[str, int]:
+    """Generate random mental attributes.
+
+    Returns:
+        dict[str, int]: Dictionary of mental attributes with random values (1-20)
+    """
     return {key: random.randint(1, 20) for key in MENTAL_ATTRS.keys()}
 
 
-def generate_random_physical():
-    """Generate random physical attributes"""
+def generate_random_physical() -> dict[str, int]:
+    """Generate random physical attributes.
+
+    Returns:
+        dict[str, int]: Dictionary of physical attributes with random values (1-20)
+    """
     return {key: random.randint(1, 20) for key in PHYSICAL_ATTRS.keys()}
 
 
-def generate_random_gk():
-    """Generate random goalkeeper attributes"""
+def generate_random_gk() -> dict[str, int]:
+    """Generate random goalkeeper attributes.
+
+    Returns:
+        dict[str, int]: Dictionary of goalkeeper attributes with random values (1-20)
+    """
     return {key: random.randint(1, 20) for key in GK_ATTRS.keys()}
 
 
-def parse_player_attributes(player_row):
+def parse_player_attributes(player_row: dict) -> dict:
     """Parse JSON attributes from a player database row.
 
     Args:
@@ -49,8 +66,15 @@ def parse_player_attributes(player_row):
     return player_dict
 
 
-def get_all_players(club_ids=None):
-    """Get all players, optionally filtered by club_ids (if None, returns all)"""
+def get_all_players(club_ids: Optional[list[int]] = None) -> list[dict]:
+    """Get all players, optionally filtered by club_ids (if None, returns all).
+
+    Args:
+        club_ids: Optional list of club IDs to filter by
+
+    Returns:
+        list[dict]: List of player dictionaries with parsed attributes
+    """
     conn = get_db()
     if club_ids is not None and len(club_ids) > 0:
         placeholders = ",".join("?" * len(club_ids))
@@ -69,8 +93,18 @@ def get_all_players(club_ids=None):
     return result
 
 
-def find_player_by_name_or_alias(name, club_ids=None):
-    """Find player by name or alias, optionally filtered by club_ids"""
+def find_player_by_name_or_alias(
+    name: str, club_ids: Optional[list[int]] = None
+) -> Optional[dict]:
+    """Find player by name or alias, optionally filtered by club_ids.
+
+    Args:
+        name: Player name or alias to search for
+        club_ids: Optional list of club IDs to filter by
+
+    Returns:
+        dict: Player dictionary with parsed attributes if found, None otherwise
+    """
     conn = get_db()
     if club_ids is not None and len(club_ids) > 0:
         placeholders = ",".join("?" * len(club_ids))
@@ -86,7 +120,9 @@ def find_player_by_name_or_alias(name, club_ids=None):
     return None
 
 
-def add_player(name, club_id, position_pref="", alias=None):
+def add_player(
+    name: str, club_id: int, position_pref: str = "", alias: Optional[str] = None
+) -> Optional[int]:
     """Add player with random attributes.
 
     Args:
@@ -130,7 +166,7 @@ def add_player(name, club_id, position_pref="", alias=None):
         conn.close()
 
 
-def delete_player(player_id):
+def delete_player(player_id: int) -> bool:
     """Delete a player.
 
     Args:
@@ -156,7 +192,7 @@ def delete_player(player_id):
         conn.close()
 
 
-def update_player_team(player_id, team, position):
+def update_player_team(player_id: int, team: str, position: str) -> bool:
     """Update player team and position.
 
     Args:
@@ -189,7 +225,13 @@ def update_player_team(player_id, team, position):
         conn.close()
 
 
-def update_player_attrs(player_id, tech_attrs, mental_attrs, phys_attrs, gk_attrs):
+def update_player_attrs(
+    player_id: int,
+    tech_attrs: dict,
+    mental_attrs: dict,
+    phys_attrs: dict,
+    gk_attrs: dict,
+) -> bool:
     """Update player attributes.
 
     Args:
@@ -230,7 +272,7 @@ def update_player_attrs(player_id, tech_attrs, mental_attrs, phys_attrs, gk_attr
         conn.close()
 
 
-def update_player_name(player_id, name, alias=None):
+def update_player_name(player_id: int, name: str, alias: Optional[str] = None) -> bool:
     """Update player name and alias.
 
     Args:
@@ -267,7 +309,9 @@ def update_player_name(player_id, name, alias=None):
         conn.close()
 
 
-def update_player_height_weight(player_id, height=None, weight=None):
+def update_player_height_weight(
+    player_id: int, height: Optional[int] = None, weight: Optional[int] = None
+) -> bool:
     """Update player height and weight.
 
     Args:
@@ -311,7 +355,7 @@ def update_player_height_weight(player_id, height=None, weight=None):
         conn.close()
 
 
-def swap_players(player1_id, player2_id):
+def swap_players(player1_id: int, player2_id: int) -> bool:
     """Swap two players' teams and positions.
 
     Args:
@@ -362,7 +406,7 @@ def swap_players(player1_id, player2_id):
         conn.close()
 
 
-def reset_teams():
+def reset_teams() -> bool:
     """Reset all team assignments.
 
     Returns:
