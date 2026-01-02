@@ -8,12 +8,14 @@ from db.matches import (
     get_all_matches,
     get_last_completed_match,
     get_last_created_match,
+    get_last_match_by_league,
     get_match,
     get_match_info,
     get_matches_by_league,
     get_next_match,
     get_next_match_by_league,
     get_recent_matches,
+    save_match_info,
     update_match,
 )
 
@@ -379,3 +381,181 @@ class TestGetMatchInfo:
         match_info = get_match_info()
 
         assert match_info is None
+
+    def test_get_match_info_returns_most_recent(self, temp_db, sample_league):
+        """Test that get_match_info returns most recent match"""
+        # Create older match
+        create_match(
+            league_id=sample_league,
+            date="2024-01-10",
+            start_time="10:00:00",
+            end_time=None,
+            location="Old Field",
+            num_teams=2,
+        )
+        # Create newer match
+        create_match(
+            league_id=sample_league,
+            date="2024-01-15",
+            start_time="14:00:00",
+            end_time=None,
+            location="New Field",
+            num_teams=2,
+        )
+
+        match_info = get_match_info()
+
+        assert match_info is not None
+        assert match_info["location"] == "New Field"
+
+
+class TestSaveMatchInfo:
+    """Tests for save_match_info function"""
+
+    def test_save_match_info(self, temp_db, sample_club):
+        """Test saving match info (creates Friendly league match)"""
+        save_match_info("2024-01-15", "10:00:00", "Test Field", sample_club)
+
+        match_info = get_match_info()
+        assert match_info is not None
+        assert match_info["date"] == "2024-01-15"
+        assert match_info["location"] == "Test Field"
+
+    def test_save_match_info_creates_friendly_league(self, temp_db, sample_club):
+        """Test that save_match_info creates Friendly league if needed"""
+        from db.leagues import get_all_leagues
+
+        save_match_info("2024-01-15", "10:00:00", "Test Field", sample_club)
+
+        # Verify Friendly league was created
+        leagues = get_all_leagues()
+        friendly_leagues = [
+            league for league in leagues if league["name"] == "Friendly"
+        ]
+        assert len(friendly_leagues) >= 1
+
+    def test_save_match_info_deletes_old_matches_without_league(
+        self, temp_db, sample_club
+    ):
+        """Test that save_match_info deletes old matches without league_id"""
+        from db.connection import get_db
+
+        # Create a match without league_id (if schema allows)
+        conn = get_db()
+        try:
+            conn.execute(
+                "INSERT INTO matches (date, start_time, location) VALUES (?, ?, ?)",
+                ("2024-01-10", "10:00:00", "Old Field"),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Save new match info
+        save_match_info("2024-01-15", "10:00:00", "New Field", sample_club)
+
+        # Verify old match without league_id is deleted
+        conn = get_db()
+        try:
+            old_matches = conn.execute(
+                "SELECT * FROM matches WHERE league_id IS NULL"
+            ).fetchall()
+            assert len(old_matches) == 0
+        finally:
+            conn.close()
+
+
+class TestGetLastMatchByLeague:
+    """Tests for get_last_match_by_league function"""
+
+    def test_get_last_match_by_league(self, temp_db, sample_league):
+        """Test getting last match for a league"""
+        # Create multiple matches
+        create_match(
+            league_id=sample_league,
+            date="2024-01-10",
+            start_time="10:00:00",
+            end_time=None,
+            location="Field 1",
+            num_teams=2,
+        )
+        create_match(
+            league_id=sample_league,
+            date="2024-01-15",
+            start_time="14:00:00",
+            end_time=None,
+            location="Field 2",
+            num_teams=2,
+        )
+
+        match = get_last_match_by_league(sample_league)
+
+        assert match is not None
+        assert match["league_id"] == sample_league
+        assert match["location"] == "Field 2"  # Most recent
+
+    def test_get_last_match_by_league_empty(self, temp_db, sample_league):
+        """Test getting last match for league with no matches"""
+        match = get_last_match_by_league(sample_league)
+
+        assert match is None
+
+
+class TestUpdateMatchEdgeCases:
+    """Tests for update_match edge cases"""
+
+    def test_update_match_not_found(self, temp_db, sample_league):
+        """Test updating non-existent match"""
+        result = update_match(
+            match_id=99999,
+            league_id=sample_league,
+            date="2024-01-15",
+            start_time="10:00:00",
+            end_time=None,
+            location="Test Field",
+            num_teams=2,
+            max_players_per_team=None,
+        )
+
+        # Should return False when match not found
+        assert result is False
+
+    def test_update_match_partial_fields(self, temp_db, sample_league):
+        """Test updating match with only some fields"""
+        match_id = create_match(
+            league_id=sample_league,
+            date="2024-01-15",
+            start_time="10:00:00",
+            end_time=None,
+            location="Old Location",
+            num_teams=2,
+        )
+
+        # Update only location (but still need to provide all required params)
+        result = update_match(
+            match_id=match_id,
+            league_id=sample_league,
+            date="2024-01-15",
+            start_time="10:00:00",
+            end_time=None,
+            location="New Location",
+            num_teams=2,
+            max_players_per_team=None,
+        )
+
+        assert result is True
+
+        # Verify update
+        match = get_match(match_id)
+        assert match["location"] == "New Location"
+
+
+class TestDeleteMatchEdgeCases:
+    """Tests for delete_match edge cases"""
+
+    def test_delete_match_not_found(self, temp_db):
+        """Test deleting non-existent match"""
+        result = delete_match(99999)
+
+        # Should return False when match not found
+        assert result is False
