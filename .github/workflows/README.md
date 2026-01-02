@@ -4,19 +4,13 @@ This directory contains GitHub Actions workflows for CI/CD.
 
 ## Available Workflows
 
-### `tests.yml`
+### `test.yml`
 Main test workflow that:
 - Runs on push/PR to main/master/develop branches
 - Tests on Python 3.13
 - Uses `uv` for dependency management
 - Runs pytest with coverage
 - Uploads coverage to Codecov (optional)
-
-### `tests-simple.yml`
-Simpler test workflow without Codecov:
-- Same test execution
-- Uploads coverage HTML report as artifact
-- No external service dependencies
 
 ## Usage
 

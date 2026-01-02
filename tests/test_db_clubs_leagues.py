@@ -241,7 +241,7 @@ class TestGetLeague:
 class TestGetOrCreateFriendlyLeague:
     """Tests for get_or_create_friendly_league function"""
 
-    @patch("db.club_leagues.add_club_to_league")
+    @patch("db.leagues.add_club_to_league")
     def test_get_existing_friendly_league(self, mock_add_club, temp_db):
         """Test getting existing Friendly league"""
         from db.clubs import create_club
@@ -266,7 +266,7 @@ class TestGetOrCreateFriendlyLeague:
         assert result == league_id
         mock_add_club.assert_called_once_with(club_id, league_id)
 
-    @patch("db.club_leagues.add_club_to_league")
+    @patch("db.leagues.add_club_to_league")
     def test_create_friendly_league(self, mock_add_club, temp_db):
         """Test creating Friendly league if it doesn't exist"""
         from db.clubs import create_club

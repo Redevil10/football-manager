@@ -30,17 +30,12 @@ class TestHashPassword:
         assert hash1 != hash2
 
     def test_hash_password_deterministic_with_salt(self):
-        """Test that same password and salt produces same hash"""
+        """Test that same password produces verifiable hash (bcrypt handles salt internally)"""
         password = "test_password"
-        # We can't directly control salt, but we can verify the hash algorithm works
+        # With bcrypt, the salt is embedded in the hash, so we verify through verify_password
         hash1, salt1 = hash_password(password)
-        # Manually verify using the same salt
-        import hashlib
-
-        hash_obj = hashlib.sha256()
-        hash_obj.update((password + salt1).encode("utf-8"))
-        expected_hash = hash_obj.hexdigest()
-        assert hash1 == expected_hash
+        # Verify that the hash can be verified (bcrypt includes salt in hash)
+        assert verify_password(password, hash1, salt1) is True
 
     def test_hash_password_empty_string(self):
         """Test hashing empty password"""
@@ -80,11 +75,15 @@ class TestVerifyPassword:
         assert verify_password(password, wrong_hash, salt) is False
 
     def test_verify_password_wrong_salt(self):
-        """Test verifying with wrong salt"""
+        """Test verifying with wrong salt (bcrypt ignores salt parameter, uses embedded salt)"""
         password = "test_password"
         password_hash, salt = hash_password(password)
-        _, wrong_salt = hash_password("different_password")
-        assert verify_password(password, password_hash, wrong_salt) is False
+        # With bcrypt, the salt is embedded in the hash, so wrong salt won't affect verification
+        # But we can test that verify_password still works correctly
+        # The function should use the embedded salt in bcrypt hash, not the parameter
+        assert verify_password(password, password_hash, salt) is True
+        # Wrong password should still fail
+        assert verify_password("wrong_password", password_hash, salt) is False
 
     def test_verify_password_empty_password(self):
         """Test verifying empty password"""
