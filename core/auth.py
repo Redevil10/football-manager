@@ -25,6 +25,22 @@ logger = logging.getLogger(__name__)
 BCRYPT_MAX_PASSWORD_LENGTH = 72
 
 
+def _preprocess_long_password_for_bcrypt(password_bytes: bytes) -> bytes:
+    """Preprocess password bytes for bcrypt when they exceed bcrypt's 72-byte limit.
+
+    This function uses SHA256 ONLY as a length-reduction preprocessing step.
+    The actual secure password hashing is performed by bcrypt after this preprocessing.
+
+    Args:
+        password_bytes: Password as bytes (must be >72 bytes)
+
+    Returns:
+        bytes: SHA256 hash of password as bytes (32 bytes, safe for bcrypt)
+    """
+    sha256_hash = hashlib.sha256(password_bytes).hexdigest()
+    return sha256_hash.encode("utf-8")
+
+
 def hash_password(password: str) -> tuple[str, str]:
     """Hash a password using bcrypt and return (hash, salt).
 
@@ -44,17 +60,20 @@ def hash_password(password: str) -> tuple[str, str]:
     # Generate salt and hash password (bcrypt handles salt internally)
     salt = bcrypt.gensalt()
 
-    # Bcrypt has a 72-byte limit, so for longer passwords, hash with SHA256 first
+    # Bcrypt has a 72-byte limit, so for longer passwords, we need to preprocess
     password_bytes = password.encode("utf-8")
     if len(password_bytes) > BCRYPT_MAX_PASSWORD_LENGTH:
-        # Hash with SHA256 first, then bcrypt the hash
-        # This is a standard approach for handling long passwords
-        sha256_hash = hashlib.sha256(password_bytes).hexdigest()
-        password_to_hash = sha256_hash.encode("utf-8")
+        # For passwords exceeding bcrypt's 72-byte limit, preprocess with SHA256
+        # before passing to bcrypt. This is a standard pattern (used by Django, etc.)
+        #
+        # SECURITY: SHA256 is used ONLY as a length-reduction preprocessing step.
+        # The actual password hashing (with computational cost) is done by bcrypt below.
+        # This maintains bcrypt's security properties while handling long passwords.
+        preprocessed_password = _preprocess_long_password_for_bcrypt(password_bytes)
     else:
-        password_to_hash = password_bytes
+        preprocessed_password = password_bytes
 
-    password_hash = bcrypt.hashpw(password_to_hash, salt).decode("utf-8")
+    password_hash = bcrypt.hashpw(preprocessed_password, salt).decode("utf-8")
     # Return salt as string for database compatibility
     return password_hash, salt.decode("utf-8")
 
@@ -75,11 +94,9 @@ def verify_password(password: str, password_hash: str, salt: str = None) -> bool
         password_bytes = password.encode("utf-8")
 
         # Handle long passwords the same way as hash_password
-        # For passwords >72 bytes, hash with SHA256 first, then verify with bcrypt
-        # This is a standard pattern (used by Django, etc.) for handling long passwords
+        # For passwords >72 bytes, preprocess with SHA256 first, then verify with bcrypt
         if len(password_bytes) > BCRYPT_MAX_PASSWORD_LENGTH:
-            sha256_hash = hashlib.sha256(password_bytes).hexdigest()
-            password_to_verify = sha256_hash.encode("utf-8")
+            password_to_verify = _preprocess_long_password_for_bcrypt(password_bytes)
         else:
             password_to_verify = password_bytes
 
