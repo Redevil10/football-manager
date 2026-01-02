@@ -103,22 +103,44 @@ class TestIsMatchCompleted:
 
         assert result is False
 
-    def test_is_match_completed_today_past_time(self):
+    @patch("render.common.datetime")
+    @patch("render.common.date")
+    def test_is_match_completed_today_past_time(self, mock_date, mock_datetime):
         """Test match completed when today but time has passed"""
-        today = date.today().isoformat()
-        # Use a time in the past
-        past_time = (datetime.now() - timedelta(hours=2)).strftime("%H:%M")
+        # Mock current date and time
+        test_date = date(2024, 1, 15)
+        mock_date.today.return_value = test_date
+
+        # Mock current time to be 14:00
+        mock_now = datetime(2024, 1, 15, 14, 0, 0)
+        mock_datetime.now.return_value = mock_now
+        mock_datetime.strptime = datetime.strptime  # Use real strptime
+
+        today = test_date.isoformat()
+        # Use a time in the past (10:00, which is 4 hours before 14:00)
+        past_time = "10:00"
         match = {"date": today, "start_time": past_time}
 
         result = is_match_completed(match)
 
         assert result is True
 
-    def test_is_match_completed_today_future_time(self):
+    @patch("render.common.datetime")
+    @patch("render.common.date")
+    def test_is_match_completed_today_future_time(self, mock_date, mock_datetime):
         """Test match not completed when today but time hasn't passed"""
-        today = date.today().isoformat()
-        # Use a time in the future
-        future_time = (datetime.now() + timedelta(hours=2)).strftime("%H:%M")
+        # Mock current date and time
+        test_date = date(2024, 1, 15)
+        mock_date.today.return_value = test_date
+
+        # Mock current time to be 10:00
+        mock_now = datetime(2024, 1, 15, 10, 0, 0)
+        mock_datetime.now.return_value = mock_now
+        mock_datetime.strptime = datetime.strptime  # Use real strptime
+
+        today = test_date.isoformat()
+        # Use a time in the future (14:00, which is 4 hours after 10:00)
+        future_time = "14:00"
         match = {"date": today, "start_time": future_time}
 
         result = is_match_completed(match)
