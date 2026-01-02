@@ -8,6 +8,7 @@ from typing import List, Optional
 import bcrypt
 from fasthtml.common import RedirectResponse, Request
 
+from core.config import USER_ROLES, VALID_ROLES
 from db import get_clubs_in_league, get_match
 from db.clubs import get_all_clubs
 from db.users import (
@@ -235,10 +236,20 @@ def check_club_access(user: dict, club_id: int) -> bool:
     return club_id in accessible_clubs
 
 
-def check_club_permission(
-    user: dict, club_id: int, required_role: str = "manager"
-) -> bool:
-    """Check if user has required permission (viewer or manager) for a club"""
+def check_club_permission(user: dict, club_id: int, required_role: str = None) -> bool:
+    """Check if user has required permission (viewer or manager) for a club
+
+    Args:
+        user: User dictionary
+        club_id: Club ID to check permission for
+        required_role: Required role (defaults to USER_ROLES["MANAGER"])
+
+    Returns:
+        bool: True if user has required permission, False otherwise
+    """
+    if required_role is None:
+        required_role = USER_ROLES["MANAGER"]
+
     if user.get("is_superuser"):
         return True
 
@@ -246,10 +257,10 @@ def check_club_permission(
     if not user_role:
         return False
 
-    if required_role == "manager":
-        return user_role == "manager"
-    elif required_role == "viewer":
-        return user_role in ["viewer", "manager"]
+    if required_role == USER_ROLES["MANAGER"]:
+        return user_role == USER_ROLES["MANAGER"]
+    elif required_role == USER_ROLES["VIEWER"]:
+        return user_role in VALID_ROLES  # Both viewer and manager can view
 
     return False
 
@@ -271,7 +282,14 @@ def require_auth(f):
     return wrapper
 
 
-def require_permission(required_role: str = "manager"):
+def require_permission(required_role: str = None):
+    """Decorator factory to require specific permission
+
+    Args:
+        required_role: Required role (defaults to USER_ROLES["MANAGER"])
+    """
+    if required_role is None:
+        required_role = USER_ROLES["MANAGER"]
     """Decorator factory to require specific permission"""
 
     def decorator(f):
@@ -333,7 +351,7 @@ def can_user_edit_match(user: dict, match_id: int) -> bool:
 
     # Check if user is manager of any of these clubs
     for club_id in club_ids:
-        if check_club_permission(user, club_id, "manager"):
+        if check_club_permission(user, club_id, USER_ROLES["MANAGER"]):
             return True
 
     return False
@@ -354,7 +372,7 @@ def can_user_edit_league(user: dict, league_id: int) -> bool:
 
     # Check if user is manager of any of these clubs
     for club_id in club_ids:
-        if check_club_permission(user, club_id, "manager"):
+        if check_club_permission(user, club_id, USER_ROLES["MANAGER"]):
             return True
 
     return False

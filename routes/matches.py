@@ -13,6 +13,8 @@ from core.auth import (
     get_current_user,
     get_user_club_ids_from_request,
 )
+from core.config import USER_ROLES
+from core.validation import parse_int, validate_non_empty_string
 from db import (
     add_match_event,
     add_match_player,
@@ -565,7 +567,7 @@ def register_match_routes(rt, STYLE):
                 manager_club_ids = [
                     cid
                     for cid in user_club_ids
-                    if check_club_permission(user, cid, "manager")
+                    if check_club_permission(user, cid, USER_ROLES["MANAGER"])
                 ]
 
                 if not manager_club_ids:
@@ -600,23 +602,31 @@ def register_match_routes(rt, STYLE):
             if not allocate_team1 and not allocate_team2:
                 allocate_team1 = True  # Default to team1 if both unchecked
             max_players_per_team = form.get("max_players_per_team", "").strip()
-            max_players = int(max_players_per_team) if max_players_per_team else None
+            max_players, _ = parse_int(max_players_per_team, "Max players per team")
 
             # Calculate num_teams for backward compatibility (can be removed later)
             num_teams = sum([allocate_team1, allocate_team2])
 
             # Validate required fields
-            if not date:
+            is_valid, error_msg = validate_non_empty_string(date, "Date")
+            if not is_valid:
                 return RedirectResponse(
-                    "/create_match?error=date_required", status_code=303
+                    f"/create_match?error={error_msg.replace(' ', '+')}",
+                    status_code=303,
                 )
-            if not start_time:
+
+            is_valid, error_msg = validate_non_empty_string(start_time, "Start time")
+            if not is_valid:
                 return RedirectResponse(
-                    "/create_match?error=start_time_required", status_code=303
+                    f"/create_match?error={error_msg.replace(' ', '+')}",
+                    status_code=303,
                 )
-            if not location:
+
+            is_valid, error_msg = validate_non_empty_string(location, "Location")
+            if not is_valid:
                 return RedirectResponse(
-                    "/create_match?error=location_required", status_code=303
+                    f"/create_match?error={error_msg.replace(' ', '+')}",
+                    status_code=303,
                 )
 
             # Create match first

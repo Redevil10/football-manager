@@ -104,3 +104,10 @@ POSITION_DISTRIBUTION = {
     "goalkeeper_count": 1,  # Always 1 goalkeeper per team
     "substitute_gk_ratio": 0.1,  # 10% of substitutes can be goalkeepers
 }
+
+# User role constants
+USER_ROLES = {
+    "VIEWER": "viewer",
+    "MANAGER": "manager",
+}
+VALID_ROLES = [USER_ROLES["VIEWER"], USER_ROLES["MANAGER"]]  # List of valid role values
