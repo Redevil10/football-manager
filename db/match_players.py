@@ -1,9 +1,12 @@
 # db/match_players.py - Match player database operations
 
 import json
+import logging
 import sqlite3
 
 from db.connection import get_db
+
+logger = logging.getLogger(__name__)
 
 
 def get_match_players(match_id, team_id=None):
@@ -75,23 +78,22 @@ def add_match_player(match_id, player_id, team_id=None, position=None, is_starte
         match_player_id = cursor.lastrowid
         conn.commit()
         conn.close()
-        print(
-            f"Successfully added player {player_id} to match {match_id}, match_player_id={match_player_id}",
-            flush=True,
+        logger.debug(
+            f"Successfully added player {player_id} to match {match_id}, match_player_id={match_player_id}"
         )
         return match_player_id
     except sqlite3.IntegrityError as e:
-        print(
-            f"IntegrityError adding player {player_id} to match {match_id}: {e}",
-            flush=True,
+        conn.rollback()
+        logger.warning(
+            f"IntegrityError adding player {player_id} to match {match_id}: {e}"
         )
         conn.close()
         return None
     except Exception as e:
-        print(f"Error adding player {player_id} to match {match_id}: {e}", flush=True)
-        import traceback
-
-        traceback.print_exc()
+        conn.rollback()
+        logger.error(
+            f"Error adding player {player_id} to match {match_id}: {e}", exc_info=True
+        )
         conn.close()
         return None
 

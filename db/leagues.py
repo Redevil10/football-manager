@@ -1,5 +1,6 @@
 # db/leagues.py - League database operations
 
+import logging
 import sqlite3
 
 from db.club_leagues import (
@@ -8,6 +9,8 @@ from db.club_leagues import (
     is_club_in_league,
 )
 from db.connection import get_db
+
+logger = logging.getLogger(__name__)
 
 
 def get_all_leagues(club_ids=None):
@@ -101,7 +104,8 @@ def create_league(name, description=""):
         conn.close()
         return league_id
     except sqlite3.IntegrityError:
-        print(f"League {name} already exists")
+        conn.rollback()
+        logger.warning(f"League {name} already exists")
         conn.close()
         return None
 
@@ -130,7 +134,8 @@ def update_league(league_id, name=None, description=None):
             conn.close()
             return True
         except sqlite3.IntegrityError:
-            print(f"League {name} already exists")
+            conn.rollback()
+            logger.warning(f"League {name} already exists (update failed)")
             conn.close()
             return False
     conn.close()

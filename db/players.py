@@ -1,11 +1,14 @@
 # db/players.py - Player database operations
 
 import json
+import logging
 import random
 import sqlite3
 
 from core.config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
 from db.connection import get_db
+
+logger = logging.getLogger(__name__)
 
 
 def generate_random_attrs():
@@ -93,7 +96,8 @@ def add_player(name, club_id, position_pref="", alias=None):
         conn.close()
         return player_id
     except sqlite3.IntegrityError:
-        print(f"Player {name} already exists in this club")
+        conn.rollback()
+        logger.warning(f"Player {name} already exists in club_id={club_id}")
         conn.close()
         return None
 
@@ -144,7 +148,8 @@ def update_player_name(player_id, name, alias=None):
         )
         conn.commit()
     except sqlite3.IntegrityError:
-        print(f"Player {name} already exists")
+        conn.rollback()
+        logger.warning(f"Player {name} already exists (player_id={player_id})")
         pass  # Name already exists
     conn.close()
 
