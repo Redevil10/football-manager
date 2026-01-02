@@ -5,7 +5,12 @@ from fasthtml.common import *  # noqa: F403, F405
 from core.auth import get_current_user
 from core.config import USER_ROLES, VALID_ROLES
 from core.error_handling import handle_db_result, handle_route_error
-from core.validation import validate_in_list, validate_required_int
+from core.exceptions import ValidationError
+from core.validation import (
+    validate_in_list,
+    validate_non_empty_string,
+    validate_required_int,
+)
 from db import (
     create_club,
     delete_club,
@@ -103,22 +108,28 @@ def register_club_routes(rt, STYLE):
                 "/clubs?error=Only+superusers+can+create+clubs", status_code=303
             )
 
-        form = await req.form()
-        name = form.get("name", "").strip()
-        description = form.get("description", "").strip()
+        try:
+            form = await req.form()
+            name = form.get("name", "").strip()
+            description = form.get("description", "").strip()
 
-        if not name:
-            return RedirectResponse(
-                "/clubs?error=Club+name+is+required", status_code=303
-            )
+            # Validate club name
+            is_valid, error_msg = validate_non_empty_string(name, "Club name")
+            if not is_valid:
+                raise ValidationError("name", error_msg)
 
-        club_id = create_club(name, description)
-        if club_id:
-            return RedirectResponse("/clubs", status_code=303)
-        else:
-            return RedirectResponse(
-                "/clubs?error=Club+name+already+exists", status_code=303
+            club_id = create_club(name, description)
+            return handle_db_result(
+                club_id,
+                "/clubs",
+                error_redirect="/clubs",
+                error_message="Club name already exists",
+                check_none=True,
             )
+        except ValidationError as e:
+            return handle_route_error(e, "/clubs")
+        except Exception as e:
+            return handle_route_error(e, "/clubs")
 
     @rt("/club/{club_id}")
     def club_detail_page(club_id: int, req: Request = None, sess=None):

@@ -11,6 +11,9 @@ from core.auth import (
     get_user_club_ids_from_request,
 )
 from core.config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
+from core.error_handling import handle_db_result, handle_route_error
+from core.exceptions import NotFoundError, PermissionError, ValidationError
+from core.validation import validate_non_empty_string
 from db import (
     delete_player,
     find_player_by_name_or_alias,
@@ -217,11 +220,10 @@ def register_player_routes(rt, STYLE):
             form = await req.form()
             name = form.get("name", "").strip()
 
-            if not name:
-                return RedirectResponse(
-                    f"/players?error={quote('Player name cannot be empty')}",
-                    status_code=303,
-                )
+            # Validate player name
+            is_valid, error_msg = validate_non_empty_string(name, "Player name")
+            if not is_valid:
+                raise ValidationError("name", error_msg)
 
             # Check if name matches an existing player's name or alias (within the same club)
             existing_player = find_player_by_name_or_alias(name)
@@ -233,19 +235,21 @@ def register_player_routes(rt, STYLE):
                     error_msg = f"Name '{name}' matches an existing player's alias (Player: {existing_player.get('name')})"
                 else:
                     error_msg = f"Player name '{name}' already exists in this club"
-                return RedirectResponse(
-                    f"/players?error={quote(error_msg)}", status_code=303
-                )
+                raise ValidationError("name", error_msg)
 
             # Add player with club_id
-            add_player(name, club_id=target_club_id)
-            return RedirectResponse("/players", status_code=303)
-        except Exception as e:
-            logger.error(f"Error adding player: {e}", exc_info=True)
-            return RedirectResponse(
-                f"/players?error={quote(f'Error adding player: {str(e)}')}",
-                status_code=303,
+            player_id = add_player(name, club_id=target_club_id)
+            return handle_db_result(
+                player_id,
+                "/players",
+                error_redirect="/players",
+                error_message="Failed to add player",
+                check_none=True,
             )
+        except ValidationError as e:
+            return handle_route_error(e, "/players")
+        except Exception as e:
+            return handle_route_error(e, "/players")
 
     @rt("/update_player_name/{player_id}", methods=["POST"])
     async def route_update_player_name(player_id: int, req: Request, sess=None):
@@ -259,20 +263,34 @@ def register_player_routes(rt, STYLE):
         players = {p["id"]: p for p in get_all_players(club_ids)}
         player = players.get(player_id)
         if not player:
-            return RedirectResponse("/players", status_code=303)
+            raise NotFoundError("player", resource_id=player_id)
 
         if not can_user_edit(user, player.get("club_id")):
-            return RedirectResponse(f"/player/{player_id}", status_code=303)
+            raise PermissionError("edit", resource=f"player {player_id}")
 
         try:
             form = await req.form()
             name = form.get("name", "").strip()
             alias = form.get("alias", "").strip()
             alias = alias if alias else None
-            update_player_name(player_id, name, alias)
+
+            # Validate player name
+            is_valid, error_msg = validate_non_empty_string(name, "Player name")
+            if not is_valid:
+                raise ValidationError("name", error_msg)
+
+            success = update_player_name(player_id, name, alias)
+            return handle_db_result(
+                success,
+                f"/player/{player_id}",
+                error_redirect=f"/player/{player_id}",
+                error_message="Failed to update player name",
+                check_false=True,
+            )
+        except (ValidationError, NotFoundError, PermissionError) as e:
+            return handle_route_error(e, f"/player/{player_id}")
         except Exception as e:
-            logger.error(f"Error updating name/alias: {e}", exc_info=True)
-        return RedirectResponse(f"/player/{player_id}", status_code=303)
+            return handle_route_error(e, f"/player/{player_id}")
 
     @rt("/update_player_height_weight/{player_id}", methods=["POST"])
     async def route_update_player_height_weight(
@@ -288,21 +306,29 @@ def register_player_routes(rt, STYLE):
         players = {p["id"]: p for p in get_all_players(club_ids)}
         player = players.get(player_id)
         if not player:
-            return RedirectResponse("/players", status_code=303)
+            raise NotFoundError("player", resource_id=player_id)
 
         if not can_user_edit(user, player.get("club_id")):
-            return RedirectResponse(f"/player/{player_id}", status_code=303)
+            raise PermissionError("edit", resource=f"player {player_id}")
 
         try:
             form = await req.form()
             height = form.get("height", "").strip()
             weight = form.get("weight", "").strip()
-            update_player_height_weight(
+            success = update_player_height_weight(
                 player_id, height if height else None, weight if weight else None
             )
+            return handle_db_result(
+                success,
+                f"/player/{player_id}",
+                error_redirect=f"/player/{player_id}",
+                error_message="Failed to update player height/weight",
+                check_false=True,
+            )
+        except (NotFoundError, PermissionError) as e:
+            return handle_route_error(e, f"/player/{player_id}")
         except Exception as e:
-            logger.error(f"Error updating height/weight: {e}", exc_info=True)
-        return RedirectResponse(f"/player/{player_id}", status_code=303)
+            return handle_route_error(e, f"/player/{player_id}")
 
     @rt("/update_player_scores/{player_id}", methods=["POST"])
     async def route_update_player_scores(player_id: int, req: Request, sess=None):
@@ -317,10 +343,10 @@ def register_player_routes(rt, STYLE):
         player = players.get(player_id)
 
         if not player:
-            return RedirectResponse(f"/player/{player_id}", status_code=303)
+            raise NotFoundError("player", resource_id=player_id)
 
         if not can_user_edit(user, player.get("club_id")):
-            return RedirectResponse(f"/player/{player_id}", status_code=303)
+            raise PermissionError("edit", resource=f"player {player_id}")
 
         try:
             # Get form data
@@ -363,6 +389,7 @@ def register_player_routes(rt, STYLE):
                 )
         except (ValueError, TypeError, KeyError) as e:
             logger.error(f"Error updating player scores: {e}", exc_info=True)
+            return handle_route_error(e, f"/player/{player_id}")
 
         return RedirectResponse(f"/player/{player_id}", status_code=303)
 
@@ -379,10 +406,10 @@ def register_player_routes(rt, STYLE):
         player = players.get(player_id)
 
         if not player:
-            return RedirectResponse(f"/player/{player_id}", status_code=303)
+            raise NotFoundError("player", resource_id=player_id)
 
         if not can_user_edit(user, player.get("club_id")):
-            return RedirectResponse(f"/player/{player_id}", status_code=303)
+            raise PermissionError("edit", resource=f"player {player_id}")
 
         # Get form data from multipart/form-data request
         form_data = {}
@@ -391,7 +418,7 @@ def register_player_routes(rt, STYLE):
             form_data = dict(form)
         except Exception as e:
             logger.error(f"Error parsing form data: {e}", exc_info=True)
-            return RedirectResponse(f"/player/{player_id}", status_code=303)
+            return handle_route_error(e, f"/player/{player_id}")
 
         # Extract attributes from form data
         tech_attrs = {}
@@ -517,10 +544,20 @@ def register_player_routes(rt, STYLE):
             + list(gk_attrs.values())
         )
         if any(v < 1 or v > 20 for v in all_attrs):
-            return RedirectResponse(f"/player/{player_id}", status_code=303)
+            raise ValidationError(
+                "attributes", "All attribute values must be between 1 and 20"
+            )
 
-        update_player_attrs(player_id, tech_attrs, mental_attrs, phys_attrs, gk_attrs)
-        return RedirectResponse(f"/player/{player_id}", status_code=303)
+        success = update_player_attrs(
+            player_id, tech_attrs, mental_attrs, phys_attrs, gk_attrs
+        )
+        return handle_db_result(
+            success,
+            f"/player/{player_id}",
+            error_redirect=f"/player/{player_id}",
+            error_message="Failed to update player attributes",
+            check_false=True,
+        )
 
     @rt("/delete_player/{player_id}", methods=["GET", "POST"])
     def route_delete_player(player_id: int, req: Request = None, sess=None):
@@ -535,13 +572,19 @@ def register_player_routes(rt, STYLE):
         player = players.get(player_id)
 
         if not player:
-            return RedirectResponse("/players", status_code=303)
+            raise NotFoundError("player", resource_id=player_id)
 
         if not can_user_delete(user, player.get("club_id")):
-            return RedirectResponse(f"/player/{player_id}", status_code=303)
+            raise PermissionError("delete", resource=f"player {player_id}")
 
-        delete_player(player_id)
-        return RedirectResponse("/players", status_code=303)
+        success = delete_player(player_id)
+        return handle_db_result(
+            success,
+            "/players",
+            error_redirect="/players",
+            error_message="Failed to delete player",
+            check_false=True,
+        )
 
     @rt("/allocate", methods=["POST"])
     def route_allocate():
