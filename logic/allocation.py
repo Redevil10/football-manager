@@ -2,6 +2,7 @@
 
 import random
 
+from core.config import ALLOCATION_MAX_ITERATIONS, POSITION_DISTRIBUTION
 from db import (
     add_match_player,
     get_all_players,
@@ -56,9 +57,14 @@ def assign_positions(team, team_num):
     team_size = len(team)
 
     positions = []
-    positions.extend(["Goalkeeper"] * 1)
-    positions.extend(["Defender"] * max(1, int(team_size * 0.4)))
-    positions.extend(["Midfielder"] * max(1, int(team_size * 0.35)))
+    positions.extend(["Goalkeeper"] * POSITION_DISTRIBUTION["goalkeeper_count"])
+    positions.extend(
+        ["Defender"] * max(1, int(team_size * POSITION_DISTRIBUTION["defender_ratio"]))
+    )
+    positions.extend(
+        ["Midfielder"]
+        * max(1, int(team_size * POSITION_DISTRIBUTION["midfielder_ratio"]))
+    )
     positions.extend(["Forward"] * max(1, team_size - len(positions)))
 
     positions = positions[:team_size]
@@ -247,10 +253,9 @@ def allocate_two_teams(match_id, players, match, allocated_teams):
     current_diff = abs(team1_score - team2_score)
 
     improved = True
-    max_iterations = 100
     iteration = 0
 
-    while improved and iteration < max_iterations:
+    while improved and iteration < ALLOCATION_MAX_ITERATIONS:
         improved = False
         iteration += 1
 
@@ -306,9 +311,15 @@ def assign_match_positions_with_subs(starters, substitutes, team_id, match_id):
     starter_size = len(starters)
 
     starter_positions = []
-    starter_positions.extend(["Goalkeeper"] * 1)
-    starter_positions.extend(["Defender"] * max(1, int(starter_size * 0.4)))
-    starter_positions.extend(["Midfielder"] * max(1, int(starter_size * 0.35)))
+    starter_positions.extend(["Goalkeeper"] * POSITION_DISTRIBUTION["goalkeeper_count"])
+    starter_positions.extend(
+        ["Defender"]
+        * max(1, int(starter_size * POSITION_DISTRIBUTION["defender_ratio"]))
+    )
+    starter_positions.extend(
+        ["Midfielder"]
+        * max(1, int(starter_size * POSITION_DISTRIBUTION["midfielder_ratio"]))
+    )
     starter_positions.extend(
         ["Forward"] * max(1, starter_size - len(starter_positions))
     )
@@ -334,9 +345,18 @@ def assign_match_positions_with_subs(starters, substitutes, team_id, match_id):
 
     if sub_size > 0:
         sub_positions = []
-        sub_positions.extend(["Goalkeeper"] * max(0, int(sub_size * 0.1)))
-        sub_positions.extend(["Defender"] * max(0, int(sub_size * 0.4)))
-        sub_positions.extend(["Midfielder"] * max(0, int(sub_size * 0.35)))
+        sub_positions.extend(
+            ["Goalkeeper"]
+            * max(0, int(sub_size * POSITION_DISTRIBUTION["substitute_gk_ratio"]))
+        )
+        sub_positions.extend(
+            ["Defender"]
+            * max(0, int(sub_size * POSITION_DISTRIBUTION["defender_ratio"]))
+        )
+        sub_positions.extend(
+            ["Midfielder"]
+            * max(0, int(sub_size * POSITION_DISTRIBUTION["midfielder_ratio"]))
+        )
         sub_positions.extend(["Forward"] * max(0, sub_size - len(sub_positions)))
         sub_positions = sub_positions[:sub_size]
 

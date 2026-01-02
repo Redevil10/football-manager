@@ -31,6 +31,24 @@ def generate_random_gk():
     return {key: random.randint(1, 20) for key in GK_ATTRS.keys()}
 
 
+def parse_player_attributes(player_row):
+    """Parse JSON attributes from a player database row.
+
+    Args:
+        player_row: Database row (dict-like) with technical_attrs, mental_attrs,
+                   physical_attrs, and gk_attrs fields
+
+    Returns:
+        dict: Player dict with parsed attribute dictionaries
+    """
+    player_dict = dict(player_row)
+    player_dict["technical_attrs"] = json.loads(player_row["technical_attrs"] or "{}")
+    player_dict["mental_attrs"] = json.loads(player_row["mental_attrs"] or "{}")
+    player_dict["physical_attrs"] = json.loads(player_row["physical_attrs"] or "{}")
+    player_dict["gk_attrs"] = json.loads(player_row["gk_attrs"] or "{}")
+    return player_dict
+
+
 def get_all_players(club_ids=None):
     """Get all players, optionally filtered by club_ids (if None, returns all)"""
     conn = get_db()
@@ -46,12 +64,7 @@ def get_all_players(club_ids=None):
 
     result = []
     for p in players:
-        player_dict = dict(p)
-        player_dict["technical_attrs"] = json.loads(p["technical_attrs"] or "{}")
-        player_dict["mental_attrs"] = json.loads(p["mental_attrs"] or "{}")
-        player_dict["physical_attrs"] = json.loads(p["physical_attrs"] or "{}")
-        player_dict["gk_attrs"] = json.loads(p["gk_attrs"] or "{}")
-        result.append(player_dict)
+        result.append(parse_player_attributes(p))
 
     return result
 
@@ -69,12 +82,7 @@ def find_player_by_name_or_alias(name, club_ids=None):
         ).fetchone()
     conn.close()
     if player:
-        player_dict = dict(player)
-        player_dict["technical_attrs"] = json.loads(player["technical_attrs"] or "{}")
-        player_dict["mental_attrs"] = json.loads(player["mental_attrs"] or "{}")
-        player_dict["physical_attrs"] = json.loads(player["physical_attrs"] or "{}")
-        player_dict["gk_attrs"] = json.loads(player["gk_attrs"] or "{}")
-        return player_dict
+        return parse_player_attributes(player)
     return None
 
 

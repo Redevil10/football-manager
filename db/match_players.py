@@ -1,10 +1,10 @@
 # db/match_players.py - Match player database operations
 
-import json
 import logging
 import sqlite3
 
 from db.connection import get_db
+from db.players import parse_player_attributes
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +34,7 @@ def get_match_players(match_id, team_id=None):
 
     result = []
     for p in players:
-        player_dict = dict(p)
-        player_dict["technical_attrs"] = json.loads(p["technical_attrs"] or "{}")
-        player_dict["mental_attrs"] = json.loads(p["mental_attrs"] or "{}")
-        player_dict["physical_attrs"] = json.loads(p["physical_attrs"] or "{}")
-        player_dict["gk_attrs"] = json.loads(p["gk_attrs"] or "{}")
-        result.append(player_dict)
+        result.append(parse_player_attributes(p))
     return result
 
 
@@ -58,12 +53,7 @@ def get_match_signup_players(match_id):
 
     result = []
     for p in players:
-        player_dict = dict(p)
-        player_dict["technical_attrs"] = json.loads(p["technical_attrs"] or "{}")
-        player_dict["mental_attrs"] = json.loads(p["mental_attrs"] or "{}")
-        player_dict["physical_attrs"] = json.loads(p["physical_attrs"] or "{}")
-        player_dict["gk_attrs"] = json.loads(p["gk_attrs"] or "{}")
-        result.append(player_dict)
+        result.append(parse_player_attributes(p))
     return result
 
 
