@@ -21,7 +21,7 @@ if not SECRET_KEY:
     # In production, this should be set via environment variable
     SECRET_KEY = secrets.token_urlsafe(32)
     logger.warning(
-        f"Generated SECRET_KEY (set SECRET_KEY env var for persistence): {SECRET_KEY[:20]}..."
+        "Generated SECRET_KEY (set SECRET_KEY env var for persistence in production)"
     )
 
 # FastHTML's fast_app(secret_key=...) automatically handles sessions
