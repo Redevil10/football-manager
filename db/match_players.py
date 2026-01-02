@@ -2,6 +2,7 @@
 
 import logging
 import sqlite3
+from typing import Optional
 
 from db.connection import get_db
 from db.players import parse_player_attributes
@@ -9,8 +10,16 @@ from db.players import parse_player_attributes
 logger = logging.getLogger(__name__)
 
 
-def get_match_players(match_id, team_id=None):
-    """Get all players for a match, optionally filtered by team"""
+def get_match_players(match_id: int, team_id: Optional[int] = None) -> list[dict]:
+    """Get all players for a match, optionally filtered by team.
+
+    Args:
+        match_id: ID of the match
+        team_id: Optional team ID to filter by
+
+    Returns:
+        list[dict]: List of player dictionaries with parsed attributes
+    """
     conn = get_db()
     if team_id:
         players = conn.execute(
@@ -38,8 +47,15 @@ def get_match_players(match_id, team_id=None):
     return result
 
 
-def get_match_signup_players(match_id):
-    """Get all signup players for a match (players with team_id = NULL)"""
+def get_match_signup_players(match_id: int) -> list[dict]:
+    """Get all signup players for a match (players with team_id = NULL).
+
+    Args:
+        match_id: ID of the match
+
+    Returns:
+        list[dict]: List of signup player dictionaries with parsed attributes
+    """
     conn = get_db()
     players = conn.execute(
         """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs, p.physical_attrs, p.gk_attrs
@@ -57,8 +73,26 @@ def get_match_signup_players(match_id):
     return result
 
 
-def add_match_player(match_id, player_id, team_id=None, position=None, is_starter=0):
-    """Add a player to a match"""
+def add_match_player(
+    match_id: int,
+    player_id: int,
+    team_id: Optional[int] = None,
+    position: Optional[str] = None,
+    is_starter: int = 0,
+) -> Optional[int]:
+    """Add a player to a match.
+
+    Args:
+        match_id: ID of the match
+        player_id: ID of the player
+        team_id: Optional team ID to assign player to
+        position: Optional position to assign
+        is_starter: 1 for starter, 0 for substitute (default: 0)
+
+    Returns:
+        int: Match player ID on success
+        None: On error
+    """
     conn = get_db()
     try:
         cursor = conn.execute(
@@ -93,8 +127,12 @@ _UNSET = object()
 
 
 def update_match_player(
-    match_player_id, team_id=_UNSET, position=_UNSET, is_starter=_UNSET, rating=_UNSET
-):
+    match_player_id: int,
+    team_id: object = _UNSET,
+    position: object = _UNSET,
+    is_starter: object = _UNSET,
+    rating: object = _UNSET,
+) -> bool:
     """Update a match player.
 
     Args:
@@ -173,7 +211,7 @@ def update_match_player(
         conn.close()
 
 
-def remove_match_player(match_player_id):
+def remove_match_player(match_player_id: int) -> bool:
     """Remove a player from a match.
 
     Args:
@@ -205,7 +243,7 @@ def remove_match_player(match_player_id):
         conn.close()
 
 
-def remove_all_match_signup_players(match_id):
+def remove_all_match_signup_players(match_id: int) -> bool:
     """Remove all signup players (players with team_id = NULL) from a match.
 
     Args:
@@ -233,7 +271,7 @@ def remove_all_match_signup_players(match_id):
         conn.close()
 
 
-def swap_match_players(match_player1_id, match_player2_id):
+def swap_match_players(match_player1_id: int, match_player2_id: int) -> bool:
     """Swap two match players' teams and positions.
 
     Args:

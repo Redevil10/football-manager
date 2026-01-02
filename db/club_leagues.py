@@ -8,7 +8,7 @@ from db.connection import get_db
 logger = logging.getLogger(__name__)
 
 
-def add_club_to_league(club_id, league_id):
+def add_club_to_league(club_id: int, league_id: int) -> bool:
     """Add a club to a league.
 
     Args:
@@ -43,7 +43,7 @@ def add_club_to_league(club_id, league_id):
         conn.close()
 
 
-def remove_club_from_league(club_id, league_id):
+def remove_club_from_league(club_id: int, league_id: int) -> bool:
     """Remove a club from a league.
 
     Args:
@@ -78,8 +78,15 @@ def remove_club_from_league(club_id, league_id):
         conn.close()
 
 
-def get_clubs_in_league(league_id):
-    """Get all clubs participating in a league"""
+def get_clubs_in_league(league_id: int) -> list[dict]:
+    """Get all clubs participating in a league.
+
+    Args:
+        league_id: ID of the league
+
+    Returns:
+        list[dict]: List of club dictionaries
+    """
     conn = get_db()
     clubs = conn.execute(
         """SELECT c.* FROM clubs c
@@ -92,8 +99,15 @@ def get_clubs_in_league(league_id):
     return [dict(club) for club in clubs]
 
 
-def get_leagues_for_club(club_id):
-    """Get all leagues a club participates in"""
+def get_leagues_for_club(club_id: int) -> list[dict]:
+    """Get all leagues a club participates in.
+
+    Args:
+        club_id: ID of the club
+
+    Returns:
+        list[dict]: List of league dictionaries
+    """
     conn = get_db()
     leagues = conn.execute(
         """SELECT l.* FROM leagues l
@@ -106,8 +120,15 @@ def get_leagues_for_club(club_id):
     return [dict(league) for league in leagues]
 
 
-def get_league_ids_for_clubs(club_ids):
-    """Get league IDs for a list of clubs"""
+def get_league_ids_for_clubs(club_ids: list[int]) -> list[int]:
+    """Get league IDs for a list of clubs.
+
+    Args:
+        club_ids: List of club IDs
+
+    Returns:
+        list[int]: List of league IDs
+    """
     if not club_ids:
         return []
     conn = get_db()
@@ -119,8 +140,16 @@ def get_league_ids_for_clubs(club_ids):
     return [row["league_id"] for row in league_ids]
 
 
-def is_club_in_league(club_id, league_id):
-    """Check if a club is in a league"""
+def is_club_in_league(club_id: int, league_id: int) -> bool:
+    """Check if a club is in a league.
+
+    Args:
+        club_id: ID of the club
+        league_id: ID of the league
+
+    Returns:
+        bool: True if club is in league, False otherwise
+    """
     conn = get_db()
     result = conn.execute(
         "SELECT 1 FROM club_leagues WHERE club_id = ? AND league_id = ?",

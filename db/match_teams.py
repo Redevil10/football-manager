@@ -1,14 +1,22 @@
 # db/match_teams.py - Match team database operations
 
 import logging
+from typing import Optional
 
 from db.connection import get_db
 
 logger = logging.getLogger(__name__)
 
 
-def get_match_teams(match_id):
-    """Get all teams for a match"""
+def get_match_teams(match_id: int) -> list[dict]:
+    """Get all teams for a match.
+
+    Args:
+        match_id: ID of the match
+
+    Returns:
+        list[dict]: List of team dictionaries
+    """
     conn = get_db()
     teams = conn.execute(
         "SELECT * FROM match_teams WHERE match_id = ? ORDER BY team_number",
@@ -19,8 +27,12 @@ def get_match_teams(match_id):
 
 
 def create_match_team(
-    match_id, team_number, team_name, jersey_color, should_allocate=1
-):
+    match_id: int,
+    team_number: int,
+    team_name: str,
+    jersey_color: str,
+    should_allocate: int = 1,
+) -> Optional[int]:
     """Create a team for a match.
 
     Args:
@@ -81,8 +93,13 @@ def create_match_team(
 
 
 def update_match_team(
-    team_id, team_name, jersey_color, score=None, captain_id=None, should_allocate=None
-):
+    team_id: int,
+    team_name: str,
+    jersey_color: str,
+    score: Optional[int] = None,
+    captain_id: Optional[int] = None,
+    should_allocate: Optional[int] = None,
+) -> bool:
     """Update a match team.
 
     Args:
@@ -137,7 +154,7 @@ def update_match_team(
         conn.close()
 
 
-def update_team_captain(team_id, captain_id):
+def update_team_captain(team_id: int, captain_id: int) -> bool:
     """Update team captain.
 
     Args:
@@ -167,7 +184,7 @@ def update_team_captain(team_id, captain_id):
         conn.close()
 
 
-def delete_match_team(team_id):
+def delete_match_team(team_id: int) -> bool:
     """Delete a match team.
 
     Args:
