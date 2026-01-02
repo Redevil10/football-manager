@@ -54,7 +54,7 @@ class TestRenderPlayerTable:
     @patch("render.players.calculate_player_overall")
     @patch("render.common.can_user_delete")
     def test_render_player_table_with_delete_permission(
-        self, mock_can_delete, mock_calculate
+        self, mock_can_delete, mock_calculate, temp_db
     ):
         """Test rendering player table with delete permission"""
         mock_calculate.return_value = 85.5
@@ -110,6 +110,7 @@ class TestRenderPlayerDetailForm:
         mock_tech,
         mock_overall,
         sample_player,
+        temp_db,
     ):
         """Test rendering player detail form in read-only mode"""
         mock_overall.return_value = 85.5
@@ -142,6 +143,7 @@ class TestRenderPlayerDetailForm:
         mock_tech,
         mock_overall,
         sample_player,
+        temp_db,
     ):
         """Test rendering player detail form in editable mode"""
         mock_overall.return_value = 85.5
