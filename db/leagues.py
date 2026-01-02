@@ -2,7 +2,11 @@
 
 import sqlite3
 
-from db.club_leagues import get_league_ids_for_clubs
+from db.club_leagues import (
+    add_club_to_league,
+    get_league_ids_for_clubs,
+    is_club_in_league,
+)
 from db.connection import get_db
 
 
@@ -48,8 +52,6 @@ def get_league(league_id, club_ids=None):
 
     # If club_ids provided, check if any of the clubs participate in this league
     if club_ids is not None and len(club_ids) > 0:
-        from db.club_leagues import is_club_in_league
-
         has_access = any(is_club_in_league(cid, league_id) for cid in club_ids)
         if not has_access:
             return None
@@ -66,8 +68,6 @@ def get_or_create_friendly_league(club_id):
     if league:
         league_id = dict(league)["id"]
         # Make sure club is in the league
-        from db.club_leagues import add_club_to_league
-
         add_club_to_league(club_id, league_id)
         conn.close()
         return league_id
@@ -82,7 +82,6 @@ def get_or_create_friendly_league(club_id):
     conn.close()
 
     # Add club to the league
-    from db.club_leagues import add_club_to_league
 
     add_club_to_league(club_id, league_id)
 

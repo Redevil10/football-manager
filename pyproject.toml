@@ -8,6 +8,7 @@ dependencies = [
     "python-fasthtml",
     "uvicorn>=0.38.0",
     "fasthtml-hf",
+    "bcrypt>=4.0.0",
 ]
 
 [project.optional-dependencies]

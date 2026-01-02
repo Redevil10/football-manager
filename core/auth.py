@@ -1,28 +1,107 @@
 # auth.py - Authentication and authorization utilities
 
 import hashlib
-import secrets
+import logging
 from functools import wraps
 from typing import List, Optional
 
+import bcrypt
 from fasthtml.common import RedirectResponse, Request
 
+from db import get_clubs_in_league, get_match
+from db.clubs import get_all_clubs
+from db.users import (
+    get_user_by_id,
+    get_user_by_username,
+    get_user_club_ids,
+    get_user_club_role,
+    update_user_password,
+)
 
-# Password hashing using SHA256 with salt (for production, consider bcrypt)
+logger = logging.getLogger(__name__)
+
+# Password hashing using bcrypt (secure password hashing)
+# Bcrypt has a 72-byte limit, so we hash longer passwords with SHA256 first
+BCRYPT_MAX_PASSWORD_LENGTH = 72
+
+
 def hash_password(password: str) -> tuple[str, str]:
-    """Hash a password and return (hash, salt)"""
-    salt = secrets.token_hex(16)
-    hash_obj = hashlib.sha256()
-    hash_obj.update((password + salt).encode("utf-8"))
-    password_hash = hash_obj.hexdigest()
-    return password_hash, salt
+    """Hash a password using bcrypt and return (hash, salt).
+
+    Bcrypt automatically handles salt generation and includes it in the hash.
+    We return the salt separately for database compatibility, but it's embedded in the hash.
+
+    For passwords longer than 72 bytes (bcrypt's limit), we first hash with SHA256,
+    then bcrypt the SHA256 hash. This is a common pattern (used by Django, etc.)
+    to handle long passwords securely.
+
+    Args:
+        password: Plain text password to hash
+
+    Returns:
+        tuple: (password_hash, salt) where salt is the bcrypt salt string
+    """
+    # Generate salt and hash password (bcrypt handles salt internally)
+    salt = bcrypt.gensalt()
+
+    # Bcrypt has a 72-byte limit, so for longer passwords, hash with SHA256 first
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) > BCRYPT_MAX_PASSWORD_LENGTH:
+        # Hash with SHA256 first, then bcrypt the hash
+        # This is a standard approach for handling long passwords
+        sha256_hash = hashlib.sha256(password_bytes).hexdigest()
+        password_to_hash = sha256_hash.encode("utf-8")
+    else:
+        password_to_hash = password_bytes
+
+    password_hash = bcrypt.hashpw(password_to_hash, salt).decode("utf-8")
+    # Return salt as string for database compatibility
+    return password_hash, salt.decode("utf-8")
 
 
-def verify_password(password: str, password_hash: str, salt: str) -> bool:
-    """Verify a password against a hash and salt"""
-    hash_obj = hashlib.sha256()
-    hash_obj.update((password + salt).encode("utf-8"))
-    return hash_obj.hexdigest() == password_hash
+def verify_password(password: str, password_hash: str, salt: str = None) -> bool:
+    """Verify a password against a bcrypt hash.
+
+    Args:
+        password: Plain text password to verify
+        password_hash: Bcrypt hash (includes salt internally)
+        salt: Optional salt (for backward compatibility with old SHA256 hashes)
+
+    Returns:
+        bool: True if password matches, False otherwise
+    """
+    # Check if this is a bcrypt hash (new passwords) or legacy SHA256 hash
+    is_bcrypt_hash = (
+        password_hash.startswith("$2b$")
+        or password_hash.startswith("$2a$")
+        or password_hash.startswith("$2y$")
+    )
+
+    if is_bcrypt_hash:
+        # New bcrypt password - use bcrypt verification
+        try:
+            password_bytes = password.encode("utf-8")
+
+            # Handle long passwords the same way as hash_password
+            if len(password_bytes) > BCRYPT_MAX_PASSWORD_LENGTH:
+                # Hash with SHA256 first, then verify with bcrypt
+                sha256_hash = hashlib.sha256(password_bytes).hexdigest()
+                password_to_verify = sha256_hash.encode("utf-8")
+            else:
+                password_to_verify = password_bytes
+
+            return bcrypt.checkpw(password_to_verify, password_hash.encode("utf-8"))
+        except (ValueError, TypeError):
+            # If bcrypt verification fails due to encoding issues, return False
+            # Don't fall back to SHA256 for bcrypt hashes
+            return False
+    else:
+        # Legacy SHA256 password - use SHA256 verification
+        if salt:
+            hash_obj = hashlib.sha256()
+            hash_obj.update((password + salt).encode("utf-8"))
+            return hash_obj.hexdigest() == password_hash
+        return False
 
 
 def get_session_from_request(req: Request):
@@ -54,19 +133,40 @@ def get_session_from_request(req: Request):
 def login_user(req: Request, username: str, password: str, sess: dict = None) -> bool:
     """Attempt to login a user. Returns True if successful, False otherwise.
 
+    Automatically migrates old SHA256 passwords to bcrypt on successful login.
+
     Args:
         req: FastHTML Request object
         username: Username to login
         password: Password to verify
         sess: Session dict (automatically injected by FastHTML if sessions enabled)
     """
-    from db.users import get_user_by_username
-
     user = get_user_by_username(username)
     if not user:
         return False
 
-    if verify_password(password, user["password_hash"], user["password_salt"]):
+    password_hash = user["password_hash"]
+    password_salt = user.get("password_salt")
+
+    # Try to verify password (supports both bcrypt and legacy SHA256)
+    if verify_password(password, password_hash, password_salt):
+        # Check if this is a legacy SHA256 password (not bcrypt)
+        # Bcrypt hashes start with $2b$, $2a$, or $2y$
+        is_legacy_password = not (
+            password_hash.startswith("$2b$")
+            or password_hash.startswith("$2a$")
+            or password_hash.startswith("$2y$")
+        )
+
+        # Migrate legacy passwords to bcrypt
+        if is_legacy_password:
+            try:
+                new_hash, new_salt = hash_password(password)
+                update_user_password(user["id"], new_hash, new_salt)
+            except Exception as e:
+                # Log error but don't fail login - password was correct
+                logger.warning(f"Failed to migrate password for user {username}: {e}")
+
         # FastHTML injects the session as a parameter - use it directly
         # The session parameter persists via cookies automatically
         if sess is None:
@@ -76,7 +176,7 @@ def login_user(req: Request, username: str, password: str, sess: dict = None) ->
             sess["user_id"] = user["id"]
             return True
         except Exception as e:
-            print(f"Error setting session: {e}")
+            logger.error(f"Error setting session: {e}")
             return False
 
     return False
@@ -103,8 +203,6 @@ def get_current_user(req: Request, sess: dict = None) -> Optional[dict]:
     if sess is not None and isinstance(sess, dict):
         user_id = sess.get("user_id")
         if user_id:
-            from db.users import get_user_by_id
-
             return get_user_by_id(user_id)
 
     if req is not None:
@@ -112,8 +210,6 @@ def get_current_user(req: Request, sess: dict = None) -> Optional[dict]:
         if isinstance(sess, dict):
             user_id = sess.get("user_id")
             if user_id:
-                from db.users import get_user_by_id
-
                 return get_user_by_id(user_id)
 
     return None
@@ -123,13 +219,10 @@ def get_user_accessible_club_ids(user: dict) -> List[int]:
     """Get list of club IDs the user can access"""
     if user.get("is_superuser"):
         # Superuser can access all clubs
-        from db.clubs import get_all_clubs
 
         clubs = get_all_clubs()
         return [club["id"] for club in clubs]
     else:
-        from db.users import get_user_club_ids
-
         return get_user_club_ids(user["id"])
 
 
@@ -137,8 +230,6 @@ def check_club_access(user: dict, club_id: int) -> bool:
     """Check if user has access to a specific club"""
     if user.get("is_superuser"):
         return True
-
-    from db.users import get_user_club_ids
 
     accessible_clubs = get_user_club_ids(user["id"])
     return club_id in accessible_clubs
@@ -150,8 +241,6 @@ def check_club_permission(
     """Check if user has required permission (viewer or manager) for a club"""
     if user.get("is_superuser"):
         return True
-
-    from db.users import get_user_club_role
 
     user_role = get_user_club_role(user["id"], club_id)
     if not user_role:
@@ -227,9 +316,6 @@ def can_user_edit_match(user: dict, match_id: int) -> bool:
     if user.get("is_superuser"):
         return True
 
-    from db.club_leagues import get_clubs_in_league
-    from db.matches import get_match
-
     match = get_match(match_id)
     if not match:
         return False
@@ -259,8 +345,6 @@ def can_user_edit_league(user: dict, league_id: int) -> bool:
         return False
     if user.get("is_superuser"):
         return True
-
-    from db.club_leagues import get_clubs_in_league
 
     # Get clubs that participate in this league
     clubs_in_league = get_clubs_in_league(league_id)
