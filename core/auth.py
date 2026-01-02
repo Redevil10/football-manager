@@ -16,7 +16,6 @@ from db.users import (
     get_user_by_username,
     get_user_club_ids,
     get_user_club_role,
-    update_user_password,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,42 +65,27 @@ def verify_password(password: str, password_hash: str, salt: str = None) -> bool
     Args:
         password: Plain text password to verify
         password_hash: Bcrypt hash (includes salt internally)
-        salt: Optional salt (for backward compatibility with old SHA256 hashes)
+        salt: Optional salt (unused, kept for API compatibility)
 
     Returns:
         bool: True if password matches, False otherwise
     """
-    # Check if this is a bcrypt hash (new passwords) or legacy SHA256 hash
-    is_bcrypt_hash = (
-        password_hash.startswith("$2b$")
-        or password_hash.startswith("$2a$")
-        or password_hash.startswith("$2y$")
-    )
+    # Verify password using bcrypt
+    try:
+        password_bytes = password.encode("utf-8")
 
-    if is_bcrypt_hash:
-        # New bcrypt password - use bcrypt verification
-        try:
-            password_bytes = password.encode("utf-8")
+        # Handle long passwords the same way as hash_password
+        # For passwords >72 bytes, hash with SHA256 first, then verify with bcrypt
+        # This is a standard pattern (used by Django, etc.) for handling long passwords
+        if len(password_bytes) > BCRYPT_MAX_PASSWORD_LENGTH:
+            sha256_hash = hashlib.sha256(password_bytes).hexdigest()
+            password_to_verify = sha256_hash.encode("utf-8")
+        else:
+            password_to_verify = password_bytes
 
-            # Handle long passwords the same way as hash_password
-            if len(password_bytes) > BCRYPT_MAX_PASSWORD_LENGTH:
-                # Hash with SHA256 first, then verify with bcrypt
-                sha256_hash = hashlib.sha256(password_bytes).hexdigest()
-                password_to_verify = sha256_hash.encode("utf-8")
-            else:
-                password_to_verify = password_bytes
-
-            return bcrypt.checkpw(password_to_verify, password_hash.encode("utf-8"))
-        except (ValueError, TypeError):
-            # If bcrypt verification fails due to encoding issues, return False
-            # Don't fall back to SHA256 for bcrypt hashes
-            return False
-    else:
-        # Legacy SHA256 password - use SHA256 verification
-        if salt:
-            hash_obj = hashlib.sha256()
-            hash_obj.update((password + salt).encode("utf-8"))
-            return hash_obj.hexdigest() == password_hash
+        return bcrypt.checkpw(password_to_verify, password_hash.encode("utf-8"))
+    except (ValueError, TypeError):
+        # If bcrypt verification fails due to encoding issues, return False
         return False
 
 
@@ -140,8 +124,6 @@ def get_session_from_request(req: Request) -> dict:
 def login_user(req: Request, username: str, password: str, sess: dict = None) -> bool:
     """Attempt to login a user.
 
-    Automatically migrates old SHA256 passwords to bcrypt on successful login.
-
     Args:
         req: FastHTML Request object
         username: Username to login
@@ -158,25 +140,8 @@ def login_user(req: Request, username: str, password: str, sess: dict = None) ->
     password_hash = user["password_hash"]
     password_salt = user.get("password_salt")
 
-    # Try to verify password (supports both bcrypt and legacy SHA256)
+    # Verify password using bcrypt
     if verify_password(password, password_hash, password_salt):
-        # Check if this is a legacy SHA256 password (not bcrypt)
-        # Bcrypt hashes start with $2b$, $2a$, or $2y$
-        is_legacy_password = not (
-            password_hash.startswith("$2b$")
-            or password_hash.startswith("$2a$")
-            or password_hash.startswith("$2y$")
-        )
-
-        # Migrate legacy passwords to bcrypt
-        if is_legacy_password:
-            try:
-                new_hash, new_salt = hash_password(password)
-                update_user_password(user["id"], new_hash, new_salt)
-            except Exception as e:
-                # Log error but don't fail login - password was correct
-                logger.warning(f"Failed to migrate password for user {username}: {e}")
-
         # FastHTML injects the session as a parameter - use it directly
         # The session parameter persists via cookies automatically
         if sess is None:
