@@ -9,6 +9,7 @@ dependencies = [
     "uvicorn>=0.38.0",
     "fasthtml-hf",
     "bcrypt>=4.0.0",
+    "filelock>=3.20.1",  # Security: Fix Dependabot alert
 ]
 
 [project.optional-dependencies]
