@@ -1,6 +1,10 @@
 # db/match_teams.py - Match team database operations
 
+import logging
+
 from db.connection import get_db
+
+logger = logging.getLogger(__name__)
 
 
 def get_match_teams(match_id):
@@ -52,10 +56,11 @@ def create_match_team(
         conn.close()
         return team_id
     except Exception as e:
-        print(f"Error creating match team: {e}")
-        import traceback
-
-        traceback.print_exc()
+        conn.rollback()
+        logger.error(
+            f"Error creating match team (match_id={match_id}, team_number={team_number}): {e}",
+            exc_info=True,
+        )
         conn.close()
         return None
 

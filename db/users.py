@@ -1,8 +1,11 @@
 # db/users.py - User database operations
 
+import logging
 import sqlite3
 
 from db.connection import get_db
+
+logger = logging.getLogger(__name__)
 
 
 def create_user(username, password_hash, password_salt, email=None, is_superuser=False):
@@ -15,16 +18,15 @@ def create_user(username, password_hash, password_salt, email=None, is_superuser
         )
         user_id = cursor.lastrowid
         conn.commit()
-        print(f"User '{username}' created successfully with ID: {user_id}")
+        logger.info(f"User '{username}' created successfully with ID: {user_id}")
         return user_id
     except sqlite3.IntegrityError as e:
-        print(f"Failed to create user '{username}': IntegrityError - {e}")
+        conn.rollback()
+        logger.warning(f"Failed to create user '{username}': IntegrityError - {e}")
         return None
     except Exception as e:
-        print(f"Failed to create user '{username}': {e}")
-        import traceback
-
-        traceback.print_exc()
+        conn.rollback()
+        logger.error(f"Failed to create user '{username}': {e}", exc_info=True)
         return None
     finally:
         conn.close()
@@ -110,10 +112,11 @@ def update_user_club_role(user_id, club_id, role):
         conn.commit()
         return True
     except Exception as e:
-        print(f"Failed to update user club role: {e}")
-        import traceback
-
-        traceback.print_exc()
+        conn.rollback()
+        logger.error(
+            f"Failed to update user club role for user_id={user_id}, club_id={club_id}: {e}",
+            exc_info=True,
+        )
         return False
     finally:
         conn.close()
@@ -140,10 +143,10 @@ def update_user_password(user_id, password_hash, password_salt):
         conn.commit()
         return True
     except Exception as e:
-        print(f"Failed to update password for user ID {user_id}: {e}")
-        import traceback
-
-        traceback.print_exc()
+        conn.rollback()
+        logger.error(
+            f"Failed to update password for user ID {user_id}: {e}", exc_info=True
+        )
         return False
     finally:
         conn.close()
@@ -160,10 +163,8 @@ def delete_user(user_id):
         conn.commit()
         return True
     except Exception as e:
-        print(f"Failed to delete user ID {user_id}: {e}")
-        import traceback
-
-        traceback.print_exc()
+        conn.rollback()
+        logger.error(f"Failed to delete user ID {user_id}: {e}", exc_info=True)
         return False
     finally:
         conn.close()
@@ -212,13 +213,12 @@ def update_user(user_id, username=None, email=None):
         conn.commit()
         return True
     except sqlite3.IntegrityError as e:
-        print(f"Failed to update user ID {user_id}: IntegrityError - {e}")
+        conn.rollback()
+        logger.warning(f"Failed to update user ID {user_id}: IntegrityError - {e}")
         return False
     except Exception as e:
-        print(f"Failed to update user ID {user_id}: {e}")
-        import traceback
-
-        traceback.print_exc()
+        conn.rollback()
+        logger.error(f"Failed to update user ID {user_id}: {e}", exc_info=True)
         return False
     finally:
         conn.close()
@@ -235,10 +235,11 @@ def update_user_superuser_status(user_id, is_superuser):
         conn.commit()
         return True
     except Exception as e:
-        print(f"Failed to update superuser status for user ID {user_id}: {e}")
-        import traceback
-
-        traceback.print_exc()
+        conn.rollback()
+        logger.error(
+            f"Failed to update superuser status for user ID {user_id}: {e}",
+            exc_info=True,
+        )
         return False
     finally:
         conn.close()
