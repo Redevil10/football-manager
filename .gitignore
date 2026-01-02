@@ -21,4 +21,4 @@ deploy_hf.sh
 data/
 REFACTORING_SUMMARY.md
 .cursor/
-docs/  # AI generated documentation
+docs/
