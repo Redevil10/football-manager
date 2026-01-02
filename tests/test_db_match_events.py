@@ -176,3 +176,85 @@ class TestDeleteMatchEvent:
         # Verify deleted
         events = get_match_events(sample_match)
         assert len(events) == 0
+
+    def test_delete_match_event_not_found(self, temp_db):
+        """Test deleting non-existent match event"""
+        result = delete_match_event(99999)
+
+        # Should return False when event not found
+        assert result is False
+
+    def test_delete_match_event_multiple_events(
+        self, temp_db, sample_match, sample_team_and_player
+    ):
+        """Test deleting one event doesn't affect others"""
+        event1_id = add_match_event(
+            sample_match,
+            "goal",
+            sample_team_and_player["player_id"],
+            sample_team_and_player["team_id"],
+            10,
+        )
+        # Create second event (don't need to store ID)
+        add_match_event(
+            sample_match,
+            "assist",
+            sample_team_and_player["player_id"],
+            sample_team_and_player["team_id"],
+            10,
+        )
+
+        # Delete one event
+        delete_match_event(event1_id)
+
+        # Verify other event still exists
+        events = get_match_events(sample_match)
+        assert len(events) == 1
+        assert events[0]["event_type"] == "assist"
+
+
+class TestGetMatchEventsEdgeCases:
+    """Tests for get_match_events edge cases"""
+
+    def test_get_match_events_with_player_and_team_names(
+        self, temp_db, sample_match, sample_team_and_player
+    ):
+        """Test that events include player_name and team_name"""
+        add_match_event(
+            sample_match,
+            "goal",
+            sample_team_and_player["player_id"],
+            sample_team_and_player["team_id"],
+            10,
+        )
+
+        events = get_match_events(sample_match)
+        assert len(events) == 1
+        # Should have player_name and team_name from JOIN
+        assert "player_name" in events[0]
+        assert "team_name" in events[0]
+
+    def test_get_match_events_with_none_minute(
+        self, temp_db, sample_match, sample_team_and_player
+    ):
+        """Test events with None minute are handled correctly"""
+        # Add events with and without minute
+        add_match_event(
+            sample_match,
+            "goal",
+            sample_team_and_player["player_id"],
+            sample_team_and_player["team_id"],
+            10,
+        )
+        add_match_event(
+            sample_match,
+            "yellow_card",
+            sample_team_and_player["player_id"],
+            sample_team_and_player["team_id"],
+            None,  # No minute
+        )
+
+        events = get_match_events(sample_match)
+        assert len(events) == 2
+        # Events should be ordered by minute (None should come last or first depending on SQL)
+        assert events[0]["minute"] == 10 or events[1]["minute"] == 10

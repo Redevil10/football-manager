@@ -358,3 +358,63 @@ class TestSwapMatchPlayers:
         assert p2["team_id"] == sample_teams["team1_id"]
         assert p2["position"] == "Forward"
         assert p2["is_starter"] == 1
+
+
+class TestUpdateMatchPlayerEdgeCases:
+    """Tests for update_match_player edge cases"""
+
+    def test_update_match_player_not_found(self, temp_db):
+        """Test updating non-existent match player"""
+        result = update_match_player(99999, team_id=1)
+
+        # Should return False when match player not found
+        assert result is False
+
+    def test_update_match_player_all_fields(
+        self, temp_db, sample_match, sample_players, sample_teams
+    ):
+        """Test updating all fields at once"""
+        match_player_id = add_match_player(
+            sample_match,
+            sample_players["player1_id"],
+            sample_teams["team1_id"],
+            "Forward",
+            0,
+        )
+
+        # Update all fields
+        result = update_match_player(
+            match_player_id,
+            team_id=sample_teams["team2_id"],
+            position="Defender",
+            is_starter=1,
+            rating=8.5,
+        )
+
+        assert result is True
+
+        # Verify all updates
+        from db.connection import get_db
+
+        conn = get_db()
+        result = conn.execute(
+            "SELECT team_id, position, is_starter, rating FROM match_players WHERE id = ?",
+            (match_player_id,),
+        ).fetchone()
+        conn.close()
+
+        assert result["team_id"] == sample_teams["team2_id"]
+        assert result["position"] == "Defender"
+        assert result["is_starter"] == 1
+        assert result["rating"] == 8.5
+
+
+class TestRemoveMatchPlayerEdgeCases:
+    """Tests for remove_match_player edge cases"""
+
+    def test_remove_match_player_not_found(self, temp_db):
+        """Test removing non-existent match player"""
+        result = remove_match_player(99999)
+
+        # Should return False when match player not found
+        assert result is False
