@@ -1,9 +1,19 @@
 # routes/matches.py - Match routes
 
+import json
+import logging
+import traceback
+from urllib.parse import urlencode
+
 from fasthtml.common import *
 from fasthtml.common import RedirectResponse
 
-from core.auth import get_current_user, get_user_club_ids_from_request
+from core.auth import (
+    can_user_edit_match,
+    check_club_permission,
+    get_current_user,
+    get_user_club_ids_from_request,
+)
 from db import (
     add_match_event,
     add_match_player,
@@ -16,6 +26,7 @@ from db import (
     get_all_matches,
     get_all_players,
     get_db,
+    get_last_created_match,
     get_last_match_by_league,
     get_league,
     get_match,
@@ -31,15 +42,22 @@ from db import (
     update_match_team,
     update_team_captain,
 )
+from db.club_leagues import add_club_to_league, is_club_in_league
+from db.users import get_user_club_ids
 from logic import (
     allocate_match_teams,
     calculate_player_overall,
+    import_players,
+    parse_signup_text,
 )
 from render import (
+    format_match_name,
     render_all_matches,
     render_match_detail,
     render_navbar,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def register_match_routes(rt, STYLE):
@@ -48,8 +66,6 @@ def register_match_routes(rt, STYLE):
     @rt("/matches")
     def matches_page(req: Request = None, sess=None):
         """All matches page - shows all matches across all leagues"""
-        from core.auth import get_current_user, get_user_club_ids_from_request
-
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
@@ -83,8 +99,6 @@ def register_match_routes(rt, STYLE):
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
-
-        from db import get_last_created_match
 
         club_ids = get_user_club_ids_from_request(req, sess)
         # Show only leagues where user's clubs participate
@@ -460,10 +474,6 @@ def register_match_routes(rt, STYLE):
     @rt("/api/get_last_match/{league_id}")
     def api_get_last_match(league_id: int):
         """API endpoint to get last match info for prefilling"""
-        import json
-
-        from fasthtml.common import Response
-
         last_match = get_last_match_by_league(league_id)
         if last_match:
             match_id = last_match.get("id")
@@ -511,8 +521,6 @@ def register_match_routes(rt, STYLE):
     @rt("/create_match/{league_id}")
     def create_match_page_with_league(league_id: int):
         """Create match page for a specific league - redirects with league_id parameter"""
-        from urllib.parse import urlencode
-
         return RedirectResponse(
             f"/create_match?{urlencode({'league_id': league_id})}", status_code=303
         )
@@ -553,10 +561,6 @@ def register_match_routes(rt, STYLE):
 
             # Check authorization and ensure user's club is in the league
             if not user.get("is_superuser"):
-                from core.auth import check_club_permission
-                from db.club_leagues import add_club_to_league, is_club_in_league
-                from db.users import get_user_club_ids
-
                 # Get user's clubs where they are manager
                 user_club_ids = get_user_club_ids(user["id"])
                 manager_club_ids = [
@@ -628,8 +632,6 @@ def register_match_routes(rt, STYLE):
                     max_players,
                 )
             except Exception:
-                import traceback
-
                 traceback.print_exc()
                 return RedirectResponse("/create_match?error=db_error", status_code=303)
 
@@ -692,8 +694,6 @@ def register_match_routes(rt, STYLE):
             return RedirectResponse(f"/match/{match_id}", status_code=303)
 
         except Exception:
-            import traceback
-
             traceback.print_exc()
             return RedirectResponse("/matches", status_code=303)
 
@@ -740,8 +740,6 @@ def register_match_routes(rt, STYLE):
                     "gk_attrs": mp["gk_attrs"],
                 }
             )
-
-        from render import format_match_name
 
         return Html(
             Head(
@@ -830,9 +828,7 @@ def register_match_routes(rt, STYLE):
                 user=user,
             )
         except Exception as e:
-            print(f"Error in allocate_match: {e}")
-            import traceback
-
+            logger.error(f"Error in allocate_match: {e}", exc_info=True)
             traceback.print_exc()
             return Div(cls="container-white")(
                 P(f"Error: {str(e)}", style="text-align: center; color: #dc3545;")
@@ -901,10 +897,7 @@ def register_match_routes(rt, STYLE):
                 user=user,
             )
         except Exception as e:
-            print(f"Error in reset_match_teams: {e}")
-            import traceback
-
-            traceback.print_exc()
+            logger.error(f"Error in reset_match_teams: {e}", exc_info=True)
             return Div(cls="container-white")(
                 P(f"Error: {str(e)}", style="text-align: center; color: #dc3545;")
             )
@@ -917,12 +910,8 @@ def register_match_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         # Check authorization
-        from core.auth import can_user_edit_match
-
         if not can_user_edit_match(user, match_id):
             return RedirectResponse(f"/match/{match_id}", status_code=303)
-
-        from render import format_match_name
 
         match = get_match(match_id)
         if not match:
@@ -1270,8 +1259,6 @@ def register_match_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         # Check authorization
-        from core.auth import can_user_edit_match
-
         if not can_user_edit_match(user, match_id):
             return RedirectResponse(f"/match/{match_id}", status_code=303)
 
@@ -1386,8 +1373,6 @@ def register_match_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         # Check authorization
-        from core.auth import can_user_edit_match
-
         if not can_user_edit_match(user, match_id):
             return RedirectResponse(f"/match/{match_id}", status_code=303)
 
@@ -1407,8 +1392,6 @@ def register_match_routes(rt, STYLE):
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
-
-        from render import format_match_name
 
         match = get_match(match_id)
         if not match:
@@ -1676,8 +1659,6 @@ def register_match_routes(rt, STYLE):
                 }
             )
 
-        from render import render_match_detail
-
         return render_match_detail(
             match,
             teams,
@@ -1732,8 +1713,6 @@ def register_match_routes(rt, STYLE):
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
-
-        from render import format_match_name
 
         match = get_match(match_id)
         if not match:
@@ -1908,8 +1887,6 @@ def register_match_routes(rt, STYLE):
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        from render import format_match_name
-
         match = get_match(match_id)
         if not match:
             return RedirectResponse("/matches", status_code=303)
@@ -1971,9 +1948,6 @@ def register_match_routes(rt, STYLE):
         signup_text = form.get("signup_text", "").strip()
 
         if signup_text:
-            from core.auth import get_user_club_ids_from_request
-            from logic import import_players, parse_signup_text
-
             # Get user's club IDs to determine which club to assign players to
             club_ids = get_user_club_ids_from_request(req, sess)
             if not club_ids:
@@ -1987,11 +1961,11 @@ def register_match_routes(rt, STYLE):
 
             # Import players to database (if they don't exist)
             imported_count = import_players(signup_text, club_id)
-            print(f"Imported {imported_count} new players from signup text")
+            logger.info(f"Imported {imported_count} new players from signup text")
 
             # Parse signup text to get player names
             player_names = parse_signup_text(signup_text)
-            print(f"Parsed {len(player_names)} player names from signup text")
+            logger.debug(f"Parsed {len(player_names)} player names from signup text")
 
             # Add signup players to match_players (team_id = NULL means signed up but not allocated)
             # Use find_player_by_name_or_alias to support both name and alias matching
@@ -2017,7 +1991,7 @@ def register_match_routes(rt, STYLE):
                                 player.get("alias") == name
                                 and player.get("name") != name
                             ):
-                                print(
+                                logger.debug(
                                     f"Matched alias '{name}' to player '{player.get('name')}'"
                                 )
 
@@ -2029,8 +2003,6 @@ def register_match_routes(rt, STYLE):
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
-
-        from render import format_match_name
 
         match = get_match(match_id)
         if not match:
@@ -2146,8 +2118,6 @@ def register_match_routes(rt, STYLE):
             )
 
         except Exception:
-            import traceback
-
             traceback.print_exc()
 
         return RedirectResponse(f"/match/{match_id}", status_code=303)

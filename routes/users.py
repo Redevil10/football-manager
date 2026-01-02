@@ -1,7 +1,8 @@
 # routes/users.py - User management routes
+import logging
+from urllib.parse import parse_qs
 
-from fasthtml.common import *  # noqa: F403, F405
-from fasthtml.common import RedirectResponse, Request
+from fasthtml.common import *
 
 from core.auth import get_current_user, get_user_accessible_club_ids
 from db.users import (
@@ -17,14 +18,14 @@ from db.users import (
 )
 from render.common import render_navbar
 
+logger = logging.getLogger(__name__)
+
 
 def get_user_role_in_clubs(user):
     """Get the highest role a user has across all their clubs.
     Returns 'manager' if they're a manager in any club, otherwise 'viewer'"""
     if user.get("is_superuser"):
         return "superuser"
-
-    from db.users import get_user_clubs
 
     user_clubs = get_user_clubs(user["id"])
     for club in user_clubs:
@@ -257,8 +258,6 @@ def register_user_routes(rt, STYLE):
                 error_msg = req.query_params.get("error")
                 success_msg = req.query_params.get("success")
             elif hasattr(req, "url") and hasattr(req.url, "query"):
-                from urllib.parse import parse_qs
-
                 query = parse_qs(str(req.url.query))
                 error_msg = query.get("error", [None])[0]
                 success_msg = query.get("success", [None])[0]
@@ -326,8 +325,6 @@ def register_user_routes(rt, STYLE):
                 error_msg = req.query_params.get("error")
                 success_msg = req.query_params.get("success")
             elif hasattr(req, "url") and hasattr(req.url, "query"):
-                from urllib.parse import parse_qs
-
                 query = parse_qs(str(req.url.query))
                 error_msg = query.get("error", [None])[0]
                 success_msg = query.get("success", [None])[0]
@@ -574,8 +571,6 @@ def register_user_routes(rt, STYLE):
             if hasattr(req, "query_params"):
                 error_msg = req.query_params.get("error")
             elif hasattr(req, "url") and hasattr(req.url, "query"):
-                from urllib.parse import parse_qs
-
                 query = parse_qs(str(req.url.query))
                 error_msg = query.get("error", [None])[0]
 
@@ -810,11 +805,8 @@ def register_user_routes(rt, STYLE):
                     f"/users/{user_id}?error=Failed+to+update+role", status_code=303
                 )
         except Exception as e:
-            import traceback
-
             error_detail = str(e)
-            print(f"Change role error: {error_detail}")
-            print(traceback.format_exc())
+            logger.error(f"Change role error: {error_detail}", exc_info=True)
             return RedirectResponse(
                 f"/users/{user_id}?error=Role+change+failed:+{error_detail.replace(' ', '+')}",
                 status_code=303,

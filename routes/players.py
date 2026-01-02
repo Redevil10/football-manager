@@ -1,5 +1,8 @@
 # routes/players.py - Player routes
 
+import logging
+from urllib.parse import quote
+
 from fasthtml.common import *
 
 from core.auth import (
@@ -13,11 +16,13 @@ from db import (
     find_player_by_name_or_alias,
     get_all_players,
     reset_teams,
+    swap_match_players,
     swap_players,
     update_player_attrs,
     update_player_height_weight,
     update_player_name,
 )
+from db.players import add_player
 from logic import (
     adjust_category_attributes_by_single_attr,
     allocate_teams,
@@ -40,6 +45,9 @@ from render import (
     render_player_table,
     render_teams,
 )
+from render.common import can_user_delete, can_user_edit
+
+logger = logging.getLogger(__name__)
 
 
 def register_player_routes(rt, STYLE):
@@ -186,8 +194,6 @@ def register_player_routes(rt, STYLE):
         # Use the first club the user has manager access to
         club_ids = get_user_club_ids_from_request(req, sess)
         if not club_ids:
-            from urllib.parse import quote
-
             return RedirectResponse(
                 f"/players?error={quote('No clubs assigned. Contact administrator.')}",
                 status_code=303,
@@ -202,8 +208,6 @@ def register_player_routes(rt, STYLE):
                 break
 
         if not target_club_id and not user.get("is_superuser"):
-            from urllib.parse import quote
-
             return RedirectResponse(
                 f"/players?error={quote('You do not have permission to create players. Manager role required.')}",
                 status_code=303,
@@ -214,8 +218,6 @@ def register_player_routes(rt, STYLE):
             name = form.get("name", "").strip()
 
             if not name:
-                from urllib.parse import quote
-
                 return RedirectResponse(
                     f"/players?error={quote('Player name cannot be empty')}",
                     status_code=303,
@@ -224,8 +226,6 @@ def register_player_routes(rt, STYLE):
             # Check if name matches an existing player's name or alias (within the same club)
             existing_player = find_player_by_name_or_alias(name)
             if existing_player and existing_player.get("club_id") == target_club_id:
-                from urllib.parse import quote
-
                 if (
                     existing_player.get("alias") == name
                     and existing_player.get("name") != name
@@ -238,17 +238,10 @@ def register_player_routes(rt, STYLE):
                 )
 
             # Add player with club_id
-            from db.players import add_player
-
             add_player(name, club_id=target_club_id)
             return RedirectResponse("/players", status_code=303)
         except Exception as e:
-            print(f"Error adding player: {e}", flush=True)
-            import traceback
-
-            traceback.print_exc()
-            from urllib.parse import quote
-
+            logger.error(f"Error adding player: {e}", exc_info=True)
             return RedirectResponse(
                 f"/players?error={quote(f'Error adding player: {str(e)}')}",
                 status_code=303,
@@ -268,8 +261,6 @@ def register_player_routes(rt, STYLE):
         if not player:
             return RedirectResponse("/players", status_code=303)
 
-        from render.common import can_user_edit
-
         if not can_user_edit(user, player.get("club_id")):
             return RedirectResponse(f"/player/{player_id}", status_code=303)
 
@@ -280,10 +271,7 @@ def register_player_routes(rt, STYLE):
             alias = alias if alias else None
             update_player_name(player_id, name, alias)
         except Exception as e:
-            print(f"Error updating name/alias: {e}", flush=True)
-            import traceback
-
-            traceback.print_exc()
+            logger.error(f"Error updating name/alias: {e}", exc_info=True)
         return RedirectResponse(f"/player/{player_id}", status_code=303)
 
     @rt("/update_player_height_weight/{player_id}", methods=["POST"])
@@ -302,8 +290,6 @@ def register_player_routes(rt, STYLE):
         if not player:
             return RedirectResponse("/players", status_code=303)
 
-        from render.common import can_user_edit
-
         if not can_user_edit(user, player.get("club_id")):
             return RedirectResponse(f"/player/{player_id}", status_code=303)
 
@@ -315,10 +301,7 @@ def register_player_routes(rt, STYLE):
                 player_id, height if height else None, weight if weight else None
             )
         except Exception as e:
-            print(f"Error updating height/weight: {e}", flush=True)
-            import traceback
-
-            traceback.print_exc()
+            logger.error(f"Error updating height/weight: {e}", exc_info=True)
         return RedirectResponse(f"/player/{player_id}", status_code=303)
 
     @rt("/update_player_scores/{player_id}", methods=["POST"])
@@ -335,8 +318,6 @@ def register_player_routes(rt, STYLE):
 
         if not player:
             return RedirectResponse(f"/player/{player_id}", status_code=303)
-
-        from render.common import can_user_edit
 
         if not can_user_edit(user, player.get("club_id")):
             return RedirectResponse(f"/player/{player_id}", status_code=303)
@@ -381,10 +362,7 @@ def register_player_routes(rt, STYLE):
                     player_id, tech_attrs, mental_attrs, phys_attrs, gk_attrs
                 )
         except (ValueError, TypeError, KeyError) as e:
-            print(f"Error updating player scores: {e}")
-            import traceback
-
-            traceback.print_exc()
+            logger.error(f"Error updating player scores: {e}", exc_info=True)
 
         return RedirectResponse(f"/player/{player_id}", status_code=303)
 
@@ -403,8 +381,6 @@ def register_player_routes(rt, STYLE):
         if not player:
             return RedirectResponse(f"/player/{player_id}", status_code=303)
 
-        from render.common import can_user_edit
-
         if not can_user_edit(user, player.get("club_id")):
             return RedirectResponse(f"/player/{player_id}", status_code=303)
 
@@ -414,10 +390,7 @@ def register_player_routes(rt, STYLE):
             form = await req.form()
             form_data = dict(form)
         except Exception as e:
-            print(f"Error parsing form data: {e}")
-            import traceback
-
-            traceback.print_exc()
+            logger.error(f"Error parsing form data: {e}", exc_info=True)
             return RedirectResponse(f"/player/{player_id}", status_code=303)
 
         # Extract attributes from form data
@@ -564,8 +537,6 @@ def register_player_routes(rt, STYLE):
         if not player:
             return RedirectResponse("/players", status_code=303)
 
-        from render.common import can_user_delete
-
         if not can_user_delete(user, player.get("club_id")):
             return RedirectResponse(f"/player/{player_id}", status_code=303)
 
@@ -590,7 +561,7 @@ def register_player_routes(rt, STYLE):
             )[:24]
             return render_teams(sorted_players)
         except Exception as e:
-            print(f"Error in allocate: {e}")
+            logger.error(f"Error in allocate: {e}", exc_info=True)
             return Div(cls="container-white")(
                 P(f"Error: {str(e)}", style="text-align: center; color: #dc3545;")
             )
@@ -616,7 +587,6 @@ def register_player_routes(rt, STYLE):
         match_id: int, match_player1_id: int, match_player2_id: int
     ):
         """Confirm swap for match players"""
-        from db import swap_match_players
 
         swap_match_players(match_player1_id, match_player2_id)
         return RedirectResponse(f"/match/{match_id}", status_code=303)

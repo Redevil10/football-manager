@@ -581,11 +581,8 @@ def register_auth_routes(rt, STYLE):
                 )
 
         except Exception as e:
-            import traceback
-
             error_detail = str(e)
-            print(f"Change password error: {error_detail}")
-            print(traceback.format_exc())
+            logger.error(f"Change password error: {error_detail}", exc_info=True)
             return RedirectResponse(
                 f"/change-password?error=Password+change+failed:+{error_detail.replace(' ', '+')}",
                 status_code=303,
