@@ -2,6 +2,8 @@
 
 import json
 
+from db.clubs import create_club
+from db.connection import get_db
 from db.players import (
     add_player,
     delete_player,
@@ -11,6 +13,7 @@ from db.players import (
     generate_random_mental,
     generate_random_physical,
     get_all_players,
+    parse_player_attributes,
     reset_teams,
     swap_players,
     update_player_attrs,
@@ -60,13 +63,96 @@ class TestGenerateRandomAttrs:
             assert 1 <= value <= 20
 
 
+class TestParsePlayerAttributes:
+    """Tests for parse_player_attributes function"""
+
+    def test_parse_player_attributes_with_all_attrs(self):
+        """Test parsing player attributes with all attribute types"""
+        player_row = {
+            "id": 1,
+            "name": "Test Player",
+            "technical_attrs": '{"passing": 15, "dribbling": 12}',
+            "mental_attrs": '{"composure": 10, "decisions": 12}',
+            "physical_attrs": '{"pace": 14, "strength": 11}',
+            "gk_attrs": '{"handling": 8, "reflexes": 9}',
+        }
+
+        result = parse_player_attributes(player_row)
+
+        assert result["id"] == 1
+        assert result["name"] == "Test Player"
+        assert isinstance(result["technical_attrs"], dict)
+        assert result["technical_attrs"]["passing"] == 15
+        assert isinstance(result["mental_attrs"], dict)
+        assert isinstance(result["physical_attrs"], dict)
+        assert isinstance(result["gk_attrs"], dict)
+
+    def test_parse_player_attributes_with_none_attrs(self):
+        """Test parsing player attributes with None values"""
+        player_row = {
+            "id": 1,
+            "name": "Test Player",
+            "technical_attrs": None,
+            "mental_attrs": None,
+            "physical_attrs": None,
+            "gk_attrs": None,
+        }
+
+        result = parse_player_attributes(player_row)
+
+        assert result["technical_attrs"] == {}
+        assert result["mental_attrs"] == {}
+        assert result["physical_attrs"] == {}
+        assert result["gk_attrs"] == {}
+
+    def test_parse_player_attributes_with_empty_strings(self):
+        """Test parsing player attributes with empty strings"""
+        player_row = {
+            "id": 1,
+            "name": "Test Player",
+            "technical_attrs": "",
+            "mental_attrs": "",
+            "physical_attrs": "",
+            "gk_attrs": "",
+        }
+
+        result = parse_player_attributes(player_row)
+
+        assert result["technical_attrs"] == {}
+        assert result["mental_attrs"] == {}
+        assert result["physical_attrs"] == {}
+        assert result["gk_attrs"] == {}
+
+    def test_parse_player_attributes_preserves_other_fields(self):
+        """Test that parse_player_attributes preserves other fields"""
+        player_row = {
+            "id": 1,
+            "name": "Test Player",
+            "alias": "TP",
+            "height": 180,
+            "weight": 75,
+            "club_id": 1,
+            "technical_attrs": "{}",
+            "mental_attrs": "{}",
+            "physical_attrs": "{}",
+            "gk_attrs": "{}",
+        }
+
+        result = parse_player_attributes(player_row)
+
+        assert result["id"] == 1
+        assert result["name"] == "Test Player"
+        assert result["alias"] == "TP"
+        assert result["height"] == 180
+        assert result["weight"] == 75
+        assert result["club_id"] == 1
+
+
 class TestGetAllPlayers:
     """Tests for get_all_players function"""
 
     def test_get_all_players_no_filter(self, temp_db):
         """Test getting all players without filter"""
-        from db.connection import get_db
-
         # Create test data
         conn = get_db()
         conn.execute(
@@ -85,9 +171,6 @@ class TestGetAllPlayers:
     def test_get_all_players_with_club_filter(self, temp_db):
         """Test getting players filtered by club_ids"""
         # Create clubs and test data
-        from db.clubs import create_club
-        from db.connection import get_db
-
         club1_id = create_club("Club 1")
         club2_id = create_club("Club 2")
 
@@ -110,15 +193,32 @@ class TestGetAllPlayers:
         assert len(result) >= 1
         assert all(p["club_id"] == club1_id for p in result)
 
+    def test_get_all_players_empty_club_list(self, temp_db):
+        """Test getting players with empty club_ids list"""
+        club_id = create_club("Club 1")
+
+        conn = get_db()
+        conn.execute(
+            """INSERT INTO players (name, club_id, technical_attrs, mental_attrs, physical_attrs, gk_attrs)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            ("Player 1", club_id, "{}", "{}", "{}", "{}"),
+        )
+        conn.commit()
+        conn.close()
+
+        result = get_all_players(club_ids=[])
+
+        # Empty club_ids list is treated the same as None - returns all players
+        # (The implementation checks len(club_ids) > 0, so empty list falls through to else branch)
+        assert len(result) >= 1
+        assert any(p["name"] == "Player 1" for p in result)
+
 
 class TestFindPlayerByNameOrAlias:
     """Tests for find_player_by_name_or_alias function"""
 
     def test_find_player_by_name(self, temp_db):
         """Test finding player by name"""
-        from db.clubs import create_club
-        from db.connection import get_db
-
         club_id = create_club("Test Club")
 
         conn = get_db()
@@ -137,9 +237,6 @@ class TestFindPlayerByNameOrAlias:
 
     def test_find_player_by_alias(self, temp_db):
         """Test finding player by alias"""
-        from db.clubs import create_club
-        from db.connection import get_db
-
         club_id = create_club("Test Club")
 
         conn = get_db()
@@ -169,8 +266,6 @@ class TestAddPlayer:
     def test_add_player_success(self, temp_db):
         """Test successfully adding a player"""
         # First create a club
-        from db.clubs import create_club
-
         club_id = create_club("Test Club")
 
         player_id = add_player("New Player", club_id=club_id)
@@ -181,8 +276,6 @@ class TestAddPlayer:
     def test_add_player_with_alias(self, temp_db):
         """Test adding player with alias"""
         # First create a club
-        from db.clubs import create_club
-
         club_id = create_club("Test Club")
 
         player_id = add_player("New Player", club_id=club_id, alias="NP")
@@ -195,9 +288,6 @@ class TestDeletePlayer:
 
     def test_delete_player(self, temp_db):
         """Test deleting a player"""
-        from db.clubs import create_club
-        from db.connection import get_db
-
         # Create club first
         club_id = create_club("Test Club")
 
@@ -230,9 +320,6 @@ class TestUpdatePlayerTeam:
 
     def test_update_player_team(self, temp_db):
         """Test updating player team and position"""
-        from db.clubs import create_club
-        from db.connection import get_db
-
         # Create club first
         club_id = create_club("Test Club")
 
@@ -266,9 +353,6 @@ class TestUpdatePlayerAttrs:
 
     def test_update_player_attrs(self, temp_db):
         """Test updating player attributes"""
-        from db.clubs import create_club
-        from db.connection import get_db
-
         # Create club first
         club_id = create_club("Test Club")
 
@@ -308,9 +392,6 @@ class TestUpdatePlayerName:
 
     def test_update_player_name(self, temp_db):
         """Test updating player name"""
-        from db.clubs import create_club
-        from db.connection import get_db
-
         # Create club first
         club_id = create_club("Test Club")
 
@@ -344,9 +425,6 @@ class TestUpdatePlayerHeightWeight:
 
     def test_update_height_weight(self, temp_db):
         """Test updating player height and weight"""
-        from db.clubs import create_club
-        from db.connection import get_db
-
         # Create club first
         club_id = create_club("Test Club")
 
@@ -376,9 +454,6 @@ class TestUpdatePlayerHeightWeight:
 
     def test_update_height_weight_empty_strings(self, temp_db):
         """Test updating with empty strings converts to None"""
-        from db.clubs import create_club
-        from db.connection import get_db
-
         # Create club first
         club_id = create_club("Test Club")
 
@@ -412,9 +487,6 @@ class TestSwapPlayers:
 
     def test_swap_players(self, temp_db):
         """Test swapping two players' teams and positions"""
-        from db.clubs import create_club
-        from db.connection import get_db
-
         # Create club first
         club_id = create_club("Test Club")
 
@@ -459,9 +531,6 @@ class TestResetTeams:
 
     def test_reset_teams(self, temp_db):
         """Test resetting all team assignments"""
-        from db.clubs import create_club
-        from db.connection import get_db
-
         # Create club first
         club_id = create_club("Test Club")
 
