@@ -1,5 +1,6 @@
 # routes/__init__.py - Route registration
 
+import logging
 import secrets
 
 from fasthtml.common import fast_app
@@ -9,6 +10,8 @@ from core.config import *
 from core.styles import STYLE
 from db import init_db
 
+logger = logging.getLogger(__name__)
+
 # Use a persistent secret key for sessions
 # On Hugging Face Spaces, use environment variable if available, otherwise generate once
 # For production, set SECRET_KEY in environment variables
@@ -17,7 +20,7 @@ if not SECRET_KEY:
     # Generate a secret key and store it (for persistence across restarts on HF Spaces)
     # In production, this should be set via environment variable
     SECRET_KEY = secrets.token_urlsafe(32)
-    print(
+    logger.warning(
         f"Generated SECRET_KEY (set SECRET_KEY env var for persistence): {SECRET_KEY[:20]}..."
     )
 
@@ -83,14 +86,14 @@ try:
 except ImportError:
     pass  # SessionMiddleware not available
 except Exception as e:
-    print(f"Warning: Error configuring SessionMiddleware: {e}")
+    logger.warning(f"Error configuring SessionMiddleware: {e}", exc_info=True)
 
 # Setup Hugging Face backup for persistent storage (only on Hugging Face Spaces)
 if os.environ.get("HF_TOKEN"):
-    print("#########setup_hf_backup#######")
+    logger.info("Setting up Hugging Face backup for persistent storage")
     setup_hf_backup(app)
 else:
-    print("========DO NOT run setup_hf_backup=======")
+    logger.debug("HF_TOKEN not found, skipping Hugging Face backup setup")
 
 # Initialize database (after restore if on HF Spaces)
 init_db()
