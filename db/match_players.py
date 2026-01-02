@@ -95,7 +95,7 @@ _UNSET = object()
 def update_match_player(
     match_player_id, team_id=_UNSET, position=_UNSET, is_starter=_UNSET, rating=_UNSET
 ):
-    """Update a match player
+    """Update a match player.
 
     Args:
         match_player_id: ID of the match_player record
@@ -103,39 +103,44 @@ def update_match_player(
         position: Position to assign. Pass None to set to NULL, or omit to leave unchanged.
         is_starter: 1 for starter, 0 for substitute, or omit to leave unchanged.
         rating: Rating value, or omit to leave unchanged.
+
+    Returns:
+        bool: True on success, False on error
     """
     conn = get_db()
-    updates = []
-    values = []
+    try:
+        updates = []
+        values = []
 
-    # Handle team_id - _UNSET means "not provided", None means "set to NULL"
-    if team_id is not _UNSET:
-        if team_id is None:
-            updates.append("team_id = NULL")
-        else:
-            updates.append("team_id = ?")
-            values.append(team_id)
+        # Handle team_id - _UNSET means "not provided", None means "set to NULL"
+        if team_id is not _UNSET:
+            if team_id is None:
+                updates.append("team_id = NULL")
+            else:
+                updates.append("team_id = ?")
+                values.append(team_id)
 
-    # Handle position
-    if position is not _UNSET:
-        if position is None:
-            updates.append("position = NULL")
-        else:
-            updates.append("position = ?")
-            values.append(position)
+        # Handle position
+        if position is not _UNSET:
+            if position is None:
+                updates.append("position = NULL")
+            else:
+                updates.append("position = ?")
+                values.append(position)
 
-    # Handle is_starter
-    if is_starter is not _UNSET:
-        updates.append("is_starter = ?")
-        values.append(is_starter)
+        # Handle is_starter
+        if is_starter is not _UNSET:
+            updates.append("is_starter = ?")
+            values.append(is_starter)
 
-    # Handle rating
-    if rating is not _UNSET:
-        updates.append("rating = ?")
-        values.append(rating)
+        # Handle rating
+        if rating is not _UNSET:
+            updates.append("rating = ?")
+            values.append(rating)
 
-    if updates:
-        values.append(match_player_id)
+        if not updates:
+            return True  # Nothing to update
+
         # Build SQL with proper handling of NULL values
         sql_updates = []
         sql_values = []
@@ -146,58 +151,141 @@ def update_match_player(
                 sql_updates.append(update)
                 sql_values.append(values.pop(0))
         sql_values.append(match_player_id)
-        conn.execute(
+        cursor = conn.execute(
             f"UPDATE match_players SET {', '.join(sql_updates)} WHERE id = ?",
             sql_values,
         )
         conn.commit()
-    conn.close()
+        if cursor.rowcount == 0:
+            logger.warning(
+                f"Update match player: No match player found with ID {match_player_id}"
+            )
+            return False
+        logger.debug(f"Match player {match_player_id} updated successfully")
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(
+            f"Failed to update match player {match_player_id}: {e}", exc_info=True
+        )
+        return False
+    finally:
+        conn.close()
 
 
 def remove_match_player(match_player_id):
-    """Remove a player from a match"""
+    """Remove a player from a match.
+
+    Args:
+        match_player_id: ID of the match_player record to remove
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    conn.execute("DELETE FROM match_players WHERE id = ?", (match_player_id,))
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.execute(
+            "DELETE FROM match_players WHERE id = ?", (match_player_id,)
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(
+                f"Remove match player: No match player found with ID {match_player_id}"
+            )
+            return False
+        logger.debug(f"Match player {match_player_id} removed successfully")
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(
+            f"Failed to remove match player {match_player_id}: {e}", exc_info=True
+        )
+        return False
+    finally:
+        conn.close()
 
 
 def remove_all_match_signup_players(match_id):
-    """Remove all signup players (players with team_id = NULL) from a match"""
+    """Remove all signup players (players with team_id = NULL) from a match.
+
+    Args:
+        match_id: ID of the match
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    conn.execute(
-        "DELETE FROM match_players WHERE match_id = ? AND team_id IS NULL",
-        (match_id,),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.execute(
+            "DELETE FROM match_players WHERE match_id = ? AND team_id IS NULL",
+            (match_id,),
+        )
+        conn.commit()
+        logger.debug(f"Removed {cursor.rowcount} signup players from match {match_id}")
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(
+            f"Failed to remove signup players from match {match_id}: {e}", exc_info=True
+        )
+        return False
+    finally:
+        conn.close()
 
 
 def swap_match_players(match_player1_id, match_player2_id):
-    """Swap two match players' teams and positions"""
+    """Swap two match players' teams and positions.
+
+    Args:
+        match_player1_id: ID of the first match player
+        match_player2_id: ID of the second match player
+
+    Returns:
+        bool: True on success, False on error (player not found, etc.)
+    """
     conn = get_db()
-    c = conn.cursor()
+    try:
+        # Get both match players
+        p1 = conn.execute(
+            "SELECT team_id, position, is_starter FROM match_players WHERE id = ?",
+            (match_player1_id,),
+        ).fetchone()
+        p2 = conn.execute(
+            "SELECT team_id, position, is_starter FROM match_players WHERE id = ?",
+            (match_player2_id,),
+        ).fetchone()
 
-    # Get both match players
-    p1 = c.execute(
-        "SELECT team_id, position, is_starter FROM match_players WHERE id = ?",
-        (match_player1_id,),
-    ).fetchone()
-    p2 = c.execute(
-        "SELECT team_id, position, is_starter FROM match_players WHERE id = ?",
-        (match_player2_id,),
-    ).fetchone()
+        if not p1:
+            logger.warning(
+                f"Swap match players: Match player {match_player1_id} not found"
+            )
+            return False
+        if not p2:
+            logger.warning(
+                f"Swap match players: Match player {match_player2_id} not found"
+            )
+            return False
 
-    if p1 and p2:
         # Swap their team_id, position, and is_starter
-        c.execute(
+        conn.execute(
             "UPDATE match_players SET team_id = ?, position = ?, is_starter = ? WHERE id = ?",
             (p2[0], p2[1], p2[2], match_player1_id),
         )
-        c.execute(
+        conn.execute(
             "UPDATE match_players SET team_id = ?, position = ?, is_starter = ? WHERE id = ?",
             (p1[0], p1[1], p1[2], match_player2_id),
         )
         conn.commit()
-
-    conn.close()
+        logger.debug(
+            f"Swapped teams/positions for match players {match_player1_id} and {match_player2_id}"
+        )
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(
+            f"Failed to swap match players {match_player1_id} and {match_player2_id}: {e}",
+            exc_info=True,
+        )
+        return False
+    finally:
+        conn.close()

@@ -87,7 +87,18 @@ def find_player_by_name_or_alias(name, club_ids=None):
 
 
 def add_player(name, club_id, position_pref="", alias=None):
-    """Add player with random attributes"""
+    """Add player with random attributes.
+
+    Args:
+        name: Player name
+        club_id: ID of the club the player belongs to
+        position_pref: Preferred position (optional)
+        alias: Player alias (optional)
+
+    Returns:
+        int: Player ID on success
+        None: On error (duplicate player, database error, etc.)
+    """
     conn = get_db()
     try:
         technical = json.dumps(generate_random_attrs())
@@ -101,112 +112,271 @@ def add_player(name, club_id, position_pref="", alias=None):
         )
         player_id = cursor.lastrowid
         conn.commit()
-        conn.close()
+        logger.info(f"Player '{name}' created successfully with ID: {player_id}")
         return player_id
-    except sqlite3.IntegrityError:
+    except sqlite3.IntegrityError as e:
         conn.rollback()
-        logger.warning(f"Player {name} already exists in club_id={club_id}")
-        conn.close()
+        logger.warning(
+            f"Failed to create player '{name}' in club {club_id}: Player already exists or constraint violated - {e}"
+        )
         return None
+    except Exception as e:
+        conn.rollback()
+        logger.error(
+            f"Failed to create player '{name}' in club {club_id}: {e}", exc_info=True
+        )
+        return None
+    finally:
+        conn.close()
 
 
 def delete_player(player_id):
-    """Delete player"""
+    """Delete a player.
+
+    Args:
+        player_id: ID of the player to delete
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    conn.execute("DELETE FROM players WHERE id = ?", (player_id,))
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.execute("DELETE FROM players WHERE id = ?", (player_id,))
+        conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(f"Delete player: No player found with ID {player_id}")
+            return False
+        logger.info(f"Player {player_id} deleted successfully")
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to delete player {player_id}: {e}", exc_info=True)
+        return False
+    finally:
+        conn.close()
 
 
 def update_player_team(player_id, team, position):
-    """Update player team and position"""
+    """Update player team and position.
+
+    Args:
+        player_id: ID of the player
+        team: Team name or identifier
+        position: Position name
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    conn.execute(
-        "UPDATE players SET team = ?, position = ? WHERE id = ?",
-        (team, position, player_id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.execute(
+            "UPDATE players SET team = ?, position = ? WHERE id = ?",
+            (team, position, player_id),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(f"Update player team: No player found with ID {player_id}")
+            return False
+        logger.debug(
+            f"Player {player_id} team updated to '{team}', position '{position}'"
+        )
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to update player {player_id} team: {e}", exc_info=True)
+        return False
+    finally:
+        conn.close()
 
 
 def update_player_attrs(player_id, tech_attrs, mental_attrs, phys_attrs, gk_attrs):
-    """Update player attributes"""
+    """Update player attributes.
+
+    Args:
+        player_id: ID of the player
+        tech_attrs: Technical attributes dictionary
+        mental_attrs: Mental attributes dictionary
+        phys_attrs: Physical attributes dictionary
+        gk_attrs: Goalkeeper attributes dictionary
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    conn.execute(
-        "UPDATE players SET technical_attrs = ?, mental_attrs = ?, physical_attrs = ?, gk_attrs = ? WHERE id = ?",
-        (
-            json.dumps(tech_attrs),
-            json.dumps(mental_attrs),
-            json.dumps(phys_attrs),
-            json.dumps(gk_attrs),
-            player_id,
-        ),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.execute(
+            "UPDATE players SET technical_attrs = ?, mental_attrs = ?, physical_attrs = ?, gk_attrs = ? WHERE id = ?",
+            (
+                json.dumps(tech_attrs),
+                json.dumps(mental_attrs),
+                json.dumps(phys_attrs),
+                json.dumps(gk_attrs),
+                player_id,
+            ),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(f"Update player attrs: No player found with ID {player_id}")
+            return False
+        logger.debug(f"Player {player_id} attributes updated successfully")
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(
+            f"Failed to update player {player_id} attributes: {e}", exc_info=True
+        )
+        return False
+    finally:
+        conn.close()
 
 
 def update_player_name(player_id, name, alias=None):
-    """Update player name and alias"""
+    """Update player name and alias.
+
+    Args:
+        player_id: ID of the player
+        name: New player name
+        alias: New player alias (optional)
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
     try:
-        conn.execute(
+        cursor = conn.execute(
             "UPDATE players SET name = ?, alias = ? WHERE id = ?",
             (name, alias, player_id),
         )
         conn.commit()
-    except sqlite3.IntegrityError:
+        if cursor.rowcount == 0:
+            logger.warning(f"Update player name: No player found with ID {player_id}")
+            return False
+        logger.debug(f"Player {player_id} name updated to '{name}'")
+        return True
+    except sqlite3.IntegrityError as e:
         conn.rollback()
-        logger.warning(f"Player {name} already exists (player_id={player_id})")
-        pass  # Name already exists
-    conn.close()
+        logger.warning(
+            f"Failed to update player {player_id} name: Player name '{name}' already exists - {e}"
+        )
+        return False
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to update player {player_id} name: {e}", exc_info=True)
+        return False
+    finally:
+        conn.close()
 
 
 def update_player_height_weight(player_id, height=None, weight=None):
-    """Update player height and weight"""
+    """Update player height and weight.
+
+    Args:
+        player_id: ID of the player
+        height: Height in cm (optional)
+        weight: Weight in kg (optional)
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    # Convert empty strings to None
-    height = int(height) if height and str(height).strip() else None
-    weight = int(weight) if weight and str(weight).strip() else None
-    conn.execute(
-        "UPDATE players SET height = ?, weight = ? WHERE id = ?",
-        (height, weight, player_id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        # Convert empty strings to None
+        height = int(height) if height and str(height).strip() else None
+        weight = int(weight) if weight and str(weight).strip() else None
+        cursor = conn.execute(
+            "UPDATE players SET height = ?, weight = ? WHERE id = ?",
+            (height, weight, player_id),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(
+                f"Update player height/weight: No player found with ID {player_id}"
+            )
+            return False
+        logger.debug(f"Player {player_id} height/weight updated")
+        return True
+    except (ValueError, TypeError) as e:
+        conn.rollback()
+        logger.warning(
+            f"Failed to update player {player_id} height/weight: Invalid value - {e}"
+        )
+        return False
+    except Exception as e:
+        conn.rollback()
+        logger.error(
+            f"Failed to update player {player_id} height/weight: {e}", exc_info=True
+        )
+        return False
+    finally:
+        conn.close()
 
 
 def swap_players(player1_id, player2_id):
-    """Swap two players' teams and positions"""
+    """Swap two players' teams and positions.
+
+    Args:
+        player1_id: ID of the first player
+        player2_id: ID of the second player
+
+    Returns:
+        bool: True on success, False on error (player not found, etc.)
+    """
     conn = get_db()
-    c = conn.cursor()
+    try:
+        # Get both players
+        p1 = conn.execute(
+            "SELECT team, position FROM players WHERE id = ?", (player1_id,)
+        ).fetchone()
+        p2 = conn.execute(
+            "SELECT team, position FROM players WHERE id = ?", (player2_id,)
+        ).fetchone()
 
-    # Get both players
-    p1 = c.execute(
-        "SELECT team, position FROM players WHERE id = ?", (player1_id,)
-    ).fetchone()
-    p2 = c.execute(
-        "SELECT team, position FROM players WHERE id = ?", (player2_id,)
-    ).fetchone()
+        if not p1:
+            logger.warning(f"Swap players: Player {player1_id} not found")
+            return False
+        if not p2:
+            logger.warning(f"Swap players: Player {player2_id} not found")
+            return False
 
-    if p1 and p2:
         # Swap their team and position
-        c.execute(
+        conn.execute(
             "UPDATE players SET team = ?, position = ? WHERE id = ?",
             (p2[0], p2[1], player1_id),
         )
-        c.execute(
+        conn.execute(
             "UPDATE players SET team = ?, position = ? WHERE id = ?",
             (p1[0], p1[1], player2_id),
         )
         conn.commit()
-
-    conn.close()
+        logger.debug(
+            f"Swapped teams/positions for players {player1_id} and {player2_id}"
+        )
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(
+            f"Failed to swap players {player1_id} and {player2_id}: {e}", exc_info=True
+        )
+        return False
+    finally:
+        conn.close()
 
 
 def reset_teams():
-    """Reset all team assignments"""
+    """Reset all team assignments.
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
-    conn.execute("UPDATE players SET team = NULL, position = NULL")
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.execute("UPDATE players SET team = NULL, position = NULL")
+        conn.commit()
+        logger.info(f"Reset teams: {cursor.rowcount} players updated")
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to reset teams: {e}", exc_info=True)
+        return False
+    finally:
+        conn.close()

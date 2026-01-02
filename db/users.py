@@ -9,7 +9,19 @@ logger = logging.getLogger(__name__)
 
 
 def create_user(username, password_hash, password_salt, email=None, is_superuser=False):
-    """Create a new user"""
+    """Create a new user.
+
+    Args:
+        username: Username for the new user
+        password_hash: Hashed password
+        password_salt: Password salt
+        email: Optional email address
+        is_superuser: Whether user is a superuser (default: False)
+
+    Returns:
+        int: User ID on success
+        None: On error (duplicate username, database error, etc.)
+    """
     conn = get_db()
     try:
         cursor = conn.execute(
@@ -22,7 +34,8 @@ def create_user(username, password_hash, password_salt, email=None, is_superuser
         return user_id
     except sqlite3.IntegrityError as e:
         conn.rollback()
-        logger.warning(f"Failed to create user '{username}': IntegrityError - {e}")
+        error_msg = f"Failed to create user '{username}': Username already exists or constraint violated"
+        logger.warning(f"{error_msg} - {e}")
         return None
     except Exception as e:
         conn.rollback()
@@ -75,7 +88,16 @@ def get_user_club_ids(user_id):
 
 
 def add_user_to_club(user_id, club_id, role):
-    """Add user to a club with a specific role"""
+    """Add user to a club with a specific role.
+
+    Args:
+        user_id: ID of the user
+        club_id: ID of the club
+        role: Role to assign (e.g., 'viewer', 'manager')
+
+    Returns:
+        bool: True on success, False on error (user already in club, etc.)
+    """
     conn = get_db()
     try:
         conn.execute(
@@ -83,8 +105,19 @@ def add_user_to_club(user_id, club_id, role):
             (user_id, club_id, role),
         )
         conn.commit()
+        logger.debug(f"User {user_id} added to club {club_id} with role '{role}'")
         return True
-    except sqlite3.IntegrityError:
+    except sqlite3.IntegrityError as e:
+        conn.rollback()
+        logger.warning(
+            f"Failed to add user {user_id} to club {club_id}: User already in club or constraint violated - {e}"
+        )
+        return False
+    except Exception as e:
+        conn.rollback()
+        logger.error(
+            f"Failed to add user {user_id} to club {club_id}: {e}", exc_info=True
+        )
         return False
     finally:
         conn.close()
@@ -102,14 +135,29 @@ def get_user_club_role(user_id, club_id):
 
 
 def update_user_club_role(user_id, club_id, role):
-    """Update a user's role in a club"""
+    """Update a user's role in a club.
+
+    Args:
+        user_id: ID of the user
+        club_id: ID of the club
+        role: New role to assign
+
+    Returns:
+        bool: True on success, False on error
+    """
     conn = get_db()
     try:
-        conn.execute(
+        cursor = conn.execute(
             "UPDATE user_clubs SET role = ? WHERE user_id = ? AND club_id = ?",
             (role, user_id, club_id),
         )
         conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(
+                f"Update user club role: No matching record found for user_id={user_id}, club_id={club_id}"
+            )
+            return False
+        logger.debug(f"User {user_id} role updated to '{role}' in club {club_id}")
         return True
     except Exception as e:
         conn.rollback()
