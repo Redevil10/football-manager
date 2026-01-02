@@ -95,3 +95,12 @@ OVERALL_SCORE_WEIGHTS = {
 # When all category scores are 100: weighted_sum = 100*3 + 100*2 + 100*3 + 100*2 = 1000
 # We want this to map to 200, so divide by OVERALL_SCORE_DIVISOR
 OVERALL_SCORE_DIVISOR = 5
+
+# Team allocation constants
+ALLOCATION_MAX_ITERATIONS = 100  # Maximum iterations for team balancing optimization
+POSITION_DISTRIBUTION = {
+    "defender_ratio": 0.4,  # 40% of team should be defenders
+    "midfielder_ratio": 0.35,  # 35% of team should be midfielders
+    "goalkeeper_count": 1,  # Always 1 goalkeeper per team
+    "substitute_gk_ratio": 0.1,  # 10% of substitutes can be goalkeepers
+}
