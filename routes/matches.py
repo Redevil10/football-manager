@@ -6,7 +6,6 @@ import traceback
 from urllib.parse import urlencode
 
 from fasthtml.common import *
-from fasthtml.common import RedirectResponse
 
 from core.auth import (
     can_user_edit_match,

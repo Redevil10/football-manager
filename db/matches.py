@@ -3,6 +3,7 @@
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
+from db.club_leagues import get_league_ids_for_clubs, is_club_in_league
 from db.connection import get_db
 from db.leagues import get_all_leagues, get_or_create_friendly_league
 
@@ -111,8 +112,6 @@ def get_all_matches(club_ids: Optional[List[int]] = None) -> List[Dict[str, Any]
     Returns:
         List[Dict[str, Any]]: List of match dictionaries with league_name
     """
-    from db.club_leagues import get_league_ids_for_clubs
-
     conn = get_db()
     try:
         if club_ids is not None and len(club_ids) > 0:
@@ -250,8 +249,6 @@ def get_recent_matches(
     Returns:
         List[Dict[str, Any]]: List of match dictionaries with league_name
     """
-    from db.club_leagues import get_league_ids_for_clubs
-
     # Constant for excluding the next match
     NEXT_MATCH_EXCLUSION_OFFSET = 1
 
@@ -306,8 +303,6 @@ def get_match(
     Returns:
         Optional[Dict[str, Any]]: Match dictionary if found and accessible, None otherwise
     """
-    from db.club_leagues import is_club_in_league
-
     conn = get_db()
     try:
         match = conn.execute(

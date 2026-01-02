@@ -1,7 +1,6 @@
 # routes/home.py - Home page routes
 
 from fasthtml.common import *
-from fasthtml.common import Request
 
 from core.auth import get_current_user, get_user_club_ids_from_request
 from db import (

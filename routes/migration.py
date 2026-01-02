@@ -1,8 +1,12 @@
 # routes/migration.py - Migration routes
 
+import traceback
+from contextlib import redirect_stdout
+
 from fasthtml.common import *
 
 from core.auth import get_current_user
+from migrations.migrate_all import migrate_all
 from render import render_navbar
 
 
@@ -16,14 +20,10 @@ def register_migration_routes(rt, STYLE):
 
         # Require authentication
         if not user:
-            from fasthtml.common import RedirectResponse
-
             return RedirectResponse("/login", status_code=303)
 
         # Require superuser status
         if not user.get("is_superuser"):
-            from fasthtml.common import RedirectResponse
-
             return RedirectResponse("/", status_code=303)
 
         return Html(
@@ -90,23 +90,14 @@ def register_migration_routes(rt, STYLE):
 
         # Require authentication
         if not user:
-            from fasthtml.common import RedirectResponse
-
             return RedirectResponse("/login", status_code=303)
 
         # Require superuser status
         if not user.get("is_superuser"):
-            from fasthtml.common import RedirectResponse
-
             return RedirectResponse("/", status_code=303)
 
         try:
             # Capture print output
-            import io
-            from contextlib import redirect_stdout
-
-            from migrations.migrate_all import migrate_all
-
             output_buffer = io.StringIO()
             with redirect_stdout(output_buffer):
                 success, messages = migrate_all()
@@ -171,8 +162,6 @@ def register_migration_routes(rt, STYLE):
                     ),
                 )
         except Exception as e:
-            import traceback
-
             error_msg = str(e)
             error_traceback = traceback.format_exc()
             return Div(

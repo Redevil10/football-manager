@@ -3,7 +3,6 @@
 import logging
 
 from fasthtml.common import *  # noqa: F403, F405
-from fasthtml.common import RedirectResponse, Request
 
 from core.auth import (
     get_current_user,
