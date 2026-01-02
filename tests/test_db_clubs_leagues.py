@@ -138,6 +138,54 @@ class TestUpdateClub:
         club = get_club(club_id)
         assert club["description"] == "New Description"
 
+    def test_update_club_name_and_description(self, temp_db):
+        """Test updating both name and description at once"""
+        # Create club
+        club_id = create_club("Old Name", "Old Description")
+
+        # Update both
+        result = update_club(club_id, name="New Name", description="New Description")
+
+        assert result is True
+
+        # Verify updates
+        club = get_club(club_id)
+        assert club["name"] == "New Name"
+        assert club["description"] == "New Description"
+
+    def test_update_club_not_found(self, temp_db):
+        """Test updating non-existent club"""
+        result = update_club(99999, name="New Name")
+
+        # Should return False when club not found
+        assert result is False
+
+    def test_update_club_duplicate_name(self, temp_db):
+        """Test updating club to duplicate name"""
+        # Create two clubs
+        create_club("Club 1")  # Create first club for duplicate constraint
+        club2_id = create_club("Club 2")
+
+        # Try to update club2 to have same name as club1
+        result = update_club(club2_id, name="Club 1")
+
+        # Should return False due to IntegrityError
+        assert result is False
+
+        # Verify club2 name unchanged
+        club2 = get_club(club2_id)
+        assert club2["name"] == "Club 2"
+
+    def test_update_club_no_changes(self, temp_db):
+        """Test updating club with no changes"""
+        club_id = create_club("Club Name")
+
+        # Update with no parameters
+        result = update_club(club_id)
+
+        # Should return True (nothing to update)
+        assert result is True
+
 
 class TestDeleteClub:
     """Tests for delete_club function"""
@@ -154,6 +202,13 @@ class TestDeleteClub:
         # Verify deleted
         club = get_club(club_id)
         assert club is None
+
+    def test_delete_club_not_found(self, temp_db):
+        """Test deleting non-existent club"""
+        result = delete_club(99999)
+
+        # Should return False when club not found
+        assert result is False
 
 
 class TestGetAllLeagues:
@@ -218,6 +273,79 @@ class TestGetLeague:
         result = get_league(999)
 
         assert result is None
+
+    def test_get_league_with_empty_club_ids(self, temp_db):
+        """Test getting league with empty club_ids list"""
+        league_id = create_league("Test League")
+
+        # Should return league even with empty club_ids
+        league = get_league(league_id, club_ids=[])
+
+        assert league is not None
+        assert league["id"] == league_id
+
+    def test_get_league_with_none_club_ids(self, temp_db):
+        """Test getting league with None club_ids (superuser access)"""
+        league_id = create_league("Test League")
+
+        # Should return league with None club_ids (superuser)
+        league = get_league(league_id, club_ids=None)
+
+        assert league is not None
+        assert league["id"] == league_id
+
+    def test_get_league_with_club_access(self, temp_db):
+        """Test getting league when club has access"""
+        from db.club_leagues import add_club_to_league
+
+        club_id = create_club("Test Club")
+        league_id = create_league("Test League")
+        add_club_to_league(club_id, league_id)
+
+        # Should return league when club has access
+        league = get_league(league_id, club_ids=[club_id])
+
+        assert league is not None
+        assert league["id"] == league_id
+
+    def test_get_league_without_club_access(self, temp_db):
+        """Test getting league when club doesn't have access"""
+        club_id = create_club("Test Club")
+        league_id = create_league("Test League")
+        # Don't add club to league
+
+        # Should return None when club doesn't have access
+        league = get_league(league_id, club_ids=[club_id])
+
+        assert league is None
+
+    def test_get_league_with_multiple_clubs_one_has_access(self, temp_db):
+        """Test getting league when one of multiple clubs has access"""
+        from db.club_leagues import add_club_to_league
+
+        club1_id = create_club("Club 1")
+        club2_id = create_club("Club 2")
+        league_id = create_league("Test League")
+        add_club_to_league(club1_id, league_id)
+        # Don't add club2 to league
+
+        # Should return league when at least one club has access
+        league = get_league(league_id, club_ids=[club1_id, club2_id])
+
+        assert league is not None
+        assert league["id"] == league_id
+
+    def test_get_league_with_multiple_clubs_none_have_access(self, temp_db):
+        """Test getting league when none of multiple clubs have access"""
+        club1_id = create_club("Club 1")
+        club2_id = create_club("Club 2")
+        league_id = create_league("Test League")
+        # Don't add clubs to league
+
+        # Should return None when no clubs have access
+        league = get_league(league_id, club_ids=[club1_id, club2_id])
+
+        assert league is None
 
 
 class TestGetOrCreateFriendlyLeague:
@@ -331,6 +459,46 @@ class TestUpdateLeague:
 
         assert result is True
 
+    def test_update_league_name_and_description(self, temp_db):
+        """Test updating both name and description at once"""
+        # Create league
+        league_id = create_league("Old Name", "Old Description")
+
+        # Update both
+        result = update_league(
+            league_id, name="New Name", description="New Description"
+        )
+
+        assert result is True
+
+        # Verify updates
+        league = get_league(league_id)
+        assert league["name"] == "New Name"
+        assert league["description"] == "New Description"
+
+    def test_update_league_not_found(self, temp_db):
+        """Test updating non-existent league"""
+        result = update_league(99999, name="New Name")
+
+        # Should return False when league not found
+        assert result is False
+
+    def test_update_league_duplicate_name(self, temp_db):
+        """Test updating league to duplicate name"""
+        # Create two leagues
+        create_league("League 1")  # Create first league for duplicate constraint
+        league2_id = create_league("League 2")
+
+        # Try to update league2 to have same name as league1
+        result = update_league(league2_id, name="League 1")
+
+        # Should return False due to IntegrityError
+        assert result is False
+
+        # Verify league2 name unchanged
+        league2 = get_league(league2_id)
+        assert league2["name"] == "League 2"
+
 
 class TestDeleteLeague:
     """Tests for delete_league function"""
@@ -347,3 +515,10 @@ class TestDeleteLeague:
         # Verify deleted
         league = get_league(league_id)
         assert league is None
+
+    def test_delete_league_not_found(self, temp_db):
+        """Test deleting non-existent league"""
+        result = delete_league(99999)
+
+        # Should return False when league not found
+        assert result is False
