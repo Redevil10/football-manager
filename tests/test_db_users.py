@@ -21,21 +21,6 @@ from db.users import (
 
 
 @pytest.fixture
-def temp_db(monkeypatch, temp_db_path):
-    """Create a temporary database for testing"""
-    import core.config
-    import db.connection
-
-    monkeypatch.setattr(core.config, "DB_PATH", temp_db_path)
-    monkeypatch.setattr(db.connection, "DB_PATH", temp_db_path)
-
-    from db.connection import init_db
-
-    init_db()
-    yield temp_db_path
-
-
-@pytest.fixture
 def sample_user(temp_db):
     """Create a sample user"""
     from core.auth import hash_password

@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
 from db.clubs import (
     create_club,
     delete_club,
@@ -12,7 +10,6 @@ from db.clubs import (
     get_club_by_name,
     update_club,
 )
-from db.connection import init_db
 from db.leagues import (
     create_league,
     delete_league,
@@ -21,21 +18,6 @@ from db.leagues import (
     get_or_create_friendly_league,
     update_league,
 )
-
-
-@pytest.fixture
-def temp_db(monkeypatch, temp_db_path):
-    """Create a temporary database for testing"""
-    import core.config
-    import db.connection
-
-    monkeypatch.setattr(core.config, "DB_PATH", temp_db_path)
-    monkeypatch.setattr(db.connection, "DB_PATH", temp_db_path)
-
-    # Initialize the database
-    init_db()
-    yield temp_db_path
-    # Cleanup is handled by temp_db_path fixture
 
 
 class TestCreateClub:

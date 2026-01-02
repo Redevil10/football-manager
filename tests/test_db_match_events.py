@@ -6,21 +6,6 @@ from db.match_events import add_match_event, delete_match_event, get_match_event
 
 
 @pytest.fixture
-def temp_db(monkeypatch, temp_db_path):
-    """Create a temporary database for testing"""
-    import core.config
-    import db.connection
-
-    monkeypatch.setattr(core.config, "DB_PATH", temp_db_path)
-    monkeypatch.setattr(db.connection, "DB_PATH", temp_db_path)
-
-    from db.connection import init_db
-
-    init_db()
-    yield temp_db_path
-
-
-@pytest.fixture
 def sample_match(temp_db):
     """Create a sample match"""
     from db.leagues import create_league

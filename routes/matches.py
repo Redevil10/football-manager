@@ -14,6 +14,8 @@ from core.auth import (
     get_user_club_ids_from_request,
 )
 from core.config import USER_ROLES
+from core.error_handling import handle_route_error
+from core.exceptions import DatabaseError
 from core.validation import parse_int, validate_non_empty_string
 from db import (
     add_match_event,
@@ -640,12 +642,13 @@ def register_match_routes(rt, STYLE):
                     num_teams,
                     max_players,
                 )
-            except Exception:
+                if not match_id:
+                    raise DatabaseError("Failed to create match")
+            except (ValueError, DatabaseError) as e:
+                return handle_route_error(e, "/create_match")
+            except Exception as e:
                 traceback.print_exc()
-                return RedirectResponse("/create_match?error=db_error", status_code=303)
-
-            if not match_id:
-                return RedirectResponse("/matches", status_code=303)
+                return handle_route_error(e, "/create_match")
 
             # Create teams with should_allocate flag
             team1_id = None

@@ -11,24 +11,7 @@ from db.club_leagues import (
     remove_club_from_league,
 )
 from db.clubs import create_club
-from db.connection import init_db
 from db.leagues import create_league, get_all_leagues, get_league
-
-
-@pytest.fixture
-def temp_db(monkeypatch, temp_db_path):
-    """Create a temporary database for testing"""
-    # Override DB_PATH in core.config (db.connection imports from there)
-    import core.config
-    import db.connection
-
-    monkeypatch.setattr(core.config, "DB_PATH", temp_db_path)
-    monkeypatch.setattr(db.connection, "DB_PATH", temp_db_path)
-
-    # Initialize the database
-    init_db()
-    yield temp_db_path
-    # Cleanup is handled by temp_db_path fixture
 
 
 @pytest.fixture
