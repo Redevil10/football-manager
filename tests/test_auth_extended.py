@@ -57,20 +57,17 @@ class TestGetSessionFromRequest:
 class TestLoginUser:
     """Tests for login_user function"""
 
-    @patch("core.auth.update_user_password")
     @patch("core.auth.get_user_by_username")
     @patch("core.auth.verify_password")
-    def test_login_success(self, mock_verify, mock_get_user, mock_update_password):
-        # Note: patch decorators are applied bottom-to-top, so parameters are: verify, get_user, update_password
+    def test_login_success(self, mock_verify, mock_get_user):
         """Test successful login"""
         mock_get_user.return_value = {
             "id": 1,
             "username": "testuser",
-            "password_hash": "hash",
+            "password_hash": "$2b$12$hash",
             "password_salt": "salt",
         }
         mock_verify.return_value = True
-        mock_update_password.return_value = True
 
         req = Mock()
         sess = {}
