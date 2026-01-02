@@ -141,10 +141,18 @@ class TestRenderAllMatches:
 
     @patch("render.matches.format_match_name")
     @patch("render.matches.can_user_edit_match")
-    def test_render_all_matches_with_matches(self, mock_can_edit, mock_format_name):
+    @patch("render.matches.is_match_completed")
+    @patch("render.matches.get_match_score_display")
+    def test_render_all_matches_with_matches(
+        self, mock_get_score, mock_is_completed, mock_can_edit, mock_format_name
+    ):
         """Test rendering all matches with matches"""
         mock_format_name.return_value = "2024-01-15 Team A VS Team B"
         mock_can_edit.return_value = False
+        mock_is_completed.return_value = (
+            False  # Prevent database access via get_match_score_display
+        )
+        mock_get_score.return_value = ""
 
         matches = [
             {
