@@ -57,21 +57,6 @@ uv sync --extra dev
 uv run python main.py
 ```
 
-### Running Tests
-
-```bash
-# Run all tests
-uv run pytest
-
-# Run with coverage
-uv run pytest --cov=. --cov-report=html
-
-# Run specific test file
-uv run pytest tests/test_scoring.py
-```
-
-See [tests/README.md](tests/README.md) for more testing information.
-
 ### Managing Dependencies
 
 Dependencies are managed in `pyproject.toml` (the source of truth). The `requirements.txt` file is auto-generated for compatibility with Docker and CI/CD systems.
@@ -155,7 +140,7 @@ Configuration constants are defined in `core/config.py`:
 ### Runtime Configuration
 
 The app runs on:
-- **Local**: `http://localhost:7860`
+- **Local**: `http://localhost:8000`
 - **Hugging Face Spaces**: `http://yourspace.hf.space` (port 7860)
 
 ### Environment Variables
@@ -177,6 +162,19 @@ The project includes comprehensive unit tests:
 Tests run automatically on GitHub Actions for all pushes and pull requests.
 
 See [tests/README.md](tests/README.md) for detailed testing information.
+
+### Running Tests Locally
+
+```bash
+# Run all tests
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=. --cov-report=html
+
+# Run specific test file
+uv run pytest tests/test_scoring.py
+```
 
 ## CI/CD
 
@@ -235,10 +233,7 @@ football-manager/
 ├── tests/               # Unit tests
 │   ├── conftest.py      # Pytest configuration
 │   └── test_*.py        # Test files
-├── docs/                # Documentation
-│   └── ...              # Additional documentation
-└── data/                # Database files (gitignored)
-    └── football_manager.db
+└── README.md           # This README file
 ```
 
 ## License
