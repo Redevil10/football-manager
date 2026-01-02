@@ -1,4 +1,5 @@
 # render/players.py - Player rendering functions
+from urllib.parse import unquote
 
 from fasthtml.common import *
 
@@ -17,15 +18,13 @@ from logic import (
     calculate_player_overall,
     calculate_technical_score,
 )
-from render.common import render_attr_input
+from render.common import can_user_delete, can_user_edit, render_attr_input
 
 
 def render_player_table(players, user=None):
     """Render player list as table"""
     if not players:
         return P("No players yet", cls="empty-state")
-
-    from render.common import can_user_delete
 
     rows = []
     for p in players:
@@ -121,8 +120,6 @@ def render_match_available_players(match_id, signup_players):
 
 def render_player_detail_form(player, user=None):
     """Render player detail edit form"""
-    from render.common import can_user_delete, can_user_edit
-
     overall = round(calculate_player_overall(player), 1)
     tech_score = calculate_technical_score(player)
     mental_score = calculate_mental_score(player)
@@ -380,8 +377,6 @@ def render_add_player_form(error=None):
     error_msg = None
     if error:
         # Decode URL-encoded error message
-        from urllib.parse import unquote
-
         error_msg = unquote(str(error))
 
     form_elements = [

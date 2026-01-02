@@ -1,7 +1,6 @@
 # routes/clubs.py - Club management routes
 
 from fasthtml.common import *  # noqa: F403, F405
-from fasthtml.common import RedirectResponse
 
 from core.auth import get_current_user
 from db import (
@@ -492,22 +491,24 @@ def render_club_members(club_id, club_members, user=None):
                 Div(style="display: flex; gap: 10px; align-items: flex-end;")(
                     Div(style="flex: 1;")(
                         Label("User:", style="display: block; margin-bottom: 5px;"),
-                        Select(
-                            *[
-                                Option(
-                                    f"{u['username']} ({u.get('email', '')})",
-                                    value=str(u["id"]),
-                                )
-                                for u in available_users
-                            ],
-                            name="user_id",
-                            required=True,
-                            style="width: 100%; padding: 8px;",
-                        )
-                        if available_users
-                        else P(
-                            "All users are already members of this club.",
-                            style="color: #666;",
+                        (
+                            Select(
+                                *[
+                                    Option(
+                                        f"{u['username']} ({u.get('email', '')})",
+                                        value=str(u["id"]),
+                                    )
+                                    for u in available_users
+                                ],
+                                name="user_id",
+                                required=True,
+                                style="width: 100%; padding: 8px;",
+                            )
+                            if available_users
+                            else P(
+                                "All users are already members of this club.",
+                                style="color: #666;",
+                            )
                         ),
                     ),
                     Div(style="flex: 1;")(
@@ -520,12 +521,14 @@ def render_club_members(club_id, club_members, user=None):
                             style="width: 100%; padding: 8px;",
                         ),
                     ),
-                    Div(
-                        Button("Add Member", type="submit", cls="btn-success"),
-                        style="padding-top: 20px;",
-                    )
-                    if available_users
-                    else "",
+                    (
+                        Div(
+                            Button("Add Member", type="submit", cls="btn-success"),
+                            style="padding-top: 20px;",
+                        )
+                        if available_users
+                        else ""
+                    ),
                 ),
                 method="post",
                 action=f"/assign_user_to_club/{club_id}",
@@ -574,23 +577,25 @@ def render_club_members(club_id, club_members, user=None):
                         Td(member.get("email", "N/A")),
                         Td(role_badge, role_select),
                         Td(
-                            Form(
-                                method="POST",
-                                action=f"/remove_user_from_club/{club_id}/{member['user_id']}",
-                                style="display: inline;",
-                                **{
-                                    "onsubmit": "return confirm('Remove this user from the club?');",
-                                },
-                            )(
-                                Button(
-                                    "Remove",
-                                    type="submit",
-                                    cls="btn-danger",
-                                    style="padding: 4px 8px; font-size: 12px;",
-                                ),
-                            )
-                            if not member["is_superuser"]
-                            else "",
+                            (
+                                Form(
+                                    method="POST",
+                                    action=f"/remove_user_from_club/{club_id}/{member['user_id']}",
+                                    style="display: inline;",
+                                    **{
+                                        "onsubmit": "return confirm('Remove this user from the club?');",
+                                    },
+                                )(
+                                    Button(
+                                        "Remove",
+                                        type="submit",
+                                        cls="btn-danger",
+                                        style="padding: 4px 8px; font-size: 12px;",
+                                    ),
+                                )
+                                if not member["is_superuser"]
+                                else ""
+                            ),
                         ),
                     )
                 )
@@ -641,27 +646,31 @@ def render_club_leagues(club_id, leagues_for_club, all_leagues, user=None):
                 Div(style="display: flex; gap: 10px; align-items: flex-end;")(
                     Div(style="flex: 1;")(
                         Label("League:", style="display: block; margin-bottom: 5px;"),
-                        Select(
-                            *[
-                                Option(league["name"], value=str(league["id"]))
-                                for league in available_leagues
-                            ],
-                            name="league_id",
-                            required=True,
-                            style="width: 100%; padding: 8px;",
-                        )
-                        if available_leagues
-                        else P(
-                            "This club is already in all leagues.",
-                            style="color: #666;",
+                        (
+                            Select(
+                                *[
+                                    Option(league["name"], value=str(league["id"]))
+                                    for league in available_leagues
+                                ],
+                                name="league_id",
+                                required=True,
+                                style="width: 100%; padding: 8px;",
+                            )
+                            if available_leagues
+                            else P(
+                                "This club is already in all leagues.",
+                                style="color: #666;",
+                            )
                         ),
                     ),
-                    Div(
-                        Button("Add to League", type="submit", cls="btn-success"),
-                        style="padding-top: 20px;",
-                    )
-                    if available_leagues
-                    else "",
+                    (
+                        Div(
+                            Button("Add to League", type="submit", cls="btn-success"),
+                            style="padding-top: 20px;",
+                        )
+                        if available_leagues
+                        else ""
+                    ),
                 ),
                 method="post",
                 action=f"/add_club_to_league_from_club/{club_id}",
