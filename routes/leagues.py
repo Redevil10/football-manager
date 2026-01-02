@@ -7,6 +7,9 @@ from core.auth import (
     get_current_user,
     get_user_club_ids_from_request,
 )
+from core.error_handling import handle_db_result, handle_route_error
+from core.exceptions import PermissionError, ValidationError
+from core.validation import validate_non_empty_string, validate_required_int
 from db import (
     create_league,
     delete_league,
@@ -107,16 +110,28 @@ def register_league_routes(rt, STYLE):
                 "/leagues?error=Only+superusers+can+create+leagues", status_code=303
             )
 
-        form = await req.form()
-        name = form.get("name", "").strip()
-        description = form.get("description", "").strip()
+        try:
+            form = await req.form()
+            name = form.get("name", "").strip()
+            description = form.get("description", "").strip()
 
-        if name:
+            # Validate league name
+            is_valid, error_msg = validate_non_empty_string(name, "League name")
+            if not is_valid:
+                raise ValidationError("name", error_msg)
+
             league_id = create_league(name, description)
-            if league_id:
-                return RedirectResponse(f"/league/{league_id}", status_code=303)
-
-        return RedirectResponse("/leagues", status_code=303)
+            return handle_db_result(
+                league_id,
+                f"/league/{league_id}",
+                error_redirect="/leagues",
+                error_message="Failed to create league",
+                check_none=True,
+            )
+        except ValidationError as e:
+            return handle_route_error(e, "/leagues")
+        except Exception as e:
+            return handle_route_error(e, "/leagues")
 
     @rt("/league/{league_id}")
     def league_detail_page(league_id: int, req: Request = None, sess=None):
@@ -176,10 +191,21 @@ def register_league_routes(rt, STYLE):
 
         # Check authorization
         if not can_user_edit_league(user, league_id):
-            return RedirectResponse(f"/league/{league_id}", status_code=303)
+            raise PermissionError("delete", resource=f"league {league_id}")
 
-        delete_league(league_id)
-        return RedirectResponse("/leagues", status_code=303)
+        try:
+            success = delete_league(league_id)
+            return handle_db_result(
+                success,
+                "/leagues",
+                error_redirect="/leagues",
+                error_message="Failed to delete league",
+                check_false=True,
+            )
+        except PermissionError as e:
+            return handle_route_error(e, f"/league/{league_id}")
+        except Exception as e:
+            return handle_route_error(e, "/leagues")
 
     @rt("/add_club_to_league/{league_id}", methods=["POST"])
     async def route_add_club_to_league(league_id: int, req: Request, sess=None):
@@ -191,22 +217,27 @@ def register_league_routes(rt, STYLE):
         if not user.get("is_superuser"):
             return RedirectResponse("/", status_code=303)
 
-        form = await req.form()
-        club_id_str = form.get("club_id", "").strip()
-
-        if not club_id_str:
-            return RedirectResponse(
-                f"/league/{league_id}?error=Club+ID+required", status_code=303
-            )
-
         try:
-            club_id = int(club_id_str)
-            add_club_to_league(club_id, league_id)
-            return RedirectResponse(f"/league/{league_id}", status_code=303)
-        except ValueError:
-            return RedirectResponse(
-                f"/league/{league_id}?error=Invalid+club+ID", status_code=303
+            form = await req.form()
+            club_id_str = form.get("club_id", "").strip()
+
+            # Validate club ID
+            club_id, error_msg = validate_required_int(club_id_str, "Club ID")
+            if error_msg:
+                raise ValidationError("club_id", error_msg)
+
+            success = add_club_to_league(club_id, league_id)
+            return handle_db_result(
+                success,
+                f"/league/{league_id}",
+                error_redirect=f"/league/{league_id}",
+                error_message="Failed to add club to league",
+                check_false=True,
             )
+        except ValidationError as e:
+            return handle_route_error(e, f"/league/{league_id}")
+        except Exception as e:
+            return handle_route_error(e, f"/league/{league_id}")
 
     @rt("/remove_club_from_league/{league_id}/{club_id}", methods=["POST"])
     def route_remove_club_from_league(

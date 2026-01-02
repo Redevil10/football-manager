@@ -6,6 +6,8 @@ from fasthtml.common import *
 
 from core.auth import get_current_user, get_user_accessible_club_ids
 from core.config import USER_ROLES, VALID_ROLES
+from core.error_handling import handle_db_result, handle_route_error
+from core.exceptions import NotFoundError, PermissionError, ValidationError
 from core.validation import validate_in_list
 from db.users import (
     delete_user,
@@ -359,26 +361,29 @@ def register_user_routes(rt, STYLE):
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        # Get error/success from query params if present
-        error_msg = None
-        success_msg = None
-        if req:
-            if hasattr(req, "query_params"):
-                error_msg = req.query_params.get("error")
-                success_msg = req.query_params.get("success")
-            elif hasattr(req, "url") and hasattr(req.url, "query"):
-                query = parse_qs(str(req.url.query))
-                error_msg = query.get("error", [None])[0]
-                success_msg = query.get("success", [None])[0]
+        try:
+            # Get error/success from query params if present
+            error_msg = None
+            success_msg = None
+            if req:
+                if hasattr(req, "query_params"):
+                    error_msg = req.query_params.get("error")
+                    success_msg = req.query_params.get("success")
+                elif hasattr(req, "url") and hasattr(req.url, "query"):
+                    query = parse_qs(str(req.url.query))
+                    error_msg = query.get("error", [None])[0]
+                    success_msg = query.get("success", [None])[0]
 
-        target_user = get_user_by_id(user_id)
-        if not target_user:
-            return RedirectResponse("/users?error=User+not+found", status_code=303)
+            target_user = get_user_by_id(user_id)
+            if not target_user:
+                raise NotFoundError("user", resource_id=user_id)
 
-        # Check if user can view this user
-        visible_users = get_visible_users_for_user(user)
-        if not any(u["id"] == user_id for u in visible_users):
-            return RedirectResponse("/users?error=Access+denied", status_code=303)
+            # Check if user can view this user
+            visible_users = get_visible_users_for_user(user)
+            if not any(u["id"] == user_id for u in visible_users):
+                raise PermissionError("view", resource=f"user {user_id}")
+        except (NotFoundError, PermissionError) as e:
+            return handle_route_error(e, "/users")
 
         # Get user's clubs
         user_clubs = get_user_clubs(user_id)
@@ -575,13 +580,16 @@ def register_user_routes(rt, STYLE):
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        target_user = get_user_by_id(user_id)
-        if not target_user:
-            return RedirectResponse("/users?error=User+not+found", status_code=303)
+        try:
+            target_user = get_user_by_id(user_id)
+            if not target_user:
+                raise NotFoundError("user", resource_id=user_id)
 
-        # Check if user can edit this user
-        if not can_user_edit_target_user(user, target_user):
-            return RedirectResponse("/users?error=Access+denied", status_code=303)
+            # Check if user can edit this user
+            if not can_user_edit_target_user(user, target_user):
+                raise PermissionError("edit", resource=f"user {user_id}")
+        except (NotFoundError, PermissionError) as e:
+            return handle_route_error(e, "/users")
 
         # Get user's clubs for role editing
         target_user_clubs = get_user_clubs(user_id)
@@ -754,45 +762,52 @@ def register_user_routes(rt, STYLE):
         if not can_user_edit_target_user(user, target_user):
             return RedirectResponse("/users?error=Access+denied", status_code=303)
 
-        form = await req.form()
-        email = form.get("email", "").strip()
+        try:
+            form = await req.form()
+            email = form.get("email", "").strip()
 
-        # Update user email only - username is not editable
-        update_user(user_id, username=None, email=email)
+            # Update user email only - username is not editable
+            success = update_user(user_id, username=None, email=email)
+            if not success:
+                raise Exception("Failed to update user")
 
-        # Check permissions for role editing
-        is_superuser = user.get("is_superuser")
-        is_own_profile = user.get("id") == user_id
-        current_user_role = get_user_role_in_clubs(user)
-        can_edit_roles = is_superuser or (
-            current_user_role == USER_ROLES["MANAGER"] and not is_own_profile
-        )
-        can_edit_superuser_status = is_superuser
+            # Check permissions for role editing
+            is_superuser = user.get("is_superuser")
+            is_own_profile = user.get("id") == user_id
+            current_user_role = get_user_role_in_clubs(user)
+            can_edit_roles = is_superuser or (
+                current_user_role == USER_ROLES["MANAGER"] and not is_own_profile
+            )
+            can_edit_superuser_status = is_superuser
 
-        # Viewers cannot edit their own role
-        if is_own_profile and current_user_role == USER_ROLES["VIEWER"]:
-            can_edit_roles = False
+            # Viewers cannot edit their own role
+            if is_own_profile and current_user_role == USER_ROLES["VIEWER"]:
+                can_edit_roles = False
 
-        # Update superuser status (only superusers can do this)
-        if can_edit_superuser_status:
-            is_superuser_value = form.get("is_superuser") == "1"
-            update_user_superuser_status(user_id, is_superuser_value)
+            # Update superuser status (only superusers can do this)
+            if can_edit_superuser_status:
+                is_superuser_value = form.get("is_superuser") == "1"
+                update_user_superuser_status(user_id, is_superuser_value)
 
-        # Update club roles (managers and superusers can do this)
-        if can_edit_roles:
-            target_user_clubs = get_user_clubs(user_id)
-            for club in target_user_clubs:
-                club_role_key = f"club_role_{club['id']}"
-                new_role = form.get(club_role_key, "").strip()
-                if new_role in VALID_ROLES:
-                    # Check if current user can change this specific role
-                    if can_user_change_role_in_club(user, target_user, club["id"]):
-                        update_user_club_role(user_id, club["id"], new_role)
+            # Update club roles (managers and superusers can do this)
+            if can_edit_roles:
+                target_user_clubs = get_user_clubs(user_id)
+                for club in target_user_clubs:
+                    club_role_key = f"club_role_{club['id']}"
+                    new_role = form.get(club_role_key, "").strip()
+                    if new_role in VALID_ROLES:
+                        # Check if current user can change this specific role
+                        if can_user_change_role_in_club(user, target_user, club["id"]):
+                            update_user_club_role(user_id, club["id"], new_role)
 
-        # Always redirect to user detail page after update (matching update_club pattern)
-        return RedirectResponse(
-            f"/users/{user_id}?success=User+updated+successfully", status_code=303
-        )
+            # Always redirect to user detail page after update (matching update_club pattern)
+            return RedirectResponse(
+                f"/users/{user_id}?success=User+updated+successfully", status_code=303
+            )
+        except (NotFoundError, PermissionError) as e:
+            return handle_route_error(e, f"/users/{user_id}")
+        except Exception as e:
+            return handle_route_error(e, f"/users/{user_id}")
 
     @rt("/users/{user_id}/delete", methods=["POST"])
     def route_delete_user(user_id: int, req: Request = None, sess=None):
@@ -804,21 +819,20 @@ def register_user_routes(rt, STYLE):
         # Check if user can delete this user
         target_user = get_user_by_id(user_id)
         if not target_user:
-            return RedirectResponse("/users?error=User+not+found", status_code=303)
+            raise NotFoundError("user", resource_id=user_id)
 
         if not can_user_delete_target_user(user, target_user):
-            return RedirectResponse("/users?error=Access+denied", status_code=303)
+            raise PermissionError("delete", resource=f"user {user_id}")
 
         # Delete the user
         success = delete_user(user_id)
-        if success:
-            return RedirectResponse(
-                "/users?success=User+deleted+successfully", status_code=303
-            )
-        else:
-            return RedirectResponse(
-                "/users?error=Failed+to+delete+user", status_code=303
-            )
+        return handle_db_result(
+            success,
+            "/users?success=User+deleted+successfully",
+            error_redirect="/users",
+            error_message="Failed to delete user",
+            check_false=True,
+        )
 
     @rt("/users/{user_id}/change-role/{club_id}", methods=["POST"])
     async def route_change_user_role(
@@ -831,12 +845,12 @@ def register_user_routes(rt, STYLE):
 
         target_user = get_user_by_id(user_id)
         if not target_user:
-            return RedirectResponse("/users?error=User+not+found", status_code=303)
+            raise NotFoundError("user", resource_id=user_id)
 
         # Check if user can change this role
         if not can_user_change_role_in_club(user, target_user, club_id):
-            return RedirectResponse(
-                f"/users/{user_id}?error=Access+denied", status_code=303
+            raise PermissionError(
+                "change role", resource=f"user {user_id} in club {club_id}"
             )
 
         try:
@@ -846,26 +860,18 @@ def register_user_routes(rt, STYLE):
             # Validate role
             is_valid, error_msg = validate_in_list(role, VALID_ROLES, "Role")
             if not is_valid:
-                return RedirectResponse(
-                    f"/users/{user_id}?error={error_msg.replace(' ', '+')}",
-                    status_code=303,
-                )
+                raise ValidationError("role", error_msg)
 
             # Update the role
             success = update_user_club_role(user_id, club_id, role)
-            if success:
-                return RedirectResponse(
-                    f"/users/{user_id}?success=Role+updated+successfully",
-                    status_code=303,
-                )
-            else:
-                return RedirectResponse(
-                    f"/users/{user_id}?error=Failed+to+update+role", status_code=303
-                )
-        except Exception as e:
-            error_detail = str(e)
-            logger.error(f"Change role error: {error_detail}", exc_info=True)
-            return RedirectResponse(
-                f"/users/{user_id}?error=Role+change+failed:+{error_detail.replace(' ', '+')}",
-                status_code=303,
+            return handle_db_result(
+                success,
+                f"/users/{user_id}?success=Role+updated+successfully",
+                error_redirect=f"/users/{user_id}",
+                error_message="Failed to update role",
+                check_false=True,
             )
+        except (ValidationError, NotFoundError, PermissionError) as e:
+            return handle_route_error(e, f"/users/{user_id}")
+        except Exception as e:
+            return handle_route_error(e, f"/users/{user_id}")
