@@ -72,6 +72,24 @@ uv run pytest tests/test_scoring.py
 
 See [tests/README.md](tests/README.md) for more testing information.
 
+### Managing Dependencies
+
+Dependencies are managed in `pyproject.toml` (the source of truth). The `requirements.txt` file is auto-generated for compatibility with Docker and CI/CD systems.
+
+**To update dependencies:**
+
+1. Edit `pyproject.toml` to add/update/remove packages
+2. Regenerate `requirements.txt`:
+   ```bash
+   uv export > requirements.txt
+   ```
+3. Install updated dependencies:
+   ```bash
+   uv sync --extra dev
+   ```
+
+**Note**: Never manually edit `requirements.txt` - it will be overwritten when regenerated.
+
 ## Usage
 
 ### Authentication
