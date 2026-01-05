@@ -1,12 +1,13 @@
 # db/matches.py - Match database operations
 
 import logging
-import sqlite3
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
+from core.exceptions import DatabaseError, IntegrityError
 from db.club_leagues import get_league_ids_for_clubs, is_club_in_league
 from db.connection import get_db
+from db.error_handling import db_transaction
 from db.leagues import get_all_leagues, get_or_create_friendly_league
 
 logger = logging.getLogger(__name__)
@@ -370,34 +371,29 @@ def create_match(
     if max_players_per_team is not None and max_players_per_team < 1:
         raise ValueError("max_players_per_team must be at least 1 if provided")
 
-    conn = get_db()
     try:
-        cursor = conn.execute(
-            "INSERT INTO matches (league_id, date, start_time, end_time, location, num_teams, max_players_per_team) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                league_id,
-                date,
-                start_time,
-                end_time,
-                location,
-                num_teams,
-                max_players_per_team,
-            ),
-        )
-        match_id = cursor.lastrowid
-        conn.commit()
-        logger.info(f"Match created successfully with ID: {match_id}")
-        return match_id
-    except sqlite3.IntegrityError as e:
-        conn.rollback()
-        logger.warning(f"Failed to create match: IntegrityError - {e}")
-        raise ValueError(f"Failed to create match: {e}")
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to create match: {e}", exc_info=True)
-        raise
-    finally:
-        conn.close()
+        with db_transaction("create_match") as conn:
+            cursor = conn.execute(
+                "INSERT INTO matches (league_id, date, start_time, end_time, location, num_teams, max_players_per_team) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    league_id,
+                    date,
+                    start_time,
+                    end_time,
+                    location,
+                    num_teams,
+                    max_players_per_team,
+                ),
+            )
+            match_id = cursor.lastrowid
+            conn.commit()
+            logger.info(f"Match created successfully with ID: {match_id}")
+            return match_id
+    except IntegrityError as e:
+        raise ValueError(f"Failed to create match: {e.details}")
+    except DatabaseError as e:
+        # Convert to ValueError for backward compatibility
+        raise ValueError(f"Failed to create match: {str(e)}")
 
 
 def update_match(
@@ -441,37 +437,33 @@ def update_match(
     if max_players_per_team is not None and max_players_per_team < 1:
         raise ValueError("max_players_per_team must be at least 1 if provided")
 
-    conn = get_db()
     try:
-        cursor = conn.execute(
-            "UPDATE matches SET league_id = ?, date = ?, start_time = ?, end_time = ?, location = ?, num_teams = ?, max_players_per_team = ? WHERE id = ?",
-            (
-                league_id,
-                date,
-                start_time,
-                end_time,
-                location,
-                num_teams,
-                max_players_per_team,
-                match_id,
-            ),
-        )
-        conn.commit()
-        if cursor.rowcount == 0:
-            logger.warning(f"Update match: No match found with ID {match_id}")
-            return False
-        logger.debug(f"Match {match_id} updated successfully")
-        return True
-    except sqlite3.IntegrityError as e:
-        conn.rollback()
-        logger.warning(f"Failed to update match {match_id}: IntegrityError - {e}")
+        with db_transaction("update_match") as conn:
+            cursor = conn.execute(
+                "UPDATE matches SET league_id = ?, date = ?, start_time = ?, end_time = ?, location = ?, num_teams = ?, max_players_per_team = ? WHERE id = ?",
+                (
+                    league_id,
+                    date,
+                    start_time,
+                    end_time,
+                    location,
+                    num_teams,
+                    max_players_per_team,
+                    match_id,
+                ),
+            )
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(f"Update match: No match found with ID {match_id}")
+                return False
+            logger.debug(f"Match {match_id} updated successfully")
+            return True
+    except IntegrityError:
+        logger.warning(f"Failed to update match {match_id}: IntegrityError")
         return False
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to update match {match_id}: {e}", exc_info=True)
+    except DatabaseError:
+        logger.error(f"Failed to update match {match_id}", exc_info=True)
         return False
-    finally:
-        conn.close()
 
 
 def get_last_match_by_league(league_id: int) -> Optional[Dict[str, Any]]:
@@ -503,18 +495,15 @@ def delete_match(match_id: int) -> bool:
     Returns:
         bool: True on success, False on error
     """
-    conn = get_db()
     try:
-        cursor = conn.execute("DELETE FROM matches WHERE id = ?", (match_id,))
-        conn.commit()
-        if cursor.rowcount == 0:
-            logger.warning(f"Delete match: No match found with ID {match_id}")
-            return False
-        logger.info(f"Match {match_id} deleted successfully")
-        return True
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to delete match {match_id}: {e}", exc_info=True)
+        with db_transaction("delete_match") as conn:
+            cursor = conn.execute("DELETE FROM matches WHERE id = ?", (match_id,))
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(f"Delete match: No match found with ID {match_id}")
+                return False
+            logger.info(f"Match {match_id} deleted successfully")
+            return True
+    except DatabaseError:
+        logger.error(f"Failed to delete match {match_id}", exc_info=True)
         return False
-    finally:
-        conn.close()

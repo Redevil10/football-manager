@@ -1,10 +1,11 @@
 # db/users.py - User database operations
 
 import logging
-import sqlite3
 from typing import Optional
 
+from core.exceptions import DatabaseError, IntegrityError
 from db.connection import get_db
+from db.error_handling import db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -29,27 +30,30 @@ def create_user(
         int: User ID on success
         None: On error (duplicate username, database error, etc.)
     """
-    conn = get_db()
     try:
-        cursor = conn.execute(
-            "INSERT INTO users (username, email, password_hash, password_salt, is_superuser) VALUES (?, ?, ?, ?, ?)",
-            (username, email, password_hash, password_salt, 1 if is_superuser else 0),
+        with db_transaction("create_user") as conn:
+            cursor = conn.execute(
+                "INSERT INTO users (username, email, password_hash, password_salt, is_superuser) VALUES (?, ?, ?, ?, ?)",
+                (
+                    username,
+                    email,
+                    password_hash,
+                    password_salt,
+                    1 if is_superuser else 0,
+                ),
+            )
+            user_id = cursor.lastrowid
+            conn.commit()
+            logger.info(f"User '{username}' created successfully with ID: {user_id}")
+            return user_id
+    except IntegrityError:
+        logger.warning(
+            f"Failed to create user '{username}': Username already exists or constraint violated"
         )
-        user_id = cursor.lastrowid
-        conn.commit()
-        logger.info(f"User '{username}' created successfully with ID: {user_id}")
-        return user_id
-    except sqlite3.IntegrityError as e:
-        conn.rollback()
-        error_msg = f"Failed to create user '{username}': Username already exists or constraint violated"
-        logger.warning(f"{error_msg} - {e}")
         return None
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to create user '{username}': {e}", exc_info=True)
+    except DatabaseError:
+        logger.error(f"Failed to create user '{username}'", exc_info=True)
         return None
-    finally:
-        conn.close()
 
 
 def get_user_by_username(username: str) -> Optional[dict]:
@@ -133,29 +137,23 @@ def add_user_to_club(user_id: int, club_id: int, role: str) -> bool:
     Returns:
         bool: True on success, False on error (user already in club, etc.)
     """
-    conn = get_db()
     try:
-        conn.execute(
-            "INSERT INTO user_clubs (user_id, club_id, role) VALUES (?, ?, ?)",
-            (user_id, club_id, role),
-        )
-        conn.commit()
-        logger.debug(f"User {user_id} added to club {club_id} with role '{role}'")
-        return True
-    except sqlite3.IntegrityError as e:
-        conn.rollback()
+        with db_transaction("add_user_to_club") as conn:
+            conn.execute(
+                "INSERT INTO user_clubs (user_id, club_id, role) VALUES (?, ?, ?)",
+                (user_id, club_id, role),
+            )
+            conn.commit()
+            logger.debug(f"User {user_id} added to club {club_id} with role '{role}'")
+            return True
+    except IntegrityError:
         logger.warning(
-            f"Failed to add user {user_id} to club {club_id}: User already in club or constraint violated - {e}"
+            f"Failed to add user {user_id} to club {club_id}: User already in club or constraint violated"
         )
         return False
-    except Exception as e:
-        conn.rollback()
-        logger.error(
-            f"Failed to add user {user_id} to club {club_id}: {e}", exc_info=True
-        )
+    except DatabaseError:
+        logger.error(f"Failed to add user {user_id} to club {club_id}", exc_info=True)
         return False
-    finally:
-        conn.close()
 
 
 def get_user_club_role(user_id: int, club_id: int) -> Optional[str]:
@@ -188,29 +186,26 @@ def update_user_club_role(user_id: int, club_id: int, role: str) -> bool:
     Returns:
         bool: True on success, False on error
     """
-    conn = get_db()
     try:
-        cursor = conn.execute(
-            "UPDATE user_clubs SET role = ? WHERE user_id = ? AND club_id = ?",
-            (role, user_id, club_id),
-        )
-        conn.commit()
-        if cursor.rowcount == 0:
-            logger.warning(
-                f"Update user club role: No matching record found for user_id={user_id}, club_id={club_id}"
+        with db_transaction("update_user_club_role") as conn:
+            cursor = conn.execute(
+                "UPDATE user_clubs SET role = ? WHERE user_id = ? AND club_id = ?",
+                (role, user_id, club_id),
             )
-            return False
-        logger.debug(f"User {user_id} role updated to '{role}' in club {club_id}")
-        return True
-    except Exception as e:
-        conn.rollback()
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(
+                    f"Update user club role: No matching record found for user_id={user_id}, club_id={club_id}"
+                )
+                return False
+            logger.debug(f"User {user_id} role updated to '{role}' in club {club_id}")
+            return True
+    except DatabaseError:
         logger.error(
-            f"Failed to update user club role for user_id={user_id}, club_id={club_id}: {e}",
+            f"Failed to update user club role for user_id={user_id}, club_id={club_id}",
             exc_info=True,
         )
         return False
-    finally:
-        conn.close()
 
 
 def get_all_users() -> list[dict]:
@@ -238,22 +233,17 @@ def update_user_password(user_id: int, password_hash: str, password_salt: str) -
     Returns:
         bool: True on success, False on error
     """
-    conn = get_db()
     try:
-        conn.execute(
-            "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
-            (password_hash, password_salt, user_id),
-        )
-        conn.commit()
-        return True
-    except Exception as e:
-        conn.rollback()
-        logger.error(
-            f"Failed to update password for user ID {user_id}: {e}", exc_info=True
-        )
+        with db_transaction("update_user_password") as conn:
+            conn.execute(
+                "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
+                (password_hash, password_salt, user_id),
+            )
+            conn.commit()
+            return True
+    except DatabaseError:
+        logger.error(f"Failed to update password for user ID {user_id}", exc_info=True)
         return False
-    finally:
-        conn.close()
 
 
 def delete_user(user_id: int) -> bool:
@@ -265,24 +255,21 @@ def delete_user(user_id: int) -> bool:
     Returns:
         bool: True on success, False on error
     """
-    conn = get_db()
     try:
-        # Delete user_clubs associations (CASCADE should handle this, but being explicit)
-        conn.execute("DELETE FROM user_clubs WHERE user_id = ?", (user_id,))
-        # Delete the user
-        cursor = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
-        conn.commit()
-        if cursor.rowcount == 0:
-            logger.warning(f"Delete user: No user found with ID {user_id}")
-            return False
-        logger.info(f"User ID {user_id} deleted successfully")
-        return True
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to delete user ID {user_id}: {e}", exc_info=True)
+        with db_transaction("delete_user") as conn:
+            # Delete user_clubs associations (CASCADE should handle this, but being explicit)
+            conn.execute("DELETE FROM user_clubs WHERE user_id = ?", (user_id,))
+            # Delete the user
+            cursor = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(f"Delete user: No user found with ID {user_id}")
+                return False
+            logger.info(f"User ID {user_id} deleted successfully")
+            return True
+    except DatabaseError:
+        logger.error(f"Failed to delete user ID {user_id}", exc_info=True)
         return False
-    finally:
-        conn.close()
 
 
 def get_users_by_club_ids(club_ids: list[int]) -> list[dict]:
@@ -324,42 +311,38 @@ def update_user(
     Returns:
         bool: True on success, False on error
     """
-    conn = get_db()
     try:
-        updates = []
-        params = []
+        with db_transaction("update_user") as conn:
+            updates = []
+            params = []
 
-        if username is not None:
-            updates.append("username = ?")
-            params.append(username)
+            if username is not None:
+                updates.append("username = ?")
+                params.append(username)
 
-        if email is not None:
-            updates.append("email = ?")
-            params.append(email)
+            if email is not None:
+                updates.append("email = ?")
+                params.append(email)
 
-        if not updates:
-            return True  # Nothing to update
+            if not updates:
+                return True  # Nothing to update
 
-        params.append(user_id)
-        cursor = conn.execute(
-            f"UPDATE users SET {', '.join(updates)} WHERE id = ?", tuple(params)
-        )
-        conn.commit()
-        if cursor.rowcount == 0:
-            logger.warning(f"Update user: No user found with ID {user_id}")
-            return False
-        logger.debug(f"User {user_id} updated successfully")
-        return True
-    except sqlite3.IntegrityError as e:
-        conn.rollback()
-        logger.warning(f"Failed to update user ID {user_id}: IntegrityError - {e}")
+            params.append(user_id)
+            cursor = conn.execute(
+                f"UPDATE users SET {', '.join(updates)} WHERE id = ?", tuple(params)
+            )
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(f"Update user: No user found with ID {user_id}")
+                return False
+            logger.debug(f"User {user_id} updated successfully")
+            return True
+    except IntegrityError:
+        logger.warning(f"Failed to update user ID {user_id}: IntegrityError")
         return False
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to update user ID {user_id}: {e}", exc_info=True)
+    except DatabaseError:
+        logger.error(f"Failed to update user ID {user_id}", exc_info=True)
         return False
-    finally:
-        conn.close()
 
 
 def update_user_superuser_status(user_id: int, is_superuser: bool) -> bool:
@@ -372,20 +355,17 @@ def update_user_superuser_status(user_id: int, is_superuser: bool) -> bool:
     Returns:
         bool: True on success, False on error
     """
-    conn = get_db()
     try:
-        conn.execute(
-            "UPDATE users SET is_superuser = ? WHERE id = ?",
-            (1 if is_superuser else 0, user_id),
-        )
-        conn.commit()
-        return True
-    except Exception as e:
-        conn.rollback()
+        with db_transaction("update_user_superuser_status") as conn:
+            conn.execute(
+                "UPDATE users SET is_superuser = ? WHERE id = ?",
+                (1 if is_superuser else 0, user_id),
+            )
+            conn.commit()
+            return True
+    except DatabaseError:
         logger.error(
-            f"Failed to update superuser status for user ID {user_id}: {e}",
+            f"Failed to update superuser status for user ID {user_id}",
             exc_info=True,
         )
         return False
-    finally:
-        conn.close()

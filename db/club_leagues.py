@@ -1,9 +1,10 @@
 # db/club_leagues.py - Club-League relationship operations
 
 import logging
-import sqlite3
 
+from core.exceptions import DatabaseError, IntegrityError
 from db.connection import get_db
+from db.error_handling import db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -18,29 +19,25 @@ def add_club_to_league(club_id: int, league_id: int) -> bool:
     Returns:
         bool: True on success, False on error (club already in league, etc.)
     """
-    conn = get_db()
     try:
-        conn.execute(
-            "INSERT INTO club_leagues (club_id, league_id) VALUES (?, ?)",
-            (club_id, league_id),
-        )
-        conn.commit()
-        logger.debug(f"Club {club_id} added to league {league_id}")
-        return True
-    except sqlite3.IntegrityError as e:
-        conn.rollback()
+        with db_transaction("add_club_to_league") as conn:
+            conn.execute(
+                "INSERT INTO club_leagues (club_id, league_id) VALUES (?, ?)",
+                (club_id, league_id),
+            )
+            conn.commit()
+            logger.debug(f"Club {club_id} added to league {league_id}")
+            return True
+    except IntegrityError:
         logger.warning(
-            f"Failed to add club {club_id} to league {league_id}: Club already in league - {e}"
+            f"Failed to add club {club_id} to league {league_id}: Club already in league"
         )
         return False
-    except Exception as e:
-        conn.rollback()
+    except DatabaseError:
         logger.error(
-            f"Failed to add club {club_id} to league {league_id}: {e}", exc_info=True
+            f"Failed to add club {club_id} to league {league_id}", exc_info=True
         )
         return False
-    finally:
-        conn.close()
 
 
 def remove_club_from_league(club_id: int, league_id: int) -> bool:
@@ -53,29 +50,26 @@ def remove_club_from_league(club_id: int, league_id: int) -> bool:
     Returns:
         bool: True on success, False on error
     """
-    conn = get_db()
     try:
-        cursor = conn.execute(
-            "DELETE FROM club_leagues WHERE club_id = ? AND league_id = ?",
-            (club_id, league_id),
-        )
-        conn.commit()
-        if cursor.rowcount == 0:
-            logger.warning(
-                f"Remove club from league: Club {club_id} not in league {league_id}"
+        with db_transaction("remove_club_from_league") as conn:
+            cursor = conn.execute(
+                "DELETE FROM club_leagues WHERE club_id = ? AND league_id = ?",
+                (club_id, league_id),
             )
-            return False
-        logger.debug(f"Club {club_id} removed from league {league_id}")
-        return True
-    except Exception as e:
-        conn.rollback()
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(
+                    f"Remove club from league: Club {club_id} not in league {league_id}"
+                )
+                return False
+            logger.debug(f"Club {club_id} removed from league {league_id}")
+            return True
+    except DatabaseError:
         logger.error(
-            f"Failed to remove club {club_id} from league {league_id}: {e}",
+            f"Failed to remove club {club_id} from league {league_id}",
             exc_info=True,
         )
         return False
-    finally:
-        conn.close()
 
 
 def get_clubs_in_league(league_id: int) -> list[dict]:

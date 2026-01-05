@@ -1,15 +1,16 @@
 # db/leagues.py - League database operations
 
 import logging
-import sqlite3
 from typing import Optional
 
+from core.exceptions import DatabaseError, IntegrityError
 from db.club_leagues import (
     add_club_to_league,
     get_league_ids_for_clubs,
     is_club_in_league,
 )
 from db.connection import get_db
+from db.error_handling import db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -118,28 +119,24 @@ def create_league(name: str, description: str = "") -> Optional[int]:
         int: League ID on success
         None: On error (duplicate name, database error, etc.)
     """
-    conn = get_db()
     try:
-        cursor = conn.execute(
-            "INSERT INTO leagues (name, description) VALUES (?, ?)",
-            (name, description),
-        )
-        league_id = cursor.lastrowid
-        conn.commit()
-        logger.info(f"League '{name}' created successfully with ID: {league_id}")
-        return league_id
-    except sqlite3.IntegrityError as e:
-        conn.rollback()
+        with db_transaction("create_league") as conn:
+            cursor = conn.execute(
+                "INSERT INTO leagues (name, description) VALUES (?, ?)",
+                (name, description),
+            )
+            league_id = cursor.lastrowid
+            conn.commit()
+            logger.info(f"League '{name}' created successfully with ID: {league_id}")
+            return league_id
+    except IntegrityError:
         logger.warning(
-            f"Failed to create league '{name}': League name already exists or constraint violated - {e}"
+            f"Failed to create league '{name}': League name already exists or constraint violated"
         )
         return None
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to create league '{name}': {e}", exc_info=True)
+    except DatabaseError:
+        logger.error(f"Failed to create league '{name}'", exc_info=True)
         return None
-    finally:
-        conn.close()
 
 
 def update_league(
@@ -155,42 +152,38 @@ def update_league(
     Returns:
         bool: True on success, False on error
     """
-    conn = get_db()
     try:
-        updates = []
-        params = []
+        with db_transaction("update_league") as conn:
+            updates = []
+            params = []
 
-        if name is not None:
-            updates.append("name = ?")
-            params.append(name)
-        if description is not None:
-            updates.append("description = ?")
-            params.append(description)
+            if name is not None:
+                updates.append("name = ?")
+                params.append(name)
+            if description is not None:
+                updates.append("description = ?")
+                params.append(description)
 
-        if not updates:
-            return True  # Nothing to update
+            if not updates:
+                return True  # Nothing to update
 
-        params.append(league_id)
-        cursor = conn.execute(
-            f"UPDATE leagues SET {', '.join(updates)} WHERE id = ?",
-            tuple(params),
-        )
-        conn.commit()
-        if cursor.rowcount == 0:
-            logger.warning(f"Update league: No league found with ID {league_id}")
-            return False
-        logger.debug(f"League {league_id} updated successfully")
-        return True
-    except sqlite3.IntegrityError as e:
-        conn.rollback()
-        logger.warning(f"Failed to update league {league_id}: IntegrityError - {e}")
+            params.append(league_id)
+            cursor = conn.execute(
+                f"UPDATE leagues SET {', '.join(updates)} WHERE id = ?",
+                tuple(params),
+            )
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(f"Update league: No league found with ID {league_id}")
+                return False
+            logger.debug(f"League {league_id} updated successfully")
+            return True
+    except IntegrityError:
+        logger.warning(f"Failed to update league {league_id}: IntegrityError")
         return False
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to update league {league_id}: {e}", exc_info=True)
+    except DatabaseError:
+        logger.error(f"Failed to update league {league_id}", exc_info=True)
         return False
-    finally:
-        conn.close()
 
 
 def delete_league(league_id: int) -> bool:
@@ -202,18 +195,15 @@ def delete_league(league_id: int) -> bool:
     Returns:
         bool: True on success, False on error
     """
-    conn = get_db()
     try:
-        cursor = conn.execute("DELETE FROM leagues WHERE id = ?", (league_id,))
-        conn.commit()
-        if cursor.rowcount == 0:
-            logger.warning(f"Delete league: No league found with ID {league_id}")
-            return False
-        logger.info(f"League {league_id} deleted successfully")
-        return True
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to delete league {league_id}: {e}", exc_info=True)
+        with db_transaction("delete_league") as conn:
+            cursor = conn.execute("DELETE FROM leagues WHERE id = ?", (league_id,))
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(f"Delete league: No league found with ID {league_id}")
+                return False
+            logger.info(f"League {league_id} deleted successfully")
+            return True
+    except DatabaseError:
+        logger.error(f"Failed to delete league {league_id}", exc_info=True)
         return False
-    finally:
-        conn.close()
