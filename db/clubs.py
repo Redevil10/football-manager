@@ -1,10 +1,11 @@
 # db/clubs.py - Club database operations
 
 import logging
-import sqlite3
 from typing import Optional
 
+from core.exceptions import DatabaseError, IntegrityError
 from db.connection import get_db
+from db.error_handling import db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -20,28 +21,24 @@ def create_club(name: str, description: str = "") -> Optional[int]:
         int: Club ID on success
         None: On error (duplicate name, database error, etc.)
     """
-    conn = get_db()
     try:
-        cursor = conn.execute(
-            "INSERT INTO clubs (name, description) VALUES (?, ?)",
-            (name, description),
-        )
-        club_id = cursor.lastrowid
-        conn.commit()
-        logger.info(f"Club '{name}' created successfully with ID: {club_id}")
-        return club_id
-    except sqlite3.IntegrityError as e:
-        conn.rollback()
-        logger.warning(
-            f"Failed to create club '{name}': Club name already exists or constraint violated - {e}"
+        with db_transaction("create_club") as conn:
+            cursor = conn.execute(
+                "INSERT INTO clubs (name, description) VALUES (?, ?)",
+                (name, description),
+            )
+            club_id = cursor.lastrowid
+            conn.commit()
+            logger.info(f"Club '{name}' created successfully with ID: {club_id}")
+            return club_id
+    except IntegrityError:
+        logger.error(
+            f"Failed to create club '{name}': Club name already exists or constraint violated"
         )
         return None
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to create club '{name}': {e}", exc_info=True)
+    except DatabaseError:
+        logger.error(f"Failed to create club '{name}'", exc_info=True)
         return None
-    finally:
-        conn.close()
 
 
 def get_club(club_id: int) -> Optional[dict]:
@@ -99,42 +96,38 @@ def update_club(
     Returns:
         bool: True on success, False on error
     """
-    conn = get_db()
     try:
-        updates = []
-        params = []
+        with db_transaction("update_club") as conn:
+            updates = []
+            params = []
 
-        if name is not None:
-            updates.append("name = ?")
-            params.append(name)
-        if description is not None:
-            updates.append("description = ?")
-            params.append(description)
+            if name is not None:
+                updates.append("name = ?")
+                params.append(name)
+            if description is not None:
+                updates.append("description = ?")
+                params.append(description)
 
-        if not updates:
-            return True  # Nothing to update
+            if not updates:
+                return True  # Nothing to update
 
-        params.append(club_id)
-        cursor = conn.execute(
-            f"UPDATE clubs SET {', '.join(updates)} WHERE id = ?",
-            tuple(params),
-        )
-        conn.commit()
-        if cursor.rowcount == 0:
-            logger.warning(f"Update club: No club found with ID {club_id}")
-            return False
-        logger.debug(f"Club {club_id} updated successfully")
-        return True
-    except sqlite3.IntegrityError as e:
-        conn.rollback()
-        logger.warning(f"Failed to update club {club_id}: IntegrityError - {e}")
+            params.append(club_id)
+            cursor = conn.execute(
+                f"UPDATE clubs SET {', '.join(updates)} WHERE id = ?",
+                tuple(params),
+            )
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(f"Update club: No club found with ID {club_id}")
+                return False
+            logger.debug(f"Club {club_id} updated successfully")
+            return True
+    except IntegrityError:
+        logger.warning(f"Failed to update club {club_id}: IntegrityError")
         return False
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to update club {club_id}: {e}", exc_info=True)
+    except DatabaseError:
+        logger.error(f"Failed to update club {club_id}", exc_info=True)
         return False
-    finally:
-        conn.close()
 
 
 def delete_club(club_id: int) -> bool:
@@ -146,18 +139,15 @@ def delete_club(club_id: int) -> bool:
     Returns:
         bool: True on success, False on error
     """
-    conn = get_db()
     try:
-        cursor = conn.execute("DELETE FROM clubs WHERE id = ?", (club_id,))
-        conn.commit()
-        if cursor.rowcount == 0:
-            logger.warning(f"Delete club: No club found with ID {club_id}")
-            return False
-        logger.info(f"Club {club_id} deleted successfully")
-        return True
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to delete club {club_id}: {e}", exc_info=True)
+        with db_transaction("delete_club") as conn:
+            cursor = conn.execute("DELETE FROM clubs WHERE id = ?", (club_id,))
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(f"Delete club: No club found with ID {club_id}")
+                return False
+            logger.info(f"Club {club_id} deleted successfully")
+            return True
+    except DatabaseError:
+        logger.error(f"Failed to delete club {club_id}", exc_info=True)
         return False
-    finally:
-        conn.close()

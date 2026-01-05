@@ -3,7 +3,9 @@
 import logging
 from typing import Optional
 
+from core.exceptions import DatabaseError
 from db.connection import get_db
+from db.error_handling import db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -53,26 +55,21 @@ def add_match_event(
         int: Event ID on success
         None: On error
     """
-    conn = get_db()
     try:
-        cursor = conn.execute(
-            "INSERT INTO match_events (match_id, event_type, player_id, team_id, minute, description) VALUES (?, ?, ?, ?, ?, ?)",
-            (match_id, event_type, player_id, team_id, minute, description),
-        )
-        event_id = cursor.lastrowid
-        conn.commit()
-        logger.debug(
-            f"Match event added: event_id={event_id}, match_id={match_id}, type={event_type}"
-        )
-        return event_id
-    except Exception as e:
-        conn.rollback()
-        logger.error(
-            f"Failed to add match event to match {match_id}: {e}", exc_info=True
-        )
+        with db_transaction("add_match_event") as conn:
+            cursor = conn.execute(
+                "INSERT INTO match_events (match_id, event_type, player_id, team_id, minute, description) VALUES (?, ?, ?, ?, ?, ?)",
+                (match_id, event_type, player_id, team_id, minute, description),
+            )
+            event_id = cursor.lastrowid
+            conn.commit()
+            logger.debug(
+                f"Match event added: event_id={event_id}, match_id={match_id}, type={event_type}"
+            )
+            return event_id
+    except DatabaseError:
+        logger.error(f"Failed to add match event to match {match_id}", exc_info=True)
         return None
-    finally:
-        conn.close()
 
 
 def delete_match_event(event_id: int) -> bool:
@@ -84,18 +81,15 @@ def delete_match_event(event_id: int) -> bool:
     Returns:
         bool: True on success, False on error
     """
-    conn = get_db()
     try:
-        cursor = conn.execute("DELETE FROM match_events WHERE id = ?", (event_id,))
-        conn.commit()
-        if cursor.rowcount == 0:
-            logger.warning(f"Delete match event: No event found with ID {event_id}")
-            return False
-        logger.debug(f"Match event {event_id} deleted successfully")
-        return True
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to delete match event {event_id}: {e}", exc_info=True)
+        with db_transaction("delete_match_event") as conn:
+            cursor = conn.execute("DELETE FROM match_events WHERE id = ?", (event_id,))
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(f"Delete match event: No event found with ID {event_id}")
+                return False
+            logger.debug(f"Match event {event_id} deleted successfully")
+            return True
+    except DatabaseError:
+        logger.error(f"Failed to delete match event {event_id}", exc_info=True)
         return False
-    finally:
-        conn.close()
