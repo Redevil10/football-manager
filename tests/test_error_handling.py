@@ -77,24 +77,16 @@ class TestStandardizedErrorHandling:
     """Test standardized error handling patterns in database functions"""
 
     @patch("db.error_handling.logger")
-    @patch("db.connection.get_db")
-    def test_create_user_integrity_error(self, mock_logger, mock_get_db):
+    @patch("db.error_handling.get_db")
+    def test_create_user_integrity_error(self, mock_get_db, mock_logger):
         """Test that create_user handles IntegrityError correctly"""
-        # Mock database connection - use Mock() like test_db_error_handling.py
-        # Use the EXACT same pattern as test_db_error_handling.py::test_db_transaction_integrity_error
+        # Mock database connection - patch db.error_handling.get_db (the imported reference)
+        # Note: patch decorators are applied in reverse order, so mock_get_db is first parameter
         mock_conn = Mock()
         mock_get_db.return_value = mock_conn
-        # Set side_effect directly on the execute attribute (same as test_db_error_handling.py)
+        # Set side_effect directly on the execute attribute to raise IntegrityError
         mock_conn.execute.side_effect = sqlite3.IntegrityError(
             "UNIQUE constraint failed"
-        )
-
-        # Verify the mock is set up correctly before calling create_user
-        assert hasattr(mock_conn.execute, "side_effect"), (
-            "execute should have side_effect"
-        )
-        assert mock_conn.execute.side_effect is not None, (
-            "side_effect should not be None"
         )
 
         result = create_user("testuser", "hash", "salt")
@@ -133,13 +125,14 @@ class TestStandardizedErrorHandling:
         mock_conn.close.assert_called_once()
 
     @patch("db.error_handling.logger")
-    @patch("db.connection.get_db")
-    def test_create_club_integrity_error(self, mock_logger, mock_get_db):
+    @patch("db.error_handling.get_db")
+    def test_create_club_integrity_error(self, mock_get_db, mock_logger):
         """Test that create_club handles IntegrityError correctly"""
-        # Mock database connection - use Mock() like test_db_error_handling.py
+        # Mock database connection - patch db.error_handling.get_db (the imported reference)
+        # Note: patch decorators are applied in reverse order, so mock_get_db is first parameter
         mock_conn = Mock()
         mock_get_db.return_value = mock_conn
-        # Simulate IntegrityError when execute is called - same pattern as test_db_error_handling.py
+        # Simulate IntegrityError when execute is called
         mock_conn.execute.side_effect = sqlite3.IntegrityError(
             "UNIQUE constraint failed"
         )
@@ -221,13 +214,14 @@ class TestStandardizedErrorHandling:
         assert result is False
 
     @patch("db.error_handling.logger")
-    @patch("db.connection.get_db")
-    def test_add_user_to_club_integrity_error(self, mock_logger, mock_get_db):
+    @patch("db.error_handling.get_db")
+    def test_add_user_to_club_integrity_error(self, mock_get_db, mock_logger):
         """Test that add_user_to_club handles IntegrityError correctly"""
-        # Mock database connection - use Mock() like test_db_error_handling.py
+        # Mock database connection - patch db.error_handling.get_db (the imported reference)
+        # Note: patch decorators are applied in reverse order, so mock_get_db is first parameter
         mock_conn = Mock()
         mock_get_db.return_value = mock_conn
-        # Simulate IntegrityError (user already in club) - same pattern as test_db_error_handling.py
+        # Simulate IntegrityError (user already in club)
         mock_conn.execute.side_effect = sqlite3.IntegrityError(
             "UNIQUE constraint failed"
         )
