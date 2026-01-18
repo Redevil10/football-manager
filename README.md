@@ -19,6 +19,16 @@ short_description: Manage football teams, allocate players, track matches
 
 A comprehensive web application for managing amateur football team rosters, allocating players into balanced teams, and tracking match history.
 
+## Live Demo
+
+Try the live demo at: **[https://redevil10-football-manager.hf.space/](https://redevil10-football-manager.hf.space/)**
+
+**Test Account Credentials:**
+- **Username**: `TestUser`
+- **Password**: `TestUser`
+
+Feel free to explore the application with this demo account. You can view matches, player rosters, and all other features in read-only mode.
+
 ## Features
 
 - **Player Management** - Add, edit, and manage players with detailed attributes (Technical, Mental, Physical, Goalkeeper)
