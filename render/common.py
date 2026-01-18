@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from fasthtml.common import *
 
-from core.auth import check_club_permission
+from core.auth import check_club_permission, get_csrf_token
 from db import get_match_teams
 
 
@@ -238,3 +238,23 @@ def can_user_edit(user: dict, club_id: int = None) -> bool:
 def can_user_delete(user: dict, club_id: int = None) -> bool:
     """Check if user can delete (manager or superuser)"""
     return can_user_edit(user, club_id)  # Same permission as edit
+
+
+def render_csrf_input(sess: dict):
+    """Render a hidden CSRF token input field for forms.
+
+    Usage:
+        Form(
+            render_csrf_input(sess),
+            # other form fields...
+            method="POST",
+        )
+
+    Args:
+        sess: Session dictionary
+
+    Returns:
+        Hidden input element with CSRF token
+    """
+    token = get_csrf_token(sess)
+    return Input(type="hidden", name="csrf_token", value=token)

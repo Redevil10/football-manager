@@ -50,16 +50,10 @@ def register_auth_routes(rt, STYLE):
             if login_user(req, username, password, sess):
                 return RedirectResponse("/", status_code=303)
             else:
-                # Check if user exists to provide better error message
-                user = get_user_by_username(username)
-                if not user:
-                    return RedirectResponse(
-                        "/login?error=Wrong+username", status_code=303
-                    )
-                else:
-                    return RedirectResponse(
-                        "/login?error=Wrong+password", status_code=303
-                    )
+                # Use generic error message to prevent username enumeration attacks
+                return RedirectResponse(
+                    "/login?error=Invalid+username+or+password", status_code=303
+                )
         except Exception as e:
             error_detail = str(e)
             logger.error(f"Login error: {error_detail}", exc_info=True)
@@ -149,15 +143,15 @@ def register_auth_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         # Require superuser or manager status
-        is_superuser = user.get("is_superuser", False)
+        current_user_is_superuser = user.get("is_superuser", False)
         is_manager = False
-        if not is_superuser:
+        if not current_user_is_superuser:
             from db.users import get_user_clubs
 
             user_clubs = get_user_clubs(user["id"])
             is_manager = any(club.get("role") == "manager" for club in user_clubs)
 
-        if not (is_superuser or is_manager):
+        if not (current_user_is_superuser or is_manager):
             return RedirectResponse("/", status_code=303)
 
         try:
@@ -187,14 +181,15 @@ def register_auth_routes(rt, STYLE):
             username = form.get("username", "").strip()
             email = form.get("email", "").strip() or None
             password = form.get("password", "")
-            is_superuser = (
-                form.get("is_superuser") == "1" if is_superuser else False
-            )  # Only superusers can create superusers
+            # Only superusers can create superuser accounts
+            new_user_is_superuser = (
+                form.get("is_superuser") == "1" if current_user_is_superuser else False
+            )
             role = form.get("role", "").strip()
             club_id_str = form.get("club_id", "").strip()
 
             logger.debug(
-                f"Parsed registration: username={username}, email={email}, is_superuser={is_superuser}, role={role}, club_id={club_id_str}"
+                f"Parsed registration: username={username}, email={email}, is_superuser={new_user_is_superuser}, role={role}, club_id={club_id_str}"
             )
 
             # Validate username
@@ -226,7 +221,7 @@ def register_auth_routes(rt, STYLE):
                 )
 
             # For managers, verify they can assign users to this club
-            if not is_superuser:
+            if not current_user_is_superuser:
                 from core.auth import check_club_permission
 
                 if not check_club_permission(user, club_id, USER_ROLES["MANAGER"]):
@@ -241,7 +236,7 @@ def register_auth_routes(rt, STYLE):
             logger.debug(f"Created password hash for user: {username}")
 
             user_id = create_user(
-                username, password_hash, password_salt, email, is_superuser
+                username, password_hash, password_salt, email, new_user_is_superuser
             )
 
             if user_id:
@@ -276,7 +271,11 @@ def register_auth_routes(rt, STYLE):
 
                 # Auto-login after registration (only for superusers creating their own account)
                 # Managers creating users should redirect to users page
-                if is_superuser and sess is not None:
+                if (
+                    current_user_is_superuser
+                    and new_user_is_superuser
+                    and sess is not None
+                ):
                     login_success = login_user(req, username, password, sess)
                     logger.debug(f"Auto-login after registration: {login_success}")
                     if login_success:
