@@ -40,6 +40,7 @@ from db import (
     get_or_create_friendly_league,
     remove_all_match_signup_players,
     remove_match_player,
+    swap_match_players,
     update_match,
     update_match_player,
     update_match_team,
@@ -710,7 +711,9 @@ def register_match_routes(rt, STYLE):
             return RedirectResponse("/matches", status_code=303)
 
     @rt("/match/{match_id}")
-    def match_detail_page(match_id: int, req: Request = None, sess=None):
+    def match_detail_page(
+        match_id: int, req: Request = None, sess=None, display: str = "pitch"
+    ):
         """Match detail page"""
         user = get_current_user(req, sess)
         if not user:
@@ -772,11 +775,57 @@ def register_match_routes(rt, STYLE):
                             match_player_ids,
                             signup_players=available_signup_players,
                             user=user,
+                            display_mode=display,
                         ),
                     ),
                 ),
             ),
         )
+
+    @rt("/swap_pitch_players/{match_id}/{player_id}/{target_position}")
+    @rt(
+        "/swap_pitch_players/{match_id}/{player_id}/{target_position}/{target_player_id}"
+    )
+    def swap_pitch_players(
+        match_id: int,
+        player_id: int,
+        target_position: str,
+        target_player_id: int = None,
+        req: Request = None,
+        sess=None,
+        display: str = "pitch",
+    ):
+        """Handle player position swaps on interactive pitch
+
+        Args:
+            match_id: Match ID
+            player_id: ID of the player being dragged (match_player_id)
+            target_position: Target tactical position code (e.g., "CM", "ST")
+            target_player_id: Optional ID of player in target position to swap with (match_player_id)
+            display: Display mode to redirect to
+        """
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        try:
+            if target_player_id:
+                # Swap two players - swaps their teams, positions, and tactical positions
+                swap_match_players(player_id, target_player_id)
+            else:
+                # Dragging to an empty tactical position - just update the tactical position
+                update_match_player(player_id, tactical_position=target_position)
+
+            # Redirect back to match page with current display mode
+            return RedirectResponse(
+                f"/match/{match_id}?display={display}", status_code=303
+            )
+
+        except Exception as e:
+            logger.error(f"Error swapping pitch players: {e}", exc_info=True)
+            return RedirectResponse(
+                f"/match/{match_id}?display={display}", status_code=303
+            )
 
     @rt("/allocate_match/{match_id}", methods=["POST"])
     def route_allocate_match(match_id: int, req: Request = None, sess=None):

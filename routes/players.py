@@ -627,9 +627,13 @@ def register_player_routes(rt, STYLE):
 
     @rt("/confirm_swap_match/{match_id}/{match_player1_id}/{match_player2_id}")
     def confirm_swap_match_page(
-        match_id: int, match_player1_id: int, match_player2_id: int
+        match_id: int,
+        match_player1_id: int,
+        match_player2_id: int,
+        req: Request = None,
+        display: str = "classic",
     ):
         """Confirm swap for match players"""
 
         swap_match_players(match_player1_id, match_player2_id)
-        return RedirectResponse(f"/match/{match_id}", status_code=303)
+        return RedirectResponse(f"/match/{match_id}?display={display}", status_code=303)

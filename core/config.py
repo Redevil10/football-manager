@@ -99,11 +99,11 @@ OVERALL_SCORE_DIVISOR = 5
 # Team allocation constants
 ALLOCATION_MAX_ITERATIONS = 100  # Maximum iterations for team balancing optimization
 POSITION_DISTRIBUTION = {
-    "defender_ratio": 0.4,  # 40% of team should be defenders
-    "midfielder_ratio": 0.35,  # 35% of team should be midfielders
+    "defender_ratio": 0.36,  # 36% of team should be defenders (4 players in 11-man team)
+    "midfielder_ratio": 0.36,  # 36% of team should be midfielders (4 players in 11-man team)
     "goalkeeper_count": 1,  # Always 1 goalkeeper per team
     "substitute_gk_ratio": 0.1,  # 10% of substitutes can be goalkeepers
-}
+}  # This gives 4-4-2 formation: 1 GK + 4 defenders + 4 midfielders + 2 forwards
 
 # User role constants
 USER_ROLES = {
