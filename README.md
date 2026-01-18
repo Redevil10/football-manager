@@ -151,7 +151,6 @@ Configuration constants are defined in `core/config.py`:
 
 The app runs on:
 - **Local**: `http://localhost:8000`
-- **Hugging Face Spaces**: `http://yourspace.hf.space` (port 7860)
 
 ### Environment Variables
 
