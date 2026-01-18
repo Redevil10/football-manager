@@ -22,6 +22,7 @@ sys.path.insert(0, parent_dir)
 # These are in the same directory, so we can import directly
 # noqa: E402 - sys.path must be modified before these imports
 from migrations.migrate_auth import migrate_db as migrate_auth  # noqa: E402
+from migrations.migrate_club_ids import migrate_db as migrate_club_ids  # noqa: E402
 from migrations.migrate_club_leagues_many_to_many import (  # noqa: E402
     migrate_db as migrate_club_leagues_many_to_many,
 )
@@ -44,7 +45,7 @@ def migrate_all():
     print()
 
     # Step 1: Authentication and club support
-    print("Step 1/3: Adding authentication and club support...")
+    print("Step 1/4: Adding authentication and club support...")
     print("-" * 70)
     try:
         messages = migrate_auth()
@@ -57,7 +58,7 @@ def migrate_all():
     print()
 
     # Step 2: Remove league_id from players
-    print("Step 2/3: Removing league_id from players table...")
+    print("Step 2/4: Removing league_id from players table...")
     print("-" * 70)
     try:
         messages = migrate_remove_league_id()
@@ -70,7 +71,7 @@ def migrate_all():
     print()
 
     # Step 3: Convert leagues to many-to-many
-    print("Step 3/3: Converting leagues to many-to-many relationship...")
+    print("Step 3/4: Converting leagues to many-to-many relationship...")
     print("-" * 70)
     try:
         messages = migrate_club_leagues_many_to_many()
@@ -78,6 +79,19 @@ def migrate_all():
         print("✓ Step 3 completed successfully")
     except Exception as e:
         print(f"✗ Step 3 failed: {e}")
+        print("\nMigration aborted. Please fix the error and try again.")
+        return False, all_messages
+    print()
+
+    # Step 4: Fix orphaned players with invalid club_ids
+    print("Step 4/4: Fixing orphaned players with invalid club_ids...")
+    print("-" * 70)
+    try:
+        messages = migrate_club_ids()
+        all_messages.extend(messages)
+        print("✓ Step 4 completed successfully")
+    except Exception as e:
+        print(f"✗ Step 4 failed: {e}")
         print("\nMigration aborted. Please fix the error and try again.")
         return False, all_messages
     print()
