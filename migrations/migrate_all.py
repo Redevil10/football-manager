@@ -1,34 +1,7 @@
-#!/usr/bin/env python3
-"""
-Comprehensive migration script that runs all migrations in the correct order.
-This script:
-1. Adds authentication and club support (users, clubs, user_clubs tables)
-2. Adds club_id to players and leagues tables
-3. Creates default club "Concord FC" and assigns existing data
-4. Removes league_id from players table (redundant)
-5. Converts leagues to many-to-many relationship with clubs
-
-Run this script once to migrate your database to the new schema.
-"""
-
-import os
+import sqlite3
 import sys
 
-# Add parent directory to path so we can import config and other modules
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, parent_dir)
-
-# Import migration modules from the same directory
-# These are in the same directory, so we can import directly
-# noqa: E402 - sys.path must be modified before these imports
-from migrations.migrate_auth import migrate_db as migrate_auth  # noqa: E402
-from migrations.migrate_club_ids import migrate_db as migrate_club_ids  # noqa: E402
-from migrations.migrate_club_leagues_many_to_many import (  # noqa: E402
-    migrate_db as migrate_club_leagues_many_to_many,
-)
-from migrations.migrate_remove_league_id import (  # noqa: E402
-    migrate_db as migrate_remove_league_id,
-)
+from core.config import DB_PATH
 
 
 def migrate_all():
@@ -37,80 +10,25 @@ def migrate_all():
     Returns:
         tuple: (success: bool, messages: list)
     """
+    """Add should_allocate column to match_teams table if it doesn't exist.
+    Returns a list of messages describing what was done."""
+    conn = sqlite3.connect(DB_PATH)
     all_messages = []
+
+    # Add should_allocate column
+    try:
+        conn.execute("SELECT tactical_position FROM match_players LIMIT 1")
+    except sqlite3.OperationalError:
+        message = "Added tactical_position column to match_players table"
+        all_messages.append(message)
+        print("message")
+        conn.execute("ALTER TABLE match_players ADD COLUMN tactical_position TEXT")
+    finally:
+        conn.close()
 
     print("=" * 70)
     print("COMPREHENSIVE DATABASE MIGRATION")
     print("=" * 70)
-    print()
-
-    # Step 1: Authentication and club support
-    print("Step 1/4: Adding authentication and club support...")
-    print("-" * 70)
-    try:
-        messages = migrate_auth()
-        all_messages.extend(messages)
-        print("✓ Step 1 completed successfully")
-    except Exception as e:
-        print(f"✗ Step 1 failed: {e}")
-        print("\nMigration aborted. Please fix the error and try again.")
-        return False, all_messages
-    print()
-
-    # Step 2: Remove league_id from players
-    print("Step 2/4: Removing league_id from players table...")
-    print("-" * 70)
-    try:
-        messages = migrate_remove_league_id()
-        all_messages.extend(messages)
-        print("✓ Step 2 completed successfully")
-    except Exception as e:
-        print(f"✗ Step 2 failed: {e}")
-        print("\nMigration aborted. Please fix the error and try again.")
-        return False, all_messages
-    print()
-
-    # Step 3: Convert leagues to many-to-many
-    print("Step 3/4: Converting leagues to many-to-many relationship...")
-    print("-" * 70)
-    try:
-        messages = migrate_club_leagues_many_to_many()
-        all_messages.extend(messages)
-        print("✓ Step 3 completed successfully")
-    except Exception as e:
-        print(f"✗ Step 3 failed: {e}")
-        print("\nMigration aborted. Please fix the error and try again.")
-        return False, all_messages
-    print()
-
-    # Step 4: Fix orphaned players with invalid club_ids
-    print("Step 4/4: Fixing orphaned players with invalid club_ids...")
-    print("-" * 70)
-    try:
-        messages = migrate_club_ids()
-        all_messages.extend(messages)
-        print("✓ Step 4 completed successfully")
-    except Exception as e:
-        print(f"✗ Step 4 failed: {e}")
-        print("\nMigration aborted. Please fix the error and try again.")
-        return False, all_messages
-    print()
-
-    # Summary
-    print("=" * 70)
-    print("MIGRATION SUMMARY")
-    print("=" * 70)
-    for msg in all_messages:
-        print(f"  • {msg}")
-    print()
-    print("=" * 70)
-    print("✓ All migrations completed successfully!")
-    print("=" * 70)
-    print()
-    print("Next steps:")
-    print("  1. Create your first superuser by visiting /register")
-    print("  2. Log in and start using the system")
-    print("  3. Create additional clubs and assign users to them")
     print()
 
     return True, all_messages
