@@ -3,6 +3,8 @@
 Quick test script to verify pitch visualization components work correctly.
 """
 
+from unittest.mock import patch
+
 from render.pitch import (
     distribute_horizontally,
     get_formation_positions,
@@ -69,8 +71,12 @@ def test_get_formation_positions():
     print("✓ get_formation_positions tests passed")
 
 
-def test_render_functions():
+@patch("logic.scoring.calculate_overall_score")
+def test_render_functions(mock_calculate):
     """Test render functions generate output without errors"""
+    # Mock calculate_overall_score to return the overall_score field from player dict
+    mock_calculate.side_effect = lambda p: p.get("overall_score", 0)
+
     print("\nTesting render functions...")
 
     # Sample data
