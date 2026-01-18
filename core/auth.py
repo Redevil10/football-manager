@@ -1,12 +1,15 @@
 # auth.py - Authentication and authorization utilities
 
 import hashlib
+import html
 import logging
+import secrets
 from functools import wraps
 from typing import List, Optional
 
 import bcrypt
 from fasthtml.common import RedirectResponse, Request
+from starlette.exceptions import HTTPException
 
 from core.config import USER_ROLES, VALID_ROLES
 from db import get_clubs_in_league, get_match
@@ -166,6 +169,8 @@ def login_user(req: Request, username: str, password: str, sess: dict = None) ->
 
         try:
             sess["user_id"] = user["id"]
+            # Generate CSRF token on login for protection against CSRF attacks
+            generate_csrf_token(sess)
             return True
         except Exception as e:
             logger.error(f"Error setting session: {e}")
@@ -175,7 +180,7 @@ def login_user(req: Request, username: str, password: str, sess: dict = None) ->
 
 
 def logout_user(req: Request, sess: dict = None) -> None:
-    """Logout the current user by removing user_id from session.
+    """Logout the current user by removing user_id and CSRF token from session.
 
     Args:
         req: FastHTML Request object
@@ -184,11 +189,13 @@ def logout_user(req: Request, sess: dict = None) -> None:
     # FastHTML injects session as a parameter - use it if provided
     if sess is not None and isinstance(sess, dict):
         sess.pop("user_id", None)
+        sess.pop("csrf_token", None)
     elif req is not None:
         # Fallback: try to get session from request
         sess = get_session_from_request(req)
         if isinstance(sess, dict):
             sess.pop("user_id", None)
+            sess.pop("csrf_token", None)
 
 
 def get_current_user(req: Request, sess: dict = None) -> Optional[dict]:
@@ -418,3 +425,122 @@ def can_user_edit_league(user: dict, league_id: int) -> bool:
             return True
 
     return False
+
+
+# =============================================================================
+# CSRF Protection
+# =============================================================================
+
+
+def generate_csrf_token(sess: dict) -> str:
+    """Generate and store a CSRF token in the session.
+
+    Args:
+        sess: Session dictionary
+
+    Returns:
+        str: The generated CSRF token
+    """
+    if sess is None:
+        return ""
+    token = secrets.token_urlsafe(32)
+    sess["csrf_token"] = token
+    return token
+
+
+def get_csrf_token(sess: dict) -> str:
+    """Get the current CSRF token from session, generating one if needed.
+
+    Args:
+        sess: Session dictionary
+
+    Returns:
+        str: The CSRF token
+    """
+    if sess is None:
+        return ""
+    if "csrf_token" not in sess:
+        return generate_csrf_token(sess)
+    return sess.get("csrf_token", "")
+
+
+def validate_csrf_token(sess: dict, token: str) -> bool:
+    """Validate a CSRF token against the session.
+
+    Args:
+        sess: Session dictionary
+        token: Token to validate
+
+    Returns:
+        bool: True if token is valid, False otherwise
+    """
+    if sess is None or not token:
+        return False
+    stored_token = sess.get("csrf_token", "")
+    if not stored_token:
+        return False
+    # Use constant-time comparison to prevent timing attacks
+    return secrets.compare_digest(stored_token, token)
+
+
+def csrf_protect(f):
+    """Decorator to require CSRF token validation on POST requests.
+
+    The form must include a hidden field named 'csrf_token' with the value
+    from get_csrf_token(sess).
+
+    Usage:
+        @rt("/submit", methods=["POST"])
+        @csrf_protect
+        async def submit_form(req: Request, sess=None):
+            ...
+    """
+
+    @wraps(f)
+    async def wrapper(*args, **kwargs):
+        req = kwargs.get("req")
+        sess = kwargs.get("sess") or kwargs.get("session")
+
+        if req is not None and req.method == "POST":
+            # Get CSRF token from form data
+            form = await req.form()
+            csrf_token = form.get("csrf_token", "")
+
+            if not validate_csrf_token(sess, csrf_token):
+                raise HTTPException(status_code=403, detail="Invalid CSRF token")
+
+        return await f(*args, **kwargs)
+
+    return wrapper
+
+
+# =============================================================================
+# XSS Protection
+# =============================================================================
+
+
+def escape_js_string(s: str) -> str:
+    """Escape a string for safe use in JavaScript.
+
+    This escapes characters that could break out of a JavaScript string
+    or inject malicious code.
+
+    Args:
+        s: String to escape
+
+    Returns:
+        str: Escaped string safe for use in JavaScript
+    """
+    if not s:
+        return ""
+    # First escape HTML entities
+    s = html.escape(s, quote=True)
+    # Then escape JavaScript-specific characters
+    s = s.replace("\\", "\\\\")
+    s = s.replace("'", "\\'")
+    s = s.replace('"', '\\"')
+    s = s.replace("\n", "\\n")
+    s = s.replace("\r", "\\r")
+    s = s.replace("<", "\\x3c")
+    s = s.replace(">", "\\x3e")
+    return s

@@ -4,7 +4,7 @@ from urllib.parse import parse_qs
 
 from fasthtml.common import *
 
-from core.auth import get_current_user, get_user_accessible_club_ids
+from core.auth import escape_js_string, get_current_user, get_user_accessible_club_ids
 from core.config import USER_ROLES, VALID_ROLES
 from core.error_handling import handle_db_result, handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
@@ -254,7 +254,7 @@ def render_users_list(users, current_user=None):
                             action=f"/users/{user_id}/delete",
                             style="display: inline;",
                             **{
-                                "onsubmit": f"return confirm('Are you sure you want to delete user {username}? This action cannot be undone.');"
+                                "onsubmit": f"return confirm('Are you sure you want to delete user {escape_js_string(username)}? This action cannot be undone.');"
                             },
                         )(
                             Button(
