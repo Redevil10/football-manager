@@ -5,6 +5,8 @@ from fasthtml.common import *
 from core.auth import can_user_edit_match
 from logic import calculate_overall_score
 from render.common import format_match_name, get_match_score_display, is_match_completed
+from render.interactive_pitch import render_interactive_pitch
+from render.pitch import render_player_table as render_player_table_pitch
 from render.players import render_match_available_players, render_player_table
 
 
@@ -352,9 +354,14 @@ def render_all_matches(matches, user=None):
 
 
 def render_match_teams(
-    match_id, teams, match_players_dict, is_completed=False, show_scores=True
+    match_id,
+    teams,
+    match_players_dict,
+    is_completed=False,
+    show_scores=True,
+    display_mode="combined",
 ):
-    """Render match teams similar to home page render_teams"""
+    """Render match teams with multiple display modes"""
     if not teams or len(teams) < 1:
         return Div(cls="container-white")(
             P("No teams allocated. Click 'Allocate Teams' to start.", cls="empty-state")
@@ -365,6 +372,17 @@ def render_match_teams(
 
     team1_players = match_players_dict.get(team1["id"], []) if team1 else []
     team2_players = match_players_dict.get(team2["id"], []) if team2 else []
+
+    # Add is_captain field to players
+    if team1:
+        captain_id_1 = team1.get("captain_id")
+        for player in team1_players:
+            player["is_captain"] = captain_id_1 == player.get("id")
+
+    if team2:
+        captain_id_2 = team2.get("captain_id")
+        for player in team2_players:
+            player["is_captain"] = captain_id_2 == player.get("id")
 
     def render_team(team, team_players, team_num, team_data=None):
         positions_order = ["Goalkeeper", "Defender", "Midfielder", "Forward"]
@@ -510,47 +528,39 @@ def render_match_teams(
             Div(team_name_display, cls="team-header"), *position_groups
         )
 
-    # Only include drag-and-drop script if match is not completed
-    script_content = ""
-    if not is_completed:
-        script_content = f"""
-        function handleMatchDrop(event, dropTarget) {{
-            event.preventDefault();
-            dropTarget.classList.remove('drag-over');
-
-            const draggedMatchPlayerId = event.dataTransfer.getData('text/plain');
-            const targetMatchPlayerId = dropTarget.dataset.matchPlayerId;
-
-            if (draggedMatchPlayerId && targetMatchPlayerId && draggedMatchPlayerId !== targetMatchPlayerId) {{
-                window.location.href = `/confirm_swap_match/{match_id}/${{draggedMatchPlayerId}}/${{targetMatchPlayerId}}`;
-            }}
-        }}
-        """
+    # Pitch mode with tables - only display mode
+    team1_dict = teams[0] if teams and len(teams) > 0 else {}
+    team2_dict = teams[1] if teams and len(teams) > 1 else {}
 
     return Div(cls="container-white")(
-        Div(cls="teams-grid")(
-            (
-                render_team(
-                    team1,
-                    team1_players,
-                    1,
-                    teams[0] if teams and len(teams) > 0 else None,
-                )
-                if team1
-                else Div()
-            ),
-            (
-                render_team(
-                    team2,
-                    team2_players,
-                    2,
-                    teams[1] if teams and len(teams) > 1 else None,
-                )
-                if team2
-                else Div()
-            ),
+        Div(cls="pitch-view-container")(
+            render_interactive_pitch(
+                match_id,
+                team1_dict,
+                team2_dict,
+                team1_players,
+                team2_players,
+                is_completed,
+            )
         ),
-        Script(script_content) if script_content else "",
+        Div(cls="teams-grid-table", style="margin-top: 30px;")(
+            render_player_table_pitch(
+                team1_players,
+                team1_dict.get("team_name", "Team 1"),
+                team1_dict.get("jersey_color", "#0066cc"),
+                show_scores=show_scores,
+            )
+            if team1
+            else Div(),
+            render_player_table_pitch(
+                team2_players,
+                team2_dict.get("team_name", "Team 2"),
+                team2_dict.get("jersey_color", "#dc3545"),
+                show_scores=show_scores,
+            )
+            if team2
+            else Div(),
+        ),
     )
 
 
@@ -617,6 +627,7 @@ def render_match_detail(
     match_player_ids=None,
     signup_players=None,
     user=None,
+    display_mode="combined",
 ):
     """Render detailed match information"""
     # Check if match is completed
@@ -709,7 +720,11 @@ def render_match_detail(
                 ),
                 Div(id="match-teams-result")(
                     render_match_teams(
-                        match["id"], teams, match_players_dict, is_completed=True
+                        match["id"],
+                        teams,
+                        match_players_dict,
+                        is_completed=True,
+                        display_mode=display_mode,
                     )
                 ),
             ),
@@ -741,7 +756,11 @@ def render_match_detail(
                 ),
                 Div(id="match-teams-result")(
                     render_match_teams(
-                        match["id"], teams, match_players_dict, is_completed=False
+                        match["id"],
+                        teams,
+                        match_players_dict,
+                        is_completed=False,
+                        display_mode=display_mode,
                     )
                 ),
                 # Captain selection for each team

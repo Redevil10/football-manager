@@ -306,38 +306,115 @@ def assign_match_positions_with_subs(starters, substitutes, team_id, match_id):
         # Update to remove from team instead of deleting
         update_match_player(mp["id"], team_id=None, position=None, is_starter=0)
 
-    # Assign positions to starters
+    # Assign positions to starters using formation rules
     random.shuffle(starters)
     starter_size = len(starters)
 
-    starter_positions = []
-    starter_positions.extend(["Goalkeeper"] * POSITION_DISTRIBUTION["goalkeeper_count"])
-    starter_positions.extend(
-        ["Defender"]
-        * max(1, int(starter_size * POSITION_DISTRIBUTION["defender_ratio"]))
-    )
-    starter_positions.extend(
-        ["Midfielder"]
-        * max(1, int(starter_size * POSITION_DISTRIBUTION["midfielder_ratio"]))
-    )
-    starter_positions.extend(
-        ["Forward"] * max(1, starter_size - len(starter_positions))
-    )
-    starter_positions = starter_positions[:starter_size]
+    # Define formations based on team size
+    # Format: (defenders, midfielders, forwards)
+    formations = {
+        13: (4, 5, 3),  # 4-5-3: GK + 4 defenders + 5 midfielders + 3 forwards
+        12: (4, 4, 3),  # 4-4-3: GK + 4 defenders + 4 midfielders + 3 forwards
+        11: (4, 4, 2),  # 4-4-2: GK + 4 defenders + 4 midfielders + 2 forwards
+        10: (4, 4, 1),  # 4-4-1: GK + 4 defenders + 4 midfielders + 1 forward
+        9: (3, 4, 1),  # 3-4-1: GK + 3 defenders + 4 midfielders + 1 forward
+        8: (3, 3, 1),  # 3-3-1: GK + 3 defenders + 3 midfielders + 1 forward
+        7: (3, 2, 1),  # 3-2-1: GK + 3 defenders + 2 midfielders + 1 forward
+    }
+
+    # Get formation for this team size, or use default percentages for other sizes
+    if starter_size in formations:
+        defenders, midfielders, forwards = formations[starter_size]
+    else:
+        # Fallback to percentage-based for non-standard team sizes
+        defenders = max(1, int(starter_size * POSITION_DISTRIBUTION["defender_ratio"]))
+        midfielders = max(
+            1, int(starter_size * POSITION_DISTRIBUTION["midfielder_ratio"])
+        )
+        forwards = max(
+            1, starter_size - 1 - defenders - midfielders
+        )  # Subtract 1 for GK
+
+    # Map tactical positions for each formation
+    # Tactical positions based on formation
+    tactical_position_map = {
+        "Goalkeeper": ["GK"],
+        "Defender_4": ["LB", "LCB", "RCB", "RB"],  # 4 defenders
+        "Defender_3": ["LCB", "CB", "RCB"],  # 3 defenders
+        "Midfielder_5": ["LM", "LCM", "CDM", "RCM", "RM"],  # 5 midfielders (4-5-3)
+        "Midfielder_4": ["LM", "LCM", "RCM", "RM"],  # 4 midfielders (standard)
+        "Midfielder_3": ["LCM", "CDM", "RCM"],  # 3 midfielders
+        "Midfielder_2": ["LCM", "RCM"],  # 2 midfielders
+        "Forward_3": ["LW", "CF", "RW"],  # 3 forwards (4-4-3)
+        "Forward_2": ["LST", "RST"],  # 2 forwards (4-4-2)
+        "Forward_1": ["CF"],  # 1 forward (4-4-1)
+    }
+
+    # Build list of (position, tactical_position) pairs
+    position_tactical_pairs = []
+
+    # Goalkeeper
+    position_tactical_pairs.extend([("Goalkeeper", "GK")] * 1)
+
+    # Defenders
+    defender_key = f"Defender_{defenders}"
+    if defender_key in tactical_position_map:
+        defender_tactics = tactical_position_map[defender_key]
+        for tactical_pos in defender_tactics[:defenders]:
+            position_tactical_pairs.append(("Defender", tactical_pos))
+    else:
+        # Fallback
+        for _ in range(defenders):
+            position_tactical_pairs.append(("Defender", "DF"))
+
+    # Midfielders
+    midfielder_key = f"Midfielder_{midfielders}"
+    if midfielder_key in tactical_position_map:
+        midfielder_tactics = tactical_position_map[midfielder_key]
+        for tactical_pos in midfielder_tactics[:midfielders]:
+            position_tactical_pairs.append(("Midfielder", tactical_pos))
+    else:
+        # Fallback
+        for _ in range(midfielders):
+            position_tactical_pairs.append(("Midfielder", "MF"))
+
+    # Forwards
+    forward_key = f"Forward_{forwards}"
+    if forward_key in tactical_position_map:
+        forward_tactics = tactical_position_map[forward_key]
+        for tactical_pos in forward_tactics[:forwards]:
+            position_tactical_pairs.append(("Forward", tactical_pos))
+    else:
+        # Fallback
+        for _ in range(forwards):
+            position_tactical_pairs.append(("Forward", "FW"))
+
+    position_tactical_pairs = position_tactical_pairs[:starter_size]
 
     # Add/update starters to match
-    for player, position in zip(starters, starter_positions):
+    for player, (position, tactical_position) in zip(starters, position_tactical_pairs):
         player_id = player["id"]
         # Check if player already has a match_player record
         if player_id in player_to_match_player_id:
             # Update existing record
             match_player_id = player_to_match_player_id[player_id]
             update_match_player(
-                match_player_id, team_id=team_id, position=position, is_starter=1
+                match_player_id,
+                team_id=team_id,
+                position=position,
+                tactical_position=tactical_position,
+                is_starter=1,
             )
         else:
             # Create new record
-            add_match_player(match_id, player_id, team_id, position, is_starter=1)
+            add_match_player(
+                match_id,
+                player_id,
+                team_id,
+                position,
+                is_starter=1,
+                tactical_position=tactical_position,
+            )
 
     # Assign positions to substitutes
     random.shuffle(substitutes)

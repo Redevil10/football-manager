@@ -80,6 +80,7 @@ def add_match_player(
     team_id: Optional[int] = None,
     position: Optional[str] = None,
     is_starter: int = 0,
+    tactical_position: Optional[str] = None,
 ) -> Optional[int]:
     """Add a player to a match.
 
@@ -87,8 +88,9 @@ def add_match_player(
         match_id: ID of the match
         player_id: ID of the player
         team_id: Optional team ID to assign player to
-        position: Optional position to assign
+        position: Optional general position to assign (Goalkeeper, Defender, Midfielder, Forward)
         is_starter: 1 for starter, 0 for substitute (default: 0)
+        tactical_position: Optional tactical position to assign (GK, LB, CM, ST, etc.)
 
     Returns:
         int: Match player ID on success
@@ -97,8 +99,8 @@ def add_match_player(
     try:
         with db_transaction("add_match_player") as conn:
             cursor = conn.execute(
-                "INSERT INTO match_players (match_id, player_id, team_id, position, is_starter) VALUES (?, ?, ?, ?, ?)",
-                (match_id, player_id, team_id, position, is_starter),
+                "INSERT INTO match_players (match_id, player_id, team_id, position, tactical_position, is_starter) VALUES (?, ?, ?, ?, ?, ?)",
+                (match_id, player_id, team_id, position, tactical_position, is_starter),
             )
             match_player_id = cursor.lastrowid
             conn.commit()
@@ -124,6 +126,7 @@ def update_match_player(
     match_player_id: int,
     team_id: object = _UNSET,
     position: object = _UNSET,
+    tactical_position: object = _UNSET,
     is_starter: object = _UNSET,
     rating: object = _UNSET,
 ) -> bool:
@@ -132,7 +135,8 @@ def update_match_player(
     Args:
         match_player_id: ID of the match_player record
         team_id: Team ID to assign. Pass None to set to NULL (unassign from team), or omit to leave unchanged.
-        position: Position to assign. Pass None to set to NULL, or omit to leave unchanged.
+        position: General position to assign. Pass None to set to NULL, or omit to leave unchanged.
+        tactical_position: Tactical position to assign. Pass None to set to NULL, or omit to leave unchanged.
         is_starter: 1 for starter, 0 for substitute, or omit to leave unchanged.
         rating: Rating value, or omit to leave unchanged.
 
@@ -159,6 +163,14 @@ def update_match_player(
                 else:
                     updates.append("position = ?")
                     values.append(position)
+
+            # Handle tactical_position
+            if tactical_position is not _UNSET:
+                if tactical_position is None:
+                    updates.append("tactical_position = NULL")
+                else:
+                    updates.append("tactical_position = ?")
+                    values.append(tactical_position)
 
             # Handle is_starter
             if is_starter is not _UNSET:
@@ -268,11 +280,11 @@ def swap_match_players(match_player1_id: int, match_player2_id: int) -> bool:
         with db_transaction("swap_match_players") as conn:
             # Get both match players
             p1 = conn.execute(
-                "SELECT team_id, position, is_starter FROM match_players WHERE id = ?",
+                "SELECT team_id, position, tactical_position, is_starter FROM match_players WHERE id = ?",
                 (match_player1_id,),
             ).fetchone()
             p2 = conn.execute(
-                "SELECT team_id, position, is_starter FROM match_players WHERE id = ?",
+                "SELECT team_id, position, tactical_position, is_starter FROM match_players WHERE id = ?",
                 (match_player2_id,),
             ).fetchone()
 
@@ -287,18 +299,18 @@ def swap_match_players(match_player1_id: int, match_player2_id: int) -> bool:
                 )
                 return False
 
-            # Swap their team_id, position, and is_starter
+            # Swap their team_id, position, tactical_position, and is_starter
             conn.execute(
-                "UPDATE match_players SET team_id = ?, position = ?, is_starter = ? WHERE id = ?",
-                (p2[0], p2[1], p2[2], match_player1_id),
+                "UPDATE match_players SET team_id = ?, position = ?, tactical_position = ?, is_starter = ? WHERE id = ?",
+                (p2[0], p2[1], p2[2], p2[3], match_player1_id),
             )
             conn.execute(
-                "UPDATE match_players SET team_id = ?, position = ?, is_starter = ? WHERE id = ?",
-                (p1[0], p1[1], p1[2], match_player2_id),
+                "UPDATE match_players SET team_id = ?, position = ?, tactical_position = ?, is_starter = ? WHERE id = ?",
+                (p1[0], p1[1], p1[2], p1[3], match_player2_id),
             )
             conn.commit()
             logger.debug(
-                f"Swapped teams/positions for match players {match_player1_id} and {match_player2_id}"
+                f"Swapped teams/positions/tactical_positions for match players {match_player1_id} and {match_player2_id}"
             )
             return True
     except DatabaseError:
