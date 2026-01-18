@@ -126,6 +126,7 @@ def init_db():
                   player_id INTEGER NOT NULL,
                   team_id INTEGER,
                   position TEXT,
+                  tactical_position TEXT,
                   is_starter INTEGER DEFAULT 0,
                   rating REAL,
                   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
@@ -148,6 +149,13 @@ def init_db():
                   FOREIGN KEY (player_id) REFERENCES players(id),
                   FOREIGN KEY (team_id) REFERENCES match_teams(id))"""
     )
+
+    # Migration: Add tactical_position column if it doesn't exist
+    try:
+        c.execute("SELECT tactical_position FROM match_players LIMIT 1")
+    except sqlite3.OperationalError:
+        print("Adding tactical_position column to match_players table")
+        c.execute("ALTER TABLE match_players ADD COLUMN tactical_position TEXT")
 
     conn.commit()
     conn.close()
