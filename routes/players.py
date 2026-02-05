@@ -124,7 +124,7 @@ def register_player_routes(rt, STYLE):
         )
 
     @rt("/player/{player_id}")
-    def player_detail(player_id: int, req: Request = None, sess=None):
+    def player_detail(player_id: int, req: Request = None, sess=None, back: str = None):
         """Player detail page"""
         user = get_current_user(req, sess)
         if not user:
@@ -143,6 +143,14 @@ def register_player_routes(rt, STYLE):
                 ),
             )
 
+        # Context-aware back button
+        if back and back.startswith("/match/"):
+            back_label = "← Back to Match"
+            back_href = back
+        else:
+            back_label = "← Back to Players"
+            back_href = "/players"
+
         return Html(
             Head(
                 Title(f"{player['name']} - Football Manager"),
@@ -152,8 +160,8 @@ def register_player_routes(rt, STYLE):
                 render_navbar(user),
                 Div(cls="container")(
                     A(
-                        "← Back to Players",
-                        href="/players",
+                        back_label,
+                        href=back_href,
                         style="text-decoration: none; color: #0066cc;",
                     ),
                     H2(player["name"]),

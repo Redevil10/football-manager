@@ -336,7 +336,11 @@ def get_position_abbreviation(position: str) -> str:
 
 
 def render_player_table(
-    players: list, team_name: str, team_color: str, show_scores: bool = False
+    players: list,
+    team_name: str,
+    team_color: str,
+    show_scores: bool = False,
+    match_id: int = None,
 ) -> Div:
     """
     Render players in a table/list format (multi-row display).
@@ -383,10 +387,13 @@ def render_player_table(
         player_id = player.get("player_id")
 
         # Make player name clickable with hover effect
+        player_href = f"/player/{player_id}"
+        if match_id:
+            player_href += f"?back=/match/{match_id}"
         player_name_cell = (
             A(
                 player_name,
-                href=f"/player/{player_id}",
+                href=player_href,
                 style="text-decoration: none; color: #0066cc; cursor: pointer;",
                 onmouseover="this.style.textDecoration='underline'",
                 onmouseout="this.style.textDecoration='none'",
@@ -431,10 +438,13 @@ def render_player_table(
             player_id = player.get("player_id")
 
             # Make player name clickable with hover effect
+            player_href = f"/player/{player_id}"
+            if match_id:
+                player_href += f"?back=/match/{match_id}"
             player_name_cell = (
                 A(
                     player_name,
-                    href=f"/player/{player_id}",
+                    href=player_href,
                     style="text-decoration: none; color: #0066cc; cursor: pointer;",
                     onmouseover="this.style.textDecoration='underline'",
                     onmouseout="this.style.textDecoration='none'",

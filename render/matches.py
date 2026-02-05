@@ -549,6 +549,7 @@ def render_match_teams(
                 team1_dict.get("team_name", "Team 1"),
                 team1_dict.get("jersey_color", "#0066cc"),
                 show_scores=show_scores,
+                match_id=match_id,
             )
             if team1
             else Div(),
@@ -557,6 +558,7 @@ def render_match_teams(
                 team2_dict.get("team_name", "Team 2"),
                 team2_dict.get("jersey_color", "#dc3545"),
                 show_scores=show_scores,
+                match_id=match_id,
             )
             if team2
             else Div(),
@@ -816,7 +818,9 @@ def render_match_detail(
                 )
             )
             content.append(
-                Div(cls="container-white")(render_player_table(sorted_available))
+                Div(cls="container-white")(
+                    render_player_table(sorted_available, match_id=match["id"])
+                )
             )
 
     # Render events (goals, assists, etc.)

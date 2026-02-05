@@ -21,7 +21,7 @@ from logic import (
 from render.common import can_user_delete, can_user_edit, render_attr_input
 
 
-def render_player_table(players, user=None):
+def render_player_table(players, user=None, match_id=None):
     """Render player list as table"""
     if not players:
         return P("No players yet", cls="empty-state")
@@ -32,8 +32,11 @@ def render_player_table(players, user=None):
         club_id = p.get("club_id")
         can_delete = can_user_delete(user, club_id) if user else False
 
+        view_href = f"/player/{p['id']}"
+        if match_id:
+            view_href += f"?back=/match/{match_id}"
         actions = [
-            A("View", href=f"/player/{p['id']}", style="background: #0066cc;"),
+            A("View", href=view_href, style="background: #0066cc;"),
         ]
         if can_delete:
             actions.append(
@@ -83,7 +86,7 @@ def render_match_available_players(match_id, signup_players):
                 Div(cls="player-row-actions")(
                     A(
                         "View",
-                        href=f"/player/{player_id}",
+                        href=f"/player/{player_id}?back=/match/{match_id}",
                         style="background: #0066cc;",
                     ),
                     Form(
