@@ -38,6 +38,8 @@ Feel free to explore the application with this demo account. You can view matche
 - **Player Attributes** - Detailed scoring system with 1-20 scale attributes and 1-100 category scores
 - **Match Events** - Track goals, assists, and other match events
 - **Multi-Club Support** - Organize players, matches, and leagues by club with role-based access control
+- **Club Selector** - Switch between clubs from the navbar; superusers can view all clubs or filter by one
+- **Smart Import (AI)** - Use Gemini API to intelligently parse free-text player signups into structured player data
 - **Authentication & Authorization** - Secure user authentication with bcrypt password hashing and role-based permissions (viewer/manager)
 - **Persistent Storage** - Data automatically backed up to Hugging Face Datasets
 
@@ -156,6 +158,7 @@ The app runs on:
 
 - `HF_TOKEN` - Required for Hugging Face Spaces backup (set as Secret in Space settings)
 - `SECRET_KEY` - Optional session secret key (auto-generated if not set)
+- `GEMINI_API_KEY` - Optional, enables Smart Import (AI-powered player signup parsing via Gemini API)
 
 ## Testing
 
