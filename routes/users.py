@@ -320,7 +320,7 @@ def register_user_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2("User Management"),
                     error_msg
@@ -400,7 +400,7 @@ def register_user_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2(f"User: {target_user['username']}"),
                     error_msg
@@ -641,7 +641,7 @@ def register_user_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container", style="max-width: 600px;")(
                     H2(f"Edit User: {target_user['username']}"),
                     error_msg

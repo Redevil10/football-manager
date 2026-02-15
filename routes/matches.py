@@ -52,13 +52,16 @@ from logic import (
     allocate_match_teams,
     calculate_player_overall,
     import_players,
+    is_smart_import_available,
     parse_signup_text,
+    smart_parse_signup,
 )
 from render import (
     format_match_name,
     render_all_matches,
     render_match_detail,
     render_navbar,
+    render_smart_import_confirmation,
 )
 
 logger = logging.getLogger(__name__)
@@ -83,7 +86,7 @@ def register_match_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2("All Matches"),
                     P(
@@ -140,7 +143,7 @@ def register_match_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2("Create Match"),
                     Div(cls="container-white")(
@@ -763,7 +766,7 @@ def register_match_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     Div(id="match-content")(
                         render_match_detail(
@@ -1021,7 +1024,7 @@ def register_match_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2(f"Edit {format_match_name(match)}"),
                     Div(cls="container-white")(
@@ -1499,7 +1502,7 @@ def register_match_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2(
                         f"Edit Team Roster - {team.get('team_name') or 'Team ' + str(team.get('team_number', '?'))}"
@@ -1847,7 +1850,7 @@ def register_match_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2(f"Add Event - {format_match_name(match)}"),
                     Div(cls="container-white")(
@@ -2032,7 +2035,7 @@ def register_match_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2(f"Import Players for {format_match_name(match)}"),
                     Div(cls="container-white")(
@@ -2098,6 +2101,30 @@ def register_match_routes(rt, STYLE):
             # Use the first club the user has access to
             club_id = club_ids[0]
 
+            # Try smart import first if available
+            if is_smart_import_available():
+                existing_players = get_all_players(club_ids)
+                results = await smart_parse_signup(signup_text, existing_players)
+                if results:
+                    match = get_match(match_id)
+                    return Html(
+                        Head(
+                            Title(f"Confirm Import - {format_match_name(match)}"),
+                            Style(STYLE),
+                        ),
+                        Body(
+                            render_navbar(user, sess, req.url.path if req else "/"),
+                            Div(cls="container")(
+                                H2(f"Confirm Import for {format_match_name(match)}"),
+                                render_smart_import_confirmation(
+                                    match_id, results, existing_players, club_id
+                                ),
+                            ),
+                        ),
+                    )
+                # If smart import fails, fall through to existing behavior
+                logger.info("Smart import failed, falling back to numbered-list parser")
+
             # Import players to database (if they don't exist)
             imported_count = import_players(signup_text, club_id)
             logger.info(f"Imported {imported_count} new players from signup text")
@@ -2136,6 +2163,67 @@ def register_match_routes(rt, STYLE):
 
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
+    @rt("/confirm_smart_import/{match_id}", methods=["POST"])
+    async def route_confirm_smart_import(match_id: int, req: Request, sess=None):
+        """Process confirmed smart import selections"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
+        form = await req.form()
+        total_rows = int(form.get("total_rows", 0))
+        club_id = int(form.get("club_id", 0))
+
+        if not total_rows or not club_id:
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
+        existing = get_match_players(match_id)
+        added_count = 0
+
+        for i in range(total_rows):
+            # Check if this row is included (checkbox)
+            include = form.get(f"include_{i}")
+            if not include:
+                continue
+
+            extracted_name = form.get(f"name_{i}", "").strip()
+            match_selection = form.get(f"match_{i}", "new")
+
+            if not extracted_name:
+                continue
+
+            if match_selection == "new":
+                # Create a new player
+                from db import add_player
+
+                player_id = add_player(extracted_name, club_id)
+                if not player_id:
+                    continue
+            else:
+                player_id = int(match_selection)
+
+            # Skip if player already in match
+            if any(p["player_id"] == player_id for p in existing):
+                continue
+
+            result = add_match_player(
+                match_id,
+                player_id,
+                team_id=None,
+                position=None,
+                is_starter=0,
+            )
+            if result:
+                added_count += 1
+
+        logger.info(
+            f"Smart import confirmed: added {added_count} players to match {match_id}"
+        )
+        return RedirectResponse(f"/match/{match_id}", status_code=303)
+
     @rt("/add_match_player_manual/{match_id}", methods=["GET"])
     def add_match_player_manual_page(match_id: int, req: Request = None, sess=None):
         """Add player manually page for a match"""
@@ -2165,7 +2253,7 @@ def register_match_routes(rt, STYLE):
                     Style(STYLE),
                 ),
                 Body(
-                    render_navbar(user),
+                    render_navbar(user, sess, req.url.path if req else "/"),
                     Div(cls="container")(
                         H2(f"Add Player to {format_match_name(match)}"),
                         Div(cls="container-white")(
@@ -2188,7 +2276,7 @@ def register_match_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2(f"Add Player to {format_match_name(match)}"),
                     Div(cls="container-white")(

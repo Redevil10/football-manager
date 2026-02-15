@@ -103,7 +103,7 @@ def register_player_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2(f"All Players ({len(players)})"),
                     render_add_player_form(error) if can_add_player else "",
@@ -128,7 +128,7 @@ def register_player_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2("Import Players"),
                     Div(cls="container-white")(
@@ -165,7 +165,7 @@ def register_player_routes(rt, STYLE):
             return Html(
                 Head(Title("Player Not Found"), Style(STYLE)),
                 Body(
-                    render_navbar(user),
+                    render_navbar(user, sess, req.url.path if req else "/"),
                     Div(cls="container")(P("Player not found")),
                 ),
             )
@@ -184,7 +184,7 @@ def register_player_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     A(
                         back_label,

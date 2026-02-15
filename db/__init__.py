@@ -75,6 +75,7 @@ from db.players import (
     update_player_name,
     update_player_team,
 )
+from db.settings import get_setting, set_setting
 from db.users import (
     add_user_to_club,
     create_user,
@@ -90,6 +91,9 @@ __all__ = [
     # Connection
     "init_db",
     "get_db",
+    # Settings
+    "get_setting",
+    "set_setting",
     # Players
     "get_all_players",
     "find_player_by_name_or_alias",

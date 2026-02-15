@@ -135,6 +135,13 @@ def init_db():
                   UNIQUE(match_id, player_id))"""
     )
 
+    # App settings table (key-value store)
+    c.execute(
+        """CREATE TABLE IF NOT EXISTS app_settings
+                 (key TEXT PRIMARY KEY,
+                  value TEXT NOT NULL)"""
+    )
+
     # Match events table (goals, assists, etc.)
     c.execute(
         """CREATE TABLE IF NOT EXISTS match_events

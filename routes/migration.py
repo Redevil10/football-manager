@@ -33,7 +33,7 @@ def register_migration_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2("Database Migration"),
                     Div(cls="container-white")(

@@ -56,7 +56,7 @@ def register_league_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2("Leagues"),
                     *(
@@ -163,7 +163,7 @@ def register_league_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     render_league_matches(league, matches, user),
                     *(

@@ -107,6 +107,7 @@ from routes.leagues import register_league_routes  # noqa: E402
 from routes.matches import register_match_routes  # noqa: E402
 from routes.migration import register_migration_routes  # noqa: E402
 from routes.players import register_player_routes  # noqa: E402
+from routes.settings import register_settings_routes  # noqa: E402
 from routes.users import register_user_routes  # noqa: E402
 
 # Register all routes
@@ -117,6 +118,7 @@ register_player_routes(rt, STYLE)
 register_league_routes(rt, STYLE)
 register_match_routes(rt, STYLE)
 register_migration_routes(rt, STYLE)
+register_settings_routes(rt, STYLE)
 register_user_routes(rt, STYLE)
 
 __all__ = ["app", "rt"]

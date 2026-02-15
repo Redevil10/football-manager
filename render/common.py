@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from fasthtml.common import *
 
-from core.auth import check_club_permission, get_csrf_token
+from core.auth import check_club_permission, get_csrf_token, get_current_club_info
 from db import get_match_teams
 
 
@@ -119,7 +119,7 @@ def get_match_score_display(match_id):
     return ""
 
 
-def render_navbar(user=None):
+def render_navbar(user=None, sess=None, current_url="/"):
     """Render navigation bar"""
     nav_items = [
         H1("⚽ Football Manager"),
@@ -129,9 +129,10 @@ def render_navbar(user=None):
         A("Leagues", href="/leagues"),
     ]
 
-    # Add Clubs link for superusers only
+    # Add Clubs and Settings links for superusers only
     if user and user.get("is_superuser"):
         nav_items.append(A("Clubs", href="/clubs"))
+        nav_items.append(A("Settings", href="/settings"))
 
     # Add Users link for all authenticated users
     if user:
@@ -140,6 +141,12 @@ def render_navbar(user=None):
     # Right side: user info and auth buttons
     right_items = []
     if user:
+        # Club selector
+        if sess is not None:
+            club_selector = _render_club_selector(user, sess, current_url)
+            if club_selector is not None:
+                right_items.append(club_selector)
+
         user_display = Span(
             f"👤 {user['username']}", style="margin-right: 15px; color: #333;"
         )
@@ -182,6 +189,54 @@ def render_navbar(user=None):
             *nav_items[:num_nav_items]
         ),
         Div(style="display: flex; align-items: center;")(*right_items),
+    )
+
+
+def _render_club_selector(user, sess, current_url="/"):
+    """Render the club selector dropdown for the navbar."""
+    current_club_id, current_club_name, clubs = get_current_club_info(sess, user)
+
+    is_superuser = user.get("is_superuser", False)
+
+    # No clubs → nothing to show
+    if not is_superuser and len(clubs) <= 0:
+        return None
+
+    # Single club → static label
+    if not is_superuser and len(clubs) == 1:
+        return Span(
+            clubs[0].get("name", ""),
+            cls="club-selector-label",
+        )
+
+    # Build dropdown options
+    options = []
+    if is_superuser:
+        options.append(
+            Option("All Clubs", value="all", selected=(current_club_id is None))
+        )
+
+    for club in clubs:
+        club_id = club.get("id")
+        options.append(
+            Option(
+                club.get("name", ""),
+                value=str(club_id),
+                selected=(club_id == current_club_id),
+            )
+        )
+
+    return Form(
+        Select(
+            *options,
+            name="club_id",
+            cls="club-selector-dropdown",
+            onchange="this.form.submit()",
+        ),
+        Input(type="hidden", name="redirect_to", value=current_url or "/"),
+        action="/switch-club",
+        method="POST",
+        cls="club-selector-form",
     )
 
 

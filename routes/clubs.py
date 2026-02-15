@@ -55,7 +55,7 @@ def register_club_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2("Club Management"),
                     Div(cls="container-white", style="margin-bottom: 20px;")(
@@ -170,7 +170,7 @@ def register_club_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2(club["name"]),
                     Div(cls="container-white")(
@@ -226,7 +226,7 @@ def register_club_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     H2(f"Edit {club['name']}"),
                     Div(cls="container-white")(

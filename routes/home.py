@@ -59,7 +59,7 @@ def register_home_routes(rt, STYLE):
                 Script(src="https://unpkg.com/htmx.org@1.9.10"),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     render_next_matches_by_league(next_matches_data),
                     render_recent_matches(recent_matches),

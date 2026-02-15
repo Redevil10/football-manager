@@ -546,6 +546,42 @@ button:hover { background: #0052a3; }
     border-color: #0066cc;
 }
 
+/* Club selector in navbar */
+.club-selector-form {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 15px;
+}
+
+.club-selector-dropdown {
+    padding: 4px 8px;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 4px;
+    background: rgba(255,255,255,0.15);
+    color: white;
+    font-size: 13px;
+    cursor: pointer;
+    max-width: 180px;
+}
+
+.club-selector-dropdown:focus {
+    outline: none;
+    border-color: rgba(255,255,255,0.6);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.2);
+}
+
+.club-selector-dropdown option {
+    background: white;
+    color: #333;
+}
+
+.club-selector-label {
+    margin-right: 15px;
+    color: rgba(255,255,255,0.9);
+    font-size: 13px;
+    font-weight: 500;
+}
+
 @media (max-width: 900px) {
     .navbar {
         flex-direction: column;

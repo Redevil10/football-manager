@@ -22,11 +22,15 @@ from logic.scoring import (
     set_physical_score,
     set_technical_score,
 )
+from logic.smart_import import is_smart_import_available, smart_parse_signup
 
 __all__ = [
     # Import
     "import_players",
     "parse_signup_text",
+    # Smart Import
+    "is_smart_import_available",
+    "smart_parse_signup",
     # Allocation
     "allocate_teams",
     "allocate_match_teams",

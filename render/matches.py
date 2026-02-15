@@ -902,6 +902,116 @@ def render_match_detail(
     return Div(*content)
 
 
+def render_smart_import_confirmation(match_id, results, existing_players, club_id):
+    """Render confirmation page for smart import results.
+
+    Args:
+        match_id: Match ID
+        results: List of dicts from smart_parse_signup
+        existing_players: List of all existing player dicts
+        club_id: Club ID for new player creation
+    """
+    # Sort existing players alphabetically for dropdowns
+    sorted_players = sorted(existing_players, key=lambda p: p.get("name", "").lower())
+
+    rows = []
+    for i, result in enumerate(results):
+        extracted_name = result["extracted_name"]
+        matched_id = result.get("matched_player_id")
+        confidence = result.get("confidence", "none")
+
+        # Build dropdown options
+        options = [Option("-- New Player --", value="new")]
+        for p in sorted_players:
+            is_selected = matched_id == p["id"] and confidence != "none"
+            options.append(Option(p["name"], value=str(p["id"]), selected=is_selected))
+
+        # If no match, select "new"
+        if confidence == "none" or matched_id is None:
+            options[0] = Option("-- New Player --", value="new", selected=True)
+
+        # Confidence display
+        if confidence == "high":
+            conf_display = "high"
+            conf_style = "color: #28a745;"
+        elif confidence == "medium":
+            conf_display = "medium"
+            conf_style = "color: #ffc107;"
+        else:
+            conf_display = "-"
+            conf_style = "color: #666;"
+
+        rows.append(
+            Tr(
+                Td(extracted_name),
+                Td(
+                    Select(
+                        *options,
+                        name=f"match_{i}",
+                        style="width: 100%; padding: 6px;",
+                    )
+                ),
+                Td(
+                    Span(conf_display, style=conf_style),
+                ),
+                Td(
+                    Input(
+                        type="checkbox",
+                        name=f"include_{i}",
+                        value="1",
+                        checked=True,
+                    ),
+                ),
+                # Hidden field for the extracted name
+                Td(
+                    Input(
+                        type="hidden",
+                        name=f"name_{i}",
+                        value=extracted_name,
+                    ),
+                    style="display: none;",
+                ),
+            )
+        )
+
+    return Div(cls="container-white")(
+        H3("Review Imported Players"),
+        P(
+            "Review the matches below. Adjust the dropdown to change player matching, "
+            "or uncheck to exclude a player.",
+            style="color: #666; margin-bottom: 15px;",
+        ),
+        Form(
+            Input(type="hidden", name="total_rows", value=str(len(results))),
+            Input(type="hidden", name="club_id", value=str(club_id)),
+            Table(style="width: 100%; border-collapse: collapse; margin-bottom: 15px;")(
+                Thead(
+                    Tr(
+                        Th("Extracted Name", style="text-align: left; padding: 8px;"),
+                        Th("Matched To", style="text-align: left; padding: 8px;"),
+                        Th("Confidence", style="text-align: left; padding: 8px;"),
+                        Th("Include", style="text-align: center; padding: 8px;"),
+                    )
+                ),
+                Tbody(*rows),
+            ),
+            Div(cls="btn-group")(
+                Button("Confirm Import", type="submit", cls="btn-success"),
+                Button(
+                    "Cancel",
+                    type="button",
+                    cls="btn-secondary",
+                    **{
+                        "onclick": f"window.location.href='/match/{match_id}'; return false;"
+                    },
+                ),
+            ),
+            method="POST",
+            action=f"/confirm_smart_import/{match_id}",
+        ),
+    )
+
+
 def render_teams(players):
     """Render team allocation"""
     team1 = [p for p in players if p["team"] == 1]

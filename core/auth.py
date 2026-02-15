@@ -13,12 +13,13 @@ from starlette.exceptions import HTTPException
 
 from core.config import USER_ROLES, VALID_ROLES
 from db import get_clubs_in_league, get_match
-from db.clubs import get_all_clubs
+from db.clubs import get_all_clubs, get_club
 from db.users import (
     get_user_by_id,
     get_user_by_username,
     get_user_club_ids,
     get_user_club_role,
+    get_user_clubs,
 )
 
 logger = logging.getLogger(__name__)
@@ -190,6 +191,7 @@ def logout_user(req: Request, sess: dict = None) -> None:
     if sess is not None and isinstance(sess, dict):
         sess.pop("user_id", None)
         sess.pop("csrf_token", None)
+        sess.pop("current_club_id", None)
     elif req is not None:
         # Fallback: try to get session from request
         sess = get_session_from_request(req)
@@ -368,11 +370,84 @@ def require_permission(required_role: str = None):
     return decorator
 
 
+def initialize_current_club_id(sess: dict, user: dict) -> None:
+    """Set initial current_club_id in session based on user type.
+
+    - Superuser: None (means "All Clubs")
+    - Regular user: first club ID from their clubs
+    - No clubs: None
+    """
+    if user.get("is_superuser"):
+        sess["current_club_id"] = None
+    else:
+        club_ids = get_user_club_ids(user["id"])
+        sess["current_club_id"] = club_ids[0] if club_ids else None
+
+
+def get_current_club_info(
+    sess: dict, user: dict
+) -> tuple[Optional[int], str, list[dict]]:
+    """Get current club info for navbar rendering.
+
+    Returns:
+        tuple: (current_club_id, current_club_name, accessible_clubs)
+            - current_club_id: int or None (None means "All Clubs" for superusers)
+            - current_club_name: display name for the current selection
+            - accessible_clubs: list of club dicts the user can access
+    """
+    if not user or sess is None:
+        return None, "", []
+
+    # Lazy init if not in session yet
+    if "current_club_id" not in sess:
+        initialize_current_club_id(sess, user)
+
+    current_club_id = sess.get("current_club_id")
+
+    # Get accessible clubs
+    if user.get("is_superuser"):
+        clubs = get_all_clubs()
+    else:
+        clubs = get_user_clubs(user["id"])
+
+    # Determine display name
+    if current_club_id is not None:
+        club = get_club(current_club_id)
+        current_club_name = club["name"] if club else "Unknown Club"
+    else:
+        current_club_name = "All Clubs" if user.get("is_superuser") else ""
+
+    return current_club_id, current_club_name, clubs
+
+
 def get_user_club_ids_from_request(req: Request, sess: dict = None) -> List[int]:
-    """Get user's accessible club IDs from request"""
+    """Get user's accessible club IDs from request.
+
+    If a specific club is selected in the session, returns only that club ID.
+    If None (superuser "All Clubs"), returns all accessible clubs.
+    """
     user = get_current_user(req, sess)
     if not user:
         return []
+
+    if sess is not None and isinstance(sess, dict):
+        # Lazy init if not in session yet
+        if "current_club_id" not in sess:
+            initialize_current_club_id(sess, user)
+
+        current_club_id = sess.get("current_club_id")
+
+        if current_club_id is not None:
+            # Validate the user still has access
+            if check_club_access(user, current_club_id):
+                return [current_club_id]
+            else:
+                # Re-initialize if access was revoked
+                initialize_current_club_id(sess, user)
+                current_club_id = sess.get("current_club_id")
+                if current_club_id is not None:
+                    return [current_club_id]
+
     return get_user_accessible_club_ids(user)
 
 

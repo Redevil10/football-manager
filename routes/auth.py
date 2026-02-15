@@ -5,8 +5,10 @@ import logging
 from fasthtml.common import *  # noqa: F403, F405
 
 from core.auth import (
+    check_club_access,
     get_current_user,
     hash_password,
+    initialize_current_club_id,
     login_user,
     logout_user,
     verify_password,
@@ -132,6 +134,43 @@ def register_auth_routes(rt, STYLE):
         """Logout user"""
         logout_user(req, sess)
         return RedirectResponse("/login", status_code=303)
+
+    @rt("/switch-club", methods=["POST"])
+    async def route_switch_club(req: Request, sess=None):
+        """Switch the current club context"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        form = await req.form()
+        club_id_str = form.get("club_id", "")
+        redirect_to = form.get("redirect_to", "/")
+
+        # Validate redirect_to to prevent open redirect
+        if not redirect_to or not redirect_to.startswith("/"):
+            redirect_to = "/"
+
+        if sess is None:
+            return RedirectResponse(redirect_to, status_code=303)
+
+        if club_id_str == "all":
+            # Only superusers can select "All Clubs"
+            if user.get("is_superuser"):
+                sess["current_club_id"] = None
+            else:
+                initialize_current_club_id(sess, user)
+        else:
+            try:
+                club_id = int(club_id_str)
+                if check_club_access(user, club_id):
+                    sess["current_club_id"] = club_id
+                else:
+                    # No access — re-initialize to default
+                    initialize_current_club_id(sess, user)
+            except (ValueError, TypeError):
+                initialize_current_club_id(sess, user)
+
+        return RedirectResponse(redirect_to, status_code=303)
 
     @rt("/register", methods=["POST"])
     async def route_register(req: Request, sess=None):
@@ -362,7 +401,7 @@ def register_auth_routes(rt, STYLE):
                 Style(STYLE),
             ),
             Body(
-                render_navbar(user),
+                render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container", style="max-width: 400px; margin: 100px auto;")(
                     H2("Register"),
                     Form(
