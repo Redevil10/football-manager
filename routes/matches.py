@@ -808,6 +808,12 @@ def register_match_routes(rt, STYLE):
         if not user:
             return RedirectResponse("/login", status_code=303)
 
+        # Check authorization - only managers can swap players
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(
+                f"/match/{match_id}?display={display}", status_code=303
+            )
+
         try:
             if target_player_id:
                 # Swap two players - swaps their teams, positions, and tactical positions
@@ -833,6 +839,10 @@ def register_match_routes(rt, STYLE):
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can allocate teams
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
 
         try:
             success, message = allocate_match_teams(match_id)
@@ -901,6 +911,10 @@ def register_match_routes(rt, STYLE):
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can reset teams
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
 
         try:
             # Get all players assigned to teams for this match
@@ -1454,6 +1468,10 @@ def register_match_routes(rt, STYLE):
         if not user:
             return RedirectResponse("/login", status_code=303)
 
+        # Check authorization - only managers can edit team roster
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
         match = get_match(match_id)
         if not match:
             return RedirectResponse("/leagues", status_code=303)
@@ -1636,8 +1654,18 @@ def register_match_routes(rt, STYLE):
         )
 
     @rt("/update_match_team/{match_id}/{team_id}", methods=["POST"])
-    async def route_update_match_team(match_id: int, team_id: int, req: Request):
+    async def route_update_match_team(
+        match_id: int, team_id: int, req: Request, sess=None
+    ):
         """Update team roster"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can update team roster
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
         form = await req.form()
 
         # Update existing players
@@ -1675,6 +1703,10 @@ def register_match_routes(rt, STYLE):
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can set captains
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
 
         form = await req.form()
         captain_id_str = form.get("captain_id", "").strip()
@@ -1732,8 +1764,18 @@ def register_match_routes(rt, STYLE):
         )
 
     @rt("/add_match_players/{match_id}/{team_id}", methods=["POST"])
-    async def route_add_match_players(match_id: int, team_id: int, req: Request):
+    async def route_add_match_players(
+        match_id: int, team_id: int, req: Request, sess=None
+    ):
         """Add players to a team"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
         form = await req.form()
         player_ids = form.getlist("player_ids")
         position = form.get("position", "").strip()
@@ -1752,8 +1794,12 @@ def register_match_routes(rt, STYLE):
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
     @rt("/remove_match_player/{match_player_id}")
-    def route_remove_match_player(match_player_id: int):
+    def route_remove_match_player(match_player_id: int, req: Request = None, sess=None):
         """Remove a player from a match"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         # Get match_id from match_player
         conn = get_db()
         match_player = conn.execute(
@@ -1762,6 +1808,11 @@ def register_match_routes(rt, STYLE):
         conn.close()
 
         if match_player:
+            # Check authorization
+            if not can_user_edit_match(user, match_player["match_id"]):
+                return RedirectResponse(
+                    f"/match/{match_player['match_id']}", status_code=303
+                )
             remove_match_player(match_player_id)
             return RedirectResponse(
                 f"/match/{match_player['match_id']}", status_code=303
@@ -1774,6 +1825,10 @@ def register_match_routes(rt, STYLE):
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can add events
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
 
         match = get_match(match_id)
         if not match:
@@ -1894,8 +1949,16 @@ def register_match_routes(rt, STYLE):
         )
 
     @rt("/add_match_event/{match_id}", methods=["POST"])
-    async def route_add_match_event(match_id: int, req: Request):
+    async def route_add_match_event(match_id: int, req: Request, sess=None):
         """Add a match event"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can add events
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
         form = await req.form()
         event_type = form.get("event_type", "").strip()
         player_id = form.get("player_id", "").strip()
@@ -1927,8 +1990,12 @@ def register_match_routes(rt, STYLE):
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
     @rt("/delete_match_event/{event_id}")
-    def route_delete_match_event(event_id: int):
+    def route_delete_match_event(event_id: int, req: Request = None, sess=None):
         """Delete a match event"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
         # Get match_id from event
         conn = get_db()
         event = conn.execute(
@@ -1937,6 +2004,9 @@ def register_match_routes(rt, STYLE):
         conn.close()
 
         if event:
+            # Check authorization
+            if not can_user_edit_match(user, event["match_id"]):
+                return RedirectResponse(f"/match/{event['match_id']}", status_code=303)
             delete_match_event(event_id)
             return RedirectResponse(f"/match/{event['match_id']}", status_code=303)
         return RedirectResponse("/leagues", status_code=303)
@@ -1947,6 +2017,10 @@ def register_match_routes(rt, STYLE):
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can import players
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
 
         match = get_match(match_id)
         if not match:
@@ -2004,6 +2078,10 @@ def register_match_routes(rt, STYLE):
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can import players
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
 
         form = await req.form()
         signup_text = form.get("signup_text", "").strip()
@@ -2064,6 +2142,10 @@ def register_match_routes(rt, STYLE):
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can add players
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
 
         match = get_match(match_id)
         if not match:
@@ -2155,8 +2237,16 @@ def register_match_routes(rt, STYLE):
         )
 
     @rt("/add_match_player_manual/{match_id}", methods=["POST"])
-    async def route_add_match_player_manual(match_id: int, req: Request):
+    async def route_add_match_player_manual(match_id: int, req: Request, sess=None):
         """Add player manually to a match"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can add players
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
         try:
             form = await req.form()
             player_id_str = form.get("player_id", "0").strip()
@@ -2184,13 +2274,33 @@ def register_match_routes(rt, STYLE):
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
     @rt("/remove_match_signup_player/{match_id}/{match_player_id}", methods=["POST"])
-    def route_remove_match_signup_player(match_id: int, match_player_id: int):
+    def route_remove_match_signup_player(
+        match_id: int, match_player_id: int, req: Request = None, sess=None
+    ):
         """Remove a player from match signup (delete from match_players)"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can remove players
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
         remove_match_player(match_player_id)
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
     @rt("/remove_all_match_signup_players/{match_id}", methods=["POST"])
-    def route_remove_all_match_signup_players(match_id: int):
+    def route_remove_all_match_signup_players(
+        match_id: int, req: Request = None, sess=None
+    ):
         """Remove all signup players (available players) from a match"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can remove players
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
         remove_all_match_signup_players(match_id)
         return RedirectResponse(f"/match/{match_id}", status_code=303)

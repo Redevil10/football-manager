@@ -240,12 +240,23 @@ def render_recent_matches(matches):
 
 def render_all_matches(matches, user=None):
     """Render all matches across all leagues"""
+    from core.auth import check_club_permission, get_user_accessible_club_ids
+    from core.config import USER_ROLES
+
     content = []
 
     # Only show create button if user can create matches (manager or superuser)
     if user:
-        # For now, allow if user is logged in (create_match route will check permissions)
-        can_create = True
+        can_create = False
+        if user.get("is_superuser"):
+            can_create = True
+        else:
+            # Check if user is manager for any club
+            club_ids = get_user_accessible_club_ids(user)
+            can_create = any(
+                check_club_permission(user, cid, USER_ROLES["MANAGER"])
+                for cid in club_ids
+            )
         if can_create:
             content.append(
                 Div(cls="container-white", style="margin-bottom: 20px;")(
@@ -732,10 +743,10 @@ def render_match_detail(
             ),
         )
     else:
-        # For upcoming matches, show buttons
-        content.append(
-            Div(cls="container-white", style="margin-top: 20px;")(
-                H3("Team Allocation"),
+        # For upcoming matches, show buttons (only for managers)
+        allocation_buttons = []
+        if can_edit:
+            allocation_buttons = [
                 Div(cls="btn-group")(
                     Button(
                         "Allocate Teams",
@@ -756,6 +767,12 @@ def render_match_detail(
                         },
                     ),
                 ),
+            ]
+
+        content.append(
+            Div(cls="container-white", style="margin-top: 20px;")(
+                H3("Team Allocation"),
+                *allocation_buttons,
                 Div(id="match-teams-result")(
                     render_match_teams(
                         match["id"],
@@ -765,18 +782,23 @@ def render_match_detail(
                         display_mode=display_mode,
                     )
                 ),
-                # Captain selection for each team
-                *render_captain_selection(
-                    match["id"], teams, match_players_dict, is_completed=False
+                # Captain selection for each team (only for managers)
+                *(
+                    render_captain_selection(
+                        match["id"], teams, match_players_dict, is_completed=False
+                    )
+                    if can_edit
+                    else []
                 ),
             ),
         )
 
     # Available Players section (only show signup players not yet allocated)
     if signup_players is not None:
-        content.append(
-            Div(cls="container-white", style="margin-top: 20px;")(
-                H3(f"Available Players ({len(signup_players)})"),
+        # Only show action buttons for managers
+        player_action_buttons = []
+        if can_edit:
+            player_action_buttons = [
                 Div(cls="btn-group", style="margin-bottom: 15px;")(
                     A(
                         Button("Import Players", cls="btn-success"),
@@ -801,7 +823,13 @@ def render_match_detail(
                         ),
                     ),
                 ),
-                render_match_available_players(match["id"], signup_players),
+            ]
+
+        content.append(
+            Div(cls="container-white", style="margin-top: 20px;")(
+                H3(f"Available Players ({len(signup_players)})"),
+                *player_action_buttons,
+                render_match_available_players(match["id"], signup_players, can_edit),
             ),
         )
     else:
@@ -824,15 +852,18 @@ def render_match_detail(
             )
 
     # Render events (goals, assists, etc.)
-    content.append(
-        Div(cls="container-white", style="margin-bottom: 15px;")(
-            H3("Match Events"),
+    # Only show Add Event button for managers
+    event_header_content = [H3("Match Events")]
+    if can_edit:
+        event_header_content.append(
             A(
                 Button("Add Event", cls="btn-success"),
                 href=f"/add_match_event/{match['id']}",
                 style="margin-bottom: 10px; display: inline-block;",
-            ),
+            )
         )
+    content.append(
+        Div(cls="container-white", style="margin-bottom: 15px;")(*event_header_content)
     )
 
     if events:
@@ -843,27 +874,29 @@ def render_match_detail(
                 event_desc += f" - {event['player_name']}"
             if event.get("description"):
                 event_desc += f" ({event['description']})"
-            events_list.append(
-                Li(
-                    event_desc,
+
+            # Only show delete link for managers
+            event_content = [event_desc]
+            if can_edit:
+                event_content.append(
                     A(
                         " [Delete]",
                         href=f"/delete_match_event/{event['id']}",
                         style="color: #dc3545; text-decoration: none; margin-left: 10px;",
                         **{"onclick": "return confirm('Delete this event?');"},
-                    ),
-                    style="margin-bottom: 5px;",
+                    )
                 )
-            )
+
+            events_list.append(Li(*event_content, style="margin-bottom: 5px;"))
         content.append(Div(cls="container-white")(Ul(*events_list)))
     else:
+        no_events_text = (
+            "No events yet. Add events like goals, assists, etc."
+            if can_edit
+            else "No events recorded."
+        )
         content.append(
-            Div(cls="container-white")(
-                P(
-                    "No events yet. Add events like goals, assists, etc.",
-                    style="color: #666;",
-                )
-            )
+            Div(cls="container-white")(P(no_events_text, style="color: #666;"))
         )
 
     return Div(*content)

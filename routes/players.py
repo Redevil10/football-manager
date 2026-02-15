@@ -6,11 +6,19 @@ from urllib.parse import quote
 from fasthtml.common import *
 
 from core.auth import (
+    can_user_edit_match,
     check_club_permission,
     get_current_user,
+    get_user_accessible_club_ids,
     get_user_club_ids_from_request,
 )
-from core.config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
+from core.config import (
+    GK_ATTRS,
+    MENTAL_ATTRS,
+    PHYSICAL_ATTRS,
+    TECHNICAL_ATTRS,
+    USER_ROLES,
+)
 from core.error_handling import handle_db_result, handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
 from core.validation import validate_non_empty_string
@@ -69,6 +77,17 @@ def register_player_routes(rt, STYLE):
             players, key=lambda x: calculate_player_overall(x), reverse=True
         )
 
+        # Check if user can add players (manager or superuser)
+        can_add_player = False
+        if user.get("is_superuser"):
+            can_add_player = True
+        else:
+            accessible_club_ids = get_user_accessible_club_ids(user)
+            can_add_player = any(
+                check_club_permission(user, cid, USER_ROLES["MANAGER"])
+                for cid in accessible_club_ids
+            )
+
         return Html(
             Head(
                 Title("All Players - Football Manager"),
@@ -79,7 +98,7 @@ def register_player_routes(rt, STYLE):
                 render_navbar(user),
                 Div(cls="container")(
                     H2(f"All Players ({len(players)})"),
-                    render_add_player_form(error) if user else "",
+                    render_add_player_form(error) if can_add_player else "",
                     Div(cls="container-white")(
                         render_player_table(sorted_players, user)
                     ),
@@ -595,8 +614,23 @@ def register_player_routes(rt, STYLE):
         )
 
     @rt("/allocate", methods=["POST"])
-    def route_allocate():
+    def route_allocate(req: Request = None, sess=None):
         """Allocate teams"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can allocate teams
+        # Check if user is superuser or has manager role for any club
+        if not user.get("is_superuser"):
+            club_ids = get_user_club_ids_from_request(req, sess)
+            has_manager_permission = any(
+                check_club_permission(user, cid, USER_ROLES["MANAGER"])
+                for cid in club_ids
+            )
+            if not has_manager_permission:
+                return RedirectResponse("/", status_code=303)
+
         try:
             success, message = allocate_teams()
             if not success:
@@ -618,8 +652,23 @@ def register_player_routes(rt, STYLE):
             )
 
     @rt("/reset", methods=["POST"])
-    def route_reset():
+    def route_reset(req: Request = None, sess=None):
         """Reset teams"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can reset teams
+        # Check if user is superuser or has manager role for any club
+        if not user.get("is_superuser"):
+            club_ids = get_user_club_ids_from_request(req, sess)
+            has_manager_permission = any(
+                check_club_permission(user, cid, USER_ROLES["MANAGER"])
+                for cid in club_ids
+            )
+            if not has_manager_permission:
+                return RedirectResponse("/", status_code=303)
+
         reset_teams()
         players = get_all_players()
         sorted_players = sorted(
@@ -628,8 +677,24 @@ def register_player_routes(rt, STYLE):
         return render_teams(sorted_players)
 
     @rt("/confirm_swap/{player1_id}/{player2_id}")
-    def confirm_swap_page(player1_id: int, player2_id: int):
+    def confirm_swap_page(
+        player1_id: int, player2_id: int, req: Request = None, sess=None
+    ):
         """Confirm swap"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can swap players
+        if not user.get("is_superuser"):
+            club_ids = get_user_club_ids_from_request(req, sess)
+            has_manager_permission = any(
+                check_club_permission(user, cid, USER_ROLES["MANAGER"])
+                for cid in club_ids
+            )
+            if not has_manager_permission:
+                return RedirectResponse("/", status_code=303)
+
         swap_players(player1_id, player2_id)
         return RedirectResponse("/", status_code=303)
 
@@ -639,9 +704,19 @@ def register_player_routes(rt, STYLE):
         match_player1_id: int,
         match_player2_id: int,
         req: Request = None,
+        sess=None,
         display: str = "classic",
     ):
         """Confirm swap for match players"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers can swap match players
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(
+                f"/match/{match_id}?display={display}", status_code=303
+            )
 
         swap_match_players(match_player1_id, match_player2_id)
         return RedirectResponse(f"/match/{match_id}?display={display}", status_code=303)

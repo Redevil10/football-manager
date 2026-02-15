@@ -212,17 +212,19 @@ def render_users_list(users, current_user=None):
         # Format created_at if available
         created_display = created_at[:10] if created_at else "—"
 
-        # Determine role display
+        # Get user's clubs and format display
         if is_superuser:
-            role_display = "⭐ Superuser"
+            clubs_display = "⭐ Superuser (all clubs)"
         else:
-            user_role = get_user_role_in_clubs(user)
-            if user_role == USER_ROLES["MANAGER"]:
-                role_display = "Manager"
-            elif user_role == USER_ROLES["VIEWER"]:
-                role_display = "Viewer"
+            user_clubs = get_user_clubs(user_id)
+            if user_clubs:
+                # Format as "ClubName (role)" for each club
+                clubs_display = ", ".join(
+                    f"{club['name']} ({club.get('role', 'viewer')})"
+                    for club in user_clubs
+                )
             else:
-                role_display = "User"
+                clubs_display = "—"
 
         # Check permissions
         can_edit = can_user_edit_target_user(current_user, user)
@@ -232,7 +234,7 @@ def render_users_list(users, current_user=None):
             Tr(
                 Td(username),
                 Td(email),
-                Td(role_display),
+                Td(clubs_display),
                 Td(created_display),
                 Td(
                     Div(cls="player-row-actions")(
@@ -275,7 +277,7 @@ def render_users_list(users, current_user=None):
             Tr(
                 Th("Username"),
                 Th("Email"),
-                Th("Role"),
+                Th("Clubs"),
                 Th("Created At"),
                 Th("Actions"),
             )

@@ -69,8 +69,14 @@ def render_player_table(players, user=None, match_id=None):
     )
 
 
-def render_match_available_players(match_id, signup_players):
-    """Render available players for a match with remove button"""
+def render_match_available_players(match_id, signup_players, can_edit=True):
+    """Render available players for a match with remove button
+
+    Args:
+        match_id: The match ID
+        signup_players: List of signed up players
+        can_edit: Whether the user can edit (remove players). Defaults to True.
+    """
     if not signup_players:
         return P("No available players yet", cls="empty-state")
 
@@ -79,33 +85,38 @@ def render_match_available_players(match_id, signup_players):
         overall = round(calculate_overall_score(mp), 1)
         match_player_id = mp.get("id")  # This is match_players.id
         player_id = mp.get("player_id")  # This is players.id
+
+        # Build action items - View is always available, Remove only for managers
+        action_items = [
+            A(
+                "View",
+                href=f"/player/{player_id}?back=/match/{match_id}",
+                style="background: #0066cc;",
+            ),
+        ]
+        if can_edit:
+            action_items.append(
+                Form(
+                    method="POST",
+                    action=f"/remove_match_signup_player/{match_id}/{match_player_id}",
+                    style="display: inline;",
+                    **{
+                        "onsubmit": "return confirm('Remove this player from match signup?');"
+                    },
+                )(
+                    Button(
+                        "Remove",
+                        type="submit",
+                        cls="btn-danger",
+                        style="padding: 5px 10px; font-size: 12px;",
+                    ),
+                ),
+            )
+
         row = Tr(
             Td(mp["name"]),
             Td(str(overall), style="font-weight: bold; color: #0066cc;"),
-            Td(
-                Div(cls="player-row-actions")(
-                    A(
-                        "View",
-                        href=f"/player/{player_id}?back=/match/{match_id}",
-                        style="background: #0066cc;",
-                    ),
-                    Form(
-                        method="POST",
-                        action=f"/remove_match_signup_player/{match_id}/{match_player_id}",
-                        style="display: inline;",
-                        **{
-                            "onsubmit": "return confirm('Remove this player from match signup?');"
-                        },
-                    )(
-                        Button(
-                            "Remove",
-                            type="submit",
-                            cls="btn-danger",
-                            style="padding: 5px 10px; font-size: 12px;",
-                        ),
-                    ),
-                ),
-            ),
+            Td(Div(cls="player-row-actions")(*action_items)),
         )
         rows.append(row)
 
