@@ -132,7 +132,7 @@ def render_match_available_players(match_id, signup_players, can_edit=True):
     )
 
 
-def render_player_detail_form(player, user=None):
+def render_player_detail_form(player, user=None, back=None):
     """Render player detail edit form"""
     overall = round(calculate_player_overall(player), 1)
     tech_score = calculate_technical_score(player)
@@ -161,9 +161,14 @@ def render_player_detail_form(player, user=None):
             ),
         )
 
+    # Helper to create hidden input preserving back navigation context
+    def back_input():
+        return Input(type="hidden", name="back", value=back) if back else ""
+
     return Div(cls="container-white")(
         # Name and Alias edit form
         Form(
+            back_input(),
             Div(
                 cls="input-group",
                 style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;",
@@ -191,6 +196,7 @@ def render_player_detail_form(player, user=None):
         ),
         # Height and Weight form
         Form(
+            back_input(),
             Div(
                 cls="input-group",
                 style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;",
@@ -220,6 +226,7 @@ def render_player_detail_form(player, user=None):
         ),
         # Overall Score form
         Form(
+            back_input(),
             Div(cls="input-group", style="margin-bottom: 20px;")(
                 Label(
                     f"Overall Score ({SCORE_RANGES['overall'][0]}-{SCORE_RANGES['overall'][1]}): ",
@@ -241,6 +248,7 @@ def render_player_detail_form(player, user=None):
         ),
         # Category Scores form
         Form(
+            back_input(),
             H3("Category Scores"),
             Div(
                 cls="attr-section",
@@ -315,6 +323,7 @@ def render_player_detail_form(player, user=None):
         ),
         # Individual Attributes edit form
         Form(
+            back_input(),
             H3("Individual Attributes"),
             Div(cls="attr-grid")(
                 # Technical

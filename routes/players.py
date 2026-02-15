@@ -61,6 +61,14 @@ from render.common import can_user_delete, can_user_edit
 logger = logging.getLogger(__name__)
 
 
+def _player_url(player_id, back=None):
+    """Build player detail URL, preserving optional back navigation context."""
+    url = f"/player/{player_id}"
+    if back and back.startswith("/match/"):
+        url += f"?back={quote(back)}"
+    return url
+
+
 def register_player_routes(rt, STYLE):
     """Register player-related routes"""
 
@@ -184,7 +192,7 @@ def register_player_routes(rt, STYLE):
                         style="text-decoration: none; color: #0066cc;",
                     ),
                     H2(player["name"]),
-                    render_player_detail_form(player, user),
+                    render_player_detail_form(player, user, back=back),
                 ),
             ),
         )
@@ -300,6 +308,8 @@ def register_player_routes(rt, STYLE):
             name = form.get("name", "").strip()
             alias = form.get("alias", "").strip()
             alias = alias if alias else None
+            back = form.get("back")
+            redirect_url = _player_url(player_id, back)
 
             # Validate player name
             is_valid, error_msg = validate_non_empty_string(name, "Player name")
@@ -309,15 +319,15 @@ def register_player_routes(rt, STYLE):
             success = update_player_name(player_id, name, alias)
             return handle_db_result(
                 success,
-                f"/player/{player_id}",
-                error_redirect=f"/player/{player_id}",
+                redirect_url,
+                error_redirect=redirect_url,
                 error_message="Failed to update player name",
                 check_false=True,
             )
         except (ValidationError, NotFoundError, PermissionError) as e:
-            return handle_route_error(e, f"/player/{player_id}")
+            return handle_route_error(e, _player_url(player_id))
         except Exception as e:
-            return handle_route_error(e, f"/player/{player_id}")
+            return handle_route_error(e, _player_url(player_id))
 
     @rt("/update_player_height_weight/{player_id}", methods=["POST"])
     async def route_update_player_height_weight(
@@ -342,20 +352,22 @@ def register_player_routes(rt, STYLE):
             form = await req.form()
             height = form.get("height", "").strip()
             weight = form.get("weight", "").strip()
+            back = form.get("back")
+            redirect_url = _player_url(player_id, back)
             success = update_player_height_weight(
                 player_id, height if height else None, weight if weight else None
             )
             return handle_db_result(
                 success,
-                f"/player/{player_id}",
-                error_redirect=f"/player/{player_id}",
+                redirect_url,
+                error_redirect=redirect_url,
                 error_message="Failed to update player height/weight",
                 check_false=True,
             )
         except (NotFoundError, PermissionError) as e:
-            return handle_route_error(e, f"/player/{player_id}")
+            return handle_route_error(e, _player_url(player_id))
         except Exception as e:
-            return handle_route_error(e, f"/player/{player_id}")
+            return handle_route_error(e, _player_url(player_id))
 
     @rt("/update_player_scores/{player_id}", methods=["POST"])
     async def route_update_player_scores(player_id: int, req: Request, sess=None):
@@ -379,6 +391,8 @@ def register_player_routes(rt, STYLE):
             # Get form data
             form = await req.form()
             form_data = dict(form)
+            back = form_data.get("back")
+            redirect_url = _player_url(player_id, back)
 
             # Check which form was submitted
             if "score_overall" in form_data and form_data["score_overall"]:
@@ -416,9 +430,9 @@ def register_player_routes(rt, STYLE):
                 )
         except (ValueError, TypeError, KeyError) as e:
             logger.error(f"Error updating player scores: {e}", exc_info=True)
-            return handle_route_error(e, f"/player/{player_id}")
+            return handle_route_error(e, _player_url(player_id))
 
-        return RedirectResponse(f"/player/{player_id}", status_code=303)
+        return RedirectResponse(redirect_url, status_code=303)
 
     @rt("/update_player/{player_id}", methods=["POST"])
     async def route_update_player(player_id: int, req: Request, sess=None):
@@ -445,7 +459,10 @@ def register_player_routes(rt, STYLE):
             form_data = dict(form)
         except Exception as e:
             logger.error(f"Error parsing form data: {e}", exc_info=True)
-            return handle_route_error(e, f"/player/{player_id}")
+            return handle_route_error(e, _player_url(player_id))
+
+        back = form_data.get("back")
+        redirect_url = _player_url(player_id, back)
 
         # Extract attributes from form data
         tech_attrs = {}
@@ -580,8 +597,8 @@ def register_player_routes(rt, STYLE):
         )
         return handle_db_result(
             success,
-            f"/player/{player_id}",
-            error_redirect=f"/player/{player_id}",
+            redirect_url,
+            error_redirect=redirect_url,
             error_message="Failed to update player attributes",
             check_false=True,
         )
