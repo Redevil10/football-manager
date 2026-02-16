@@ -205,12 +205,14 @@ def render_users_list(users, current_user=None):
     for user in users:
         user_id = user["id"]
         username = user["username"]
-        email = user.get("email") or "—"
         is_superuser = user.get("is_superuser", 0)
         created_at = user.get("created_at", "")
 
+        last_login = user.get("last_login", "")
+
         # Format created_at if available
         created_display = created_at[:10] if created_at else "—"
+        last_login_display = last_login[:16].replace("T", " ") if last_login else "—"
 
         # Get user's clubs and format display
         if is_superuser:
@@ -233,9 +235,9 @@ def render_users_list(users, current_user=None):
         rows.append(
             Tr(
                 Td(username),
-                Td(email),
                 Td(clubs_display),
                 Td(created_display),
+                Td(last_login_display),
                 Td(
                     Div(cls="player-row-actions")(
                         A(
@@ -276,9 +278,9 @@ def render_users_list(users, current_user=None):
         Thead(
             Tr(
                 Th("Username"),
-                Th("Email"),
                 Th("Clubs"),
                 Th("Created At"),
+                Th("Last Login"),
                 Th("Actions"),
             )
         ),

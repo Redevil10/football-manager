@@ -22,6 +22,15 @@ def migrate_all():
         )
         all_messages.append("Ensured app_settings table exists")
 
+        # Add last_login column to users table if it doesn't exist
+        cursor = conn.execute("PRAGMA table_info(users)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "last_login" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN last_login TIMESTAMP")
+            all_messages.append("Added last_login column to users table")
+        else:
+            all_messages.append("last_login column already exists in users table")
+
         conn.commit()
     finally:
         conn.close()

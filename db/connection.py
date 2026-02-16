@@ -21,7 +21,8 @@ def init_db():
                   password_hash TEXT NOT NULL,
                   password_salt TEXT NOT NULL,
                   is_superuser INTEGER DEFAULT 0,
-                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"""
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  last_login TIMESTAMP)"""
     )
 
     # Clubs table

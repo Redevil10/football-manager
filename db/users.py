@@ -1,7 +1,9 @@
 # db/users.py - User database operations
 
 import logging
+from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from core.exceptions import DatabaseError, IntegrityError
 from db.connection import get_db
@@ -208,6 +210,33 @@ def update_user_club_role(user_id: int, club_id: int, role: str) -> bool:
         return False
 
 
+def update_last_login(user_id: int) -> bool:
+    """Update the last_login timestamp for a user.
+
+    Args:
+        user_id: ID of the user
+
+    Returns:
+        bool: True on success, False on error
+    """
+    try:
+        with db_transaction("update_last_login") as conn:
+            now_syd = datetime.now(ZoneInfo("Australia/Sydney")).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            conn.execute(
+                "UPDATE users SET last_login = ? WHERE id = ?",
+                (now_syd, user_id),
+            )
+            conn.commit()
+            return True
+    except DatabaseError:
+        logger.error(
+            f"Failed to update last_login for user ID {user_id}", exc_info=True
+        )
+        return False
+
+
 def get_all_users() -> list[dict]:
     """Get all users (for admin purposes).
 
@@ -216,7 +245,7 @@ def get_all_users() -> list[dict]:
     """
     conn = get_db()
     users = conn.execute(
-        "SELECT id, username, email, is_superuser, created_at FROM users ORDER BY created_at DESC"
+        "SELECT id, username, email, is_superuser, created_at, last_login FROM users ORDER BY created_at DESC"
     ).fetchall()
     conn.close()
     return [dict(user) for user in users]
@@ -287,7 +316,7 @@ def get_users_by_club_ids(club_ids: list[int]) -> list[dict]:
     conn = get_db()
     placeholders = ",".join("?" * len(club_ids))
     users = conn.execute(
-        f"""SELECT DISTINCT u.id, u.username, u.email, u.is_superuser, u.created_at
+        f"""SELECT DISTINCT u.id, u.username, u.email, u.is_superuser, u.created_at, u.last_login
            FROM users u
            JOIN user_clubs uc ON u.id = uc.user_id
            WHERE uc.club_id IN ({placeholders})

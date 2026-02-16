@@ -20,6 +20,7 @@ from db.users import (
     get_user_club_ids,
     get_user_club_role,
     get_user_clubs,
+    update_last_login,
 )
 
 logger = logging.getLogger(__name__)
@@ -172,6 +173,7 @@ def login_user(req: Request, username: str, password: str, sess: dict = None) ->
             sess["user_id"] = user["id"]
             # Generate CSRF token on login for protection against CSRF attacks
             generate_csrf_token(sess)
+            update_last_login(user["id"])
             return True
         except Exception as e:
             logger.error(f"Error setting session: {e}")

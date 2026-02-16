@@ -13,6 +13,7 @@ from db.users import (
     get_user_club_role,
     get_user_clubs,
     get_users_by_club_ids,
+    update_last_login,
     update_user,
     update_user_club_role,
     update_user_password,
@@ -214,6 +215,29 @@ class TestUpdateUserClubRole:
         # Verify update
         role = get_user_club_role(sample_user["user_id"], sample_club)
         assert role == "manager"
+
+
+class TestUpdateLastLogin:
+    """Tests for update_last_login function"""
+
+    def test_update_last_login(self, temp_db, sample_user):
+        """Test updating last login timestamp"""
+        # Initially last_login should be None
+        user = get_user_by_id(sample_user["user_id"])
+        assert user.get("last_login") is None
+
+        # Update last login
+        result = update_last_login(sample_user["user_id"])
+        assert result is True
+
+        # Verify last_login is now set
+        user = get_user_by_id(sample_user["user_id"])
+        assert user["last_login"] is not None
+
+    def test_update_last_login_nonexistent_user(self, temp_db):
+        """Test updating last login for non-existent user (no error, just no rows affected)"""
+        result = update_last_login(999)
+        assert result is True  # No error, just no rows matched
 
 
 class TestGetAllUsers:

@@ -129,14 +129,17 @@ def render_navbar(user=None, sess=None, current_url="/"):
         A("Leagues", href="/leagues"),
     ]
 
-    # Add Clubs and Settings links for superusers only
+    # Add Clubs link for superusers only
     if user and user.get("is_superuser"):
         nav_items.append(A("Clubs", href="/clubs"))
-        nav_items.append(A("Settings", href="/settings"))
 
     # Add Users link for all authenticated users
     if user:
         nav_items.append(A("Users", href="/users"))
+
+    # Add Settings link for superusers only (after Users)
+    if user and user.get("is_superuser"):
+        nav_items.append(A("Settings", href="/settings"))
 
     # Right side: user info and auth buttons
     right_items = []
