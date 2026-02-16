@@ -1,5 +1,7 @@
 # db/settings.py - App settings operations
 
+import sqlite3
+
 from db.connection import get_db
 
 
@@ -11,6 +13,8 @@ def get_setting(key, default=None):
             "SELECT value FROM app_settings WHERE key = ?", (key,)
         ).fetchone()
         return row["value"] if row else default
+    except sqlite3.OperationalError:
+        return default
     finally:
         conn.close()
 

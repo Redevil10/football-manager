@@ -10,30 +10,27 @@ def migrate_all():
     Returns:
         tuple: (success: bool, messages: list)
     """
-    """Add should_allocate column to match_teams table if it doesn't exist.
-    Returns a list of messages describing what was done."""
     conn = sqlite3.connect(DB_PATH)
     all_messages = []
 
-    # Add should_allocate column
     try:
-        conn.execute("SELECT tactical_position FROM match_players LIMIT 1")
-    except sqlite3.OperationalError:
-        message = "Added tactical_position column to match_players table"
-        all_messages.append(message)
-        print("message")
-        conn.execute("ALTER TABLE match_players ADD COLUMN tactical_position TEXT")
+        # Create app_settings table if it doesn't exist
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS app_settings
+                     (key TEXT PRIMARY KEY,
+                      value TEXT NOT NULL)"""
+        )
+        all_messages.append("Ensured app_settings table exists")
+
+        conn.commit()
     finally:
         conn.close()
-
-    print("=" * 70)
-    print("COMPREHENSIVE DATABASE MIGRATION")
-    print("=" * 70)
-    print()
 
     return True, all_messages
 
 
 if __name__ == "__main__":
     success, messages = migrate_all()
+    for msg in messages:
+        print(msg)
     sys.exit(0 if success else 1)

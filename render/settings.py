@@ -36,8 +36,33 @@ def render_settings_page(user, sess, smart_import_enabled, STYLE=""):
                     ),
                     render_smart_import_toggle(sess, smart_import_enabled, has_api_key),
                 ),
+                render_migration_section(sess),
             ),
         ),
+    )
+
+
+def render_migration_section(sess):
+    """Render the database migration section."""
+    return Div(cls="container-white", style="padding: 20px; margin-bottom: 20px;")(
+        H3("Database Migration"),
+        P(
+            "Run database migrations to update the schema. Safe to run multiple times.",
+            style="color: #666; margin-bottom: 15px;",
+        ),
+        Form(
+            render_csrf_input(sess),
+            Button(
+                "Run Migration",
+                type="submit",
+                cls="btn-success",
+                style="font-size: 14px; padding: 8px 16px;",
+            ),
+            hx_post="/run_migration",
+            hx_target="#migration-result",
+            hx_swap="innerHTML",
+        ),
+        Div(id="migration-result", style="margin-top: 15px;"),
     )
 
 
