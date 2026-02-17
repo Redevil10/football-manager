@@ -317,7 +317,7 @@ def assign_match_positions_with_subs(starters, substitutes, team_id, match_id):
         12: (4, 4, 3),  # 4-4-3: GK + 4 defenders + 4 midfielders + 3 forwards
         11: (4, 4, 2),  # 4-4-2: GK + 4 defenders + 4 midfielders + 2 forwards
         10: (4, 4, 1),  # 4-4-1: GK + 4 defenders + 4 midfielders + 1 forward
-        9: (3, 4, 1),  # 3-4-1: GK + 3 defenders + 4 midfielders + 1 forward
+        9: (4, 3, 1),  # 4-3-1: GK + 4 defenders + 3 midfielders + 1 forward
         8: (3, 3, 1),  # 3-3-1: GK + 3 defenders + 3 midfielders + 1 forward
         7: (3, 2, 1),  # 3-2-1: GK + 3 defenders + 2 midfielders + 1 forward
     }
@@ -343,7 +343,7 @@ def assign_match_positions_with_subs(starters, substitutes, team_id, match_id):
         "Defender_3": ["LCB", "CB", "RCB"],  # 3 defenders
         "Midfielder_5": ["LM", "LCM", "CDM", "RCM", "RM"],  # 5 midfielders (4-5-3)
         "Midfielder_4": ["LM", "LCM", "RCM", "RM"],  # 4 midfielders (standard)
-        "Midfielder_3": ["LCM", "CDM", "RCM"],  # 3 midfielders
+        "Midfielder_3": ["LM", "CM", "RM"],  # 3 midfielders
         "Midfielder_2": ["LCM", "RCM"],  # 2 midfielders
         "Forward_3": ["LW", "CF", "RW"],  # 3 forwards (4-4-3)
         "Forward_2": ["LST", "RST"],  # 2 forwards (4-4-2)
