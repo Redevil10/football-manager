@@ -16,12 +16,12 @@ from render.leagues import (
 from render.matches import (
     render_all_matches,
     render_captain_selection,
+    render_import_confirmation,
     render_match_detail,
     render_match_teams,
     render_next_match,
     render_next_matches_by_league,
     render_recent_matches,
-    render_smart_import_confirmation,
     render_teams,
 )
 from render.players import (
@@ -52,7 +52,7 @@ __all__ = [
     "render_recent_matches",
     "render_all_matches",
     "render_captain_selection",
-    "render_smart_import_confirmation",
+    "render_import_confirmation",
     "render_teams",
     # Leagues
     "render_leagues_list",

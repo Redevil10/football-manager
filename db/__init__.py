@@ -65,6 +65,7 @@ from db.matches import (
 )
 from db.players import (
     add_player,
+    add_player_with_score,
     delete_player,
     find_player_by_name_or_alias,
     get_all_players,
@@ -98,6 +99,7 @@ __all__ = [
     "get_all_players",
     "find_player_by_name_or_alias",
     "add_player",
+    "add_player_with_score",
     "delete_player",
     "update_player_team",
     "update_player_attrs",

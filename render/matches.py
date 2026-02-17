@@ -902,12 +902,13 @@ def render_match_detail(
     return Div(*content)
 
 
-def render_smart_import_confirmation(match_id, results, existing_players, club_id):
-    """Render confirmation page for smart import results.
+def render_import_confirmation(match_id, results, existing_players, club_id):
+    """Render confirmation page for import results (both smart and non-smart).
 
     Args:
         match_id: Match ID
-        results: List of dicts from smart_parse_signup
+        results: List of dicts with extracted_name, matched_player_id,
+                 matched_player_name, and confidence keys
         existing_players: List of all existing player dicts
         club_id: Club ID for new player creation
     """
@@ -927,7 +928,8 @@ def render_smart_import_confirmation(match_id, results, existing_players, club_i
             options.append(Option(p["name"], value=str(p["id"]), selected=is_selected))
 
         # If no match, select "new"
-        if confidence == "none" or matched_id is None:
+        is_new = confidence == "none" or matched_id is None
+        if is_new:
             options[0] = Option("-- New Player --", value="new", selected=True)
 
         # Confidence display
@@ -941,6 +943,22 @@ def render_smart_import_confirmation(match_id, results, existing_players, club_i
             conf_display = "-"
             conf_style = "color: #666;"
 
+        # Score input — visible only when "-- New Player --" is selected
+        score_display = "block" if is_new else "none"
+        score_input = Div(
+            id=f"score_wrapper_{i}",
+            style=f"display: {score_display};",
+        )(
+            Input(
+                type="number",
+                name=f"score_{i}",
+                value="100",
+                min="10",
+                max="200",
+                style="width: 70px; padding: 4px; text-align: center;",
+            ),
+        )
+
         rows.append(
             Tr(
                 Td(extracted_name),
@@ -948,12 +966,15 @@ def render_smart_import_confirmation(match_id, results, existing_players, club_i
                     Select(
                         *options,
                         name=f"match_{i}",
+                        id=f"select_{i}",
                         style="width: 100%; padding: 6px;",
+                        onchange=f"document.getElementById('score_wrapper_{i}').style.display = this.value === 'new' ? 'block' : 'none';",
                     )
                 ),
                 Td(
                     Span(conf_display, style=conf_style),
                 ),
+                Td(score_input),
                 Td(
                     Input(
                         type="checkbox",
@@ -990,6 +1011,7 @@ def render_smart_import_confirmation(match_id, results, existing_players, club_i
                         Th("Extracted Name", style="text-align: left; padding: 8px;"),
                         Th("Matched To", style="text-align: left; padding: 8px;"),
                         Th("Confidence", style="text-align: left; padding: 8px;"),
+                        Th("Score", style="text-align: center; padding: 8px;"),
                         Th("Include", style="text-align: center; padding: 8px;"),
                     )
                 ),
@@ -1007,7 +1029,7 @@ def render_smart_import_confirmation(match_id, results, existing_players, club_i
                 ),
             ),
             method="POST",
-            action=f"/confirm_smart_import/{match_id}",
+            action=f"/confirm_import/{match_id}",
         ),
     )
 

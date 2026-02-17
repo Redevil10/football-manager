@@ -163,6 +163,58 @@ def add_player(
         return None
 
 
+def add_player_with_score(
+    name: str,
+    club_id: int,
+    overall_score: int = 100,
+    position_pref: str = "",
+    alias: Optional[str] = None,
+) -> Optional[int]:
+    """Add player with attributes derived from an overall score.
+
+    Args:
+        name: Player name
+        club_id: ID of the club the player belongs to
+        overall_score: Target overall score (10-200), default 100
+        position_pref: Preferred position (optional)
+        alias: Player alias (optional)
+
+    Returns:
+        int: Player ID on success
+        None: On error (duplicate player, database error, etc.)
+    """
+    from logic.scoring import set_overall_score
+
+    try:
+        attrs = set_overall_score(overall_score)
+        with db_transaction("add_player_with_score") as conn:
+            technical = json.dumps(attrs["technical"])
+            mental = json.dumps(attrs["mental"])
+            physical = json.dumps(attrs["physical"])
+            gk = json.dumps(attrs["gk"])
+
+            cursor = conn.execute(
+                "INSERT INTO players (name, club_id, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (name, club_id, position_pref, alias, technical, mental, physical, gk),
+            )
+            player_id = cursor.lastrowid
+            conn.commit()
+            logger.info(
+                f"Player '{name}' created with score {overall_score}, ID: {player_id}"
+            )
+            return player_id
+    except IntegrityError:
+        logger.warning(
+            f"Failed to create player '{name}' in club {club_id}: Player already exists or constraint violated"
+        )
+        return None
+    except DatabaseError:
+        logger.error(
+            f"Failed to create player '{name}' in club {club_id}", exc_info=True
+        )
+        return None
+
+
 def delete_player(player_id: int) -> bool:
     """Delete a player.
 

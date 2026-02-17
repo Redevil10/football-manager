@@ -51,7 +51,6 @@ from db.users import get_user_club_ids
 from logic import (
     allocate_match_teams,
     calculate_player_overall,
-    import_players,
     is_smart_import_available,
     parse_signup_text,
     smart_parse_signup,
@@ -59,9 +58,9 @@ from logic import (
 from render import (
     format_match_name,
     render_all_matches,
+    render_import_confirmation,
     render_match_detail,
     render_navbar,
-    render_smart_import_confirmation,
 )
 
 logger = logging.getLogger(__name__)
@@ -2116,7 +2115,7 @@ def register_match_routes(rt, STYLE):
                             render_navbar(user, sess, req.url.path if req else "/"),
                             Div(cls="container")(
                                 H2(f"Confirm Import for {format_match_name(match)}"),
-                                render_smart_import_confirmation(
+                                render_import_confirmation(
                                     match_id, results, existing_players, club_id
                                 ),
                             ),
@@ -2125,47 +2124,54 @@ def register_match_routes(rt, STYLE):
                 # If smart import fails, fall through to existing behavior
                 logger.info("Smart import failed, falling back to numbered-list parser")
 
-            # Import players to database (if they don't exist)
-            imported_count = import_players(signup_text, club_id)
-            logger.info(f"Imported {imported_count} new players from signup text")
-
-            # Parse signup text to get player names
+            # Non-smart import: build results list and show confirmation page
             player_names = parse_signup_text(signup_text)
-            logger.debug(f"Parsed {len(player_names)} player names from signup text")
-
-            # Add signup players to match_players (team_id = NULL means signed up but not allocated)
-            # Use find_player_by_name_or_alias to support both name and alias matching
-            added_count = 0
-            existing = get_match_players(match_id)
+            existing_players = get_all_players(club_ids)
+            results = []
             for name in player_names:
-                # Find player by name or alias (supports automatic alias recognition)
-                player = find_player_by_name_or_alias(name)
+                player = find_player_by_name_or_alias(name, club_ids)
                 if player:
-                    player_id = player["id"]
-                    if not any(p["player_id"] == player_id for p in existing):
-                        result = add_match_player(
-                            match_id,
-                            player_id,
-                            team_id=None,
-                            position=None,
-                            is_starter=0,
-                        )
-                        if result:
-                            added_count += 1
-                            # Log if alias was used for matching
-                            if (
-                                player.get("alias") == name
-                                and player.get("name") != name
-                            ):
-                                logger.debug(
-                                    f"Matched alias '{name}' to player '{player.get('name')}'"
-                                )
+                    results.append(
+                        {
+                            "extracted_name": name,
+                            "matched_player_id": player["id"],
+                            "matched_player_name": player["name"],
+                            "confidence": "high",
+                        }
+                    )
+                else:
+                    results.append(
+                        {
+                            "extracted_name": name,
+                            "matched_player_id": None,
+                            "matched_player_name": None,
+                            "confidence": "none",
+                        }
+                    )
+
+            if results:
+                match = get_match(match_id)
+                return Html(
+                    Head(
+                        Title(f"Confirm Import - {format_match_name(match)}"),
+                        Style(STYLE),
+                    ),
+                    Body(
+                        render_navbar(user, sess, req.url.path if req else "/"),
+                        Div(cls="container")(
+                            H2(f"Confirm Import for {format_match_name(match)}"),
+                            render_import_confirmation(
+                                match_id, results, existing_players, club_id
+                            ),
+                        ),
+                    ),
+                )
 
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
-    @rt("/confirm_smart_import/{match_id}", methods=["POST"])
-    async def route_confirm_smart_import(match_id: int, req: Request, sess=None):
-        """Process confirmed smart import selections"""
+    @rt("/confirm_import/{match_id}", methods=["POST"])
+    async def route_confirm_import(match_id: int, req: Request, sess=None):
+        """Process confirmed import selections"""
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
@@ -2196,10 +2202,13 @@ def register_match_routes(rt, STYLE):
                 continue
 
             if match_selection == "new":
-                # Create a new player
-                from db import add_player
+                # Create a new player with specified overall score
+                from db import add_player_with_score
 
-                player_id = add_player(extracted_name, club_id)
+                score = int(form.get(f"score_{i}", 100))
+                player_id = add_player_with_score(
+                    extracted_name, club_id, overall_score=score
+                )
                 if not player_id:
                     continue
             else:
@@ -2220,7 +2229,7 @@ def register_match_routes(rt, STYLE):
                 added_count += 1
 
         logger.info(
-            f"Smart import confirmed: added {added_count} players to match {match_id}"
+            f"Import confirmed: added {added_count} players to match {match_id}"
         )
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
