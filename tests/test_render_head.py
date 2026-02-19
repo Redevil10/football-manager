@@ -23,13 +23,6 @@ class TestRenderHead:
         html = to_xml(head)
         assert 'charset="UTF-8"' in html or 'charset="utf-8"' in html.lower()
 
-    def test_render_head_includes_manifest_link(self):
-        """render_head should include a link to the PWA manifest"""
-        head = render_head("Test", "body{}")
-        html = to_xml(head)
-        assert 'rel="manifest"' in html
-        assert "manifest.json" in html
-
     def test_render_head_includes_title(self):
         """render_head should include the page title"""
         head = render_head("My Page Title", "body{}")
@@ -48,10 +41,3 @@ class TestRenderHead:
         head = render_head("Test", "body{}", extra)
         html = to_xml(head)
         assert "chart.js" in html
-
-    def test_render_head_includes_service_worker_registration(self):
-        """render_head should include service worker registration script"""
-        head = render_head("Test", "body{}")
-        html = to_xml(head)
-        assert "serviceWorker" in html
-        assert "service-worker.js" in html

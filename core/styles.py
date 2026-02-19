@@ -76,7 +76,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 button {
-    padding: 10px 20px;
+    padding: 8px 16px;
     background: #0066cc;
     color: white;
     border: none;
@@ -582,24 +582,55 @@ button:hover { background: #0052a3; }
     font-weight: 500;
 }
 
+/* Hamburger menu toggle (hidden on desktop) */
+.nav-toggle {
+    display: none;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+}
+
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
 @media (max-width: 900px) {
-    .navbar {
+    .nav-toggle { display: block; }
+    .nav-links {
+        display: none;
         flex-direction: column;
         align-items: flex-start;
-        gap: 10px;
+        width: 100%;
+        gap: 4px;
     }
-    .navbar > div {
+    .nav-links.open { display: flex; }
+    .navbar-right {
+        display: none;
+        flex-direction: row;
         flex-wrap: wrap;
+        align-items: center;
+        width: 100%;
+        gap: 8px;
+    }
+    .navbar-right.open { display: flex; }
+    .navbar {
+        flex-wrap: wrap;
+    }
+    .navbar-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
     }
     .teams-grid { grid-template-columns: 1fr; }
     .teams-grid-table { grid-template-columns: 1fr; }
     .attr-grid { grid-template-columns: 1fr; }
-
-    /* Horizontal scroll for wide tables */
-    .player-table {
-        display: block;
-        overflow-x: auto;
-    }
 
     /* Stack pitches vertically on mobile */
     .dual-pitch-container {
@@ -620,28 +651,6 @@ button:hover { background: #0052a3; }
         min-width: 80px;
         font-size: 12px;
         padding: 6px 12px;
-    }
-}
-
-@media (max-width: 600px) {
-    .container {
-        padding: 12px;
-    }
-    .navbar h1 {
-        font-size: 18px;
-    }
-    .navbar a {
-        padding: 6px 10px;
-    }
-    .navbar {
-        gap: 8px;
-    }
-    .input-group {
-        flex-direction: column;
-    }
-    input, select, textarea {
-        width: 100%;
-        box-sizing: border-box;
     }
 }
 """
