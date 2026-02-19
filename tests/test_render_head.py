@@ -35,6 +35,12 @@ class TestRenderHead:
         html = to_xml(head)
         assert "htmx.org" in html
 
+    def test_render_head_includes_favicon(self):
+        """render_head should include a favicon link"""
+        head = render_head("Test", "body{}")
+        html = to_xml(head)
+        assert "favicon.svg" in html
+
     def test_render_head_with_extra_scripts(self):
         """render_head should include extra elements passed via *extra"""
         extra = Script(src="https://cdn.jsdelivr.net/npm/chart.js")

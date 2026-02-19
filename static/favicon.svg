@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0077ee"/>
+      <stop offset="100%" stop-color="#004499"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="1" y="1" width="30" height="30" rx="6" ry="6" fill="url(#bg)"/>
+
+  <!-- Soccer ball -->
+  <circle cx="16" cy="14" r="9" fill="white" stroke="#ccc" stroke-width="0.5"/>
+
+  <!-- Center pentagon -->
+  <polygon points="16,11.5 17.5,12.5 17,14 15,14 14.5,12.5" fill="#333"/>
+
+  <!-- FM text -->
+  <text x="16" y="29" text-anchor="middle" font-family="sans-serif" font-size="6" font-weight="900" fill="white" letter-spacing="0.5">FM</text>
+</svg>

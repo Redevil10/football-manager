@@ -19,6 +19,7 @@ def render_head(title, STYLE, *extra):
     return Head(
         Meta(charset="UTF-8"),
         Meta(name="viewport", content="width=device-width, initial-scale=1"),
+        Link(rel="icon", href="/static/favicon.svg", type="image/svg+xml"),
         Title(title),
         Style(STYLE),
         Script(src="https://unpkg.com/htmx.org@1.9.10"),

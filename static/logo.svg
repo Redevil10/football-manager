@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0077ee"/>
+      <stop offset="100%" stop-color="#004499"/>
+    </linearGradient>
+    <linearGradient id="ball" x1="30%" y1="20%" x2="70%" y2="80%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e0e0e0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="url(#bg)"/>
+
+  <!-- Football / soccer ball -->
+  <circle cx="256" cy="200" r="120" fill="url(#ball)" stroke="#cccccc" stroke-width="2"/>
+
+  <!-- Pentagon patches on ball -->
+  <!-- Center pentagon -->
+  <polygon points="256,172 272,181 267,199 245,199 240,181" fill="#333" stroke="#333" stroke-width="1" stroke-linejoin="round"/>
+
+  <!-- Top pentagon -->
+  <polygon points="256,124 270,133 265,149 247,149 242,133" fill="#333" stroke="#333" stroke-width="1" stroke-linejoin="round"/>
+
+  <!-- Bottom-left pentagon -->
+  <polygon points="204,234 218,243 213,259 195,259 190,243" fill="#333" stroke="#333" stroke-width="1" stroke-linejoin="round"/>
+
+  <!-- Bottom-right pentagon -->
+  <polygon points="308,234 322,243 317,259 299,259 294,243" fill="#333" stroke="#333" stroke-width="1" stroke-linejoin="round"/>
+
+  <!-- Top-left pentagon -->
+  <polygon points="196,152 210,161 205,177 187,177 182,161" fill="#333" stroke="#333" stroke-width="1" stroke-linejoin="round"/>
+
+  <!-- Top-right pentagon -->
+  <polygon points="316,152 330,161 325,177 307,177 302,161" fill="#333" stroke="#333" stroke-width="1" stroke-linejoin="round"/>
+
+  <!-- Connecting lines between pentagons -->
+  <line x1="240" y1="181" x2="210" y2="161" stroke="#555" stroke-width="2"/>
+  <line x1="272" y1="181" x2="302" y2="161" stroke="#555" stroke-width="2"/>
+  <line x1="245" y1="199" x2="218" y2="234" stroke="#555" stroke-width="2"/>
+  <line x1="267" y1="199" x2="294" y2="234" stroke="#555" stroke-width="2"/>
+  <line x1="256" y1="172" x2="256" y2="149" stroke="#555" stroke-width="2"/>
+  <line x1="247" y1="149" x2="205" y2="161" stroke="#555" stroke-width="2"/>
+  <line x1="265" y1="149" x2="307" y2="161" stroke="#555" stroke-width="2"/>
+  <line x1="192" y1="177" x2="198" y2="234" stroke="#555" stroke-width="2"/>
+  <line x1="320" y1="177" x2="314" y2="234" stroke="#555" stroke-width="2"/>
+  <line x1="213" y1="259" x2="299" y2="259" stroke="#555" stroke-width="2"/>
+
+  <!-- Clipboard -->
+  <rect x="196" y="275" width="120" height="120" rx="8" ry="8" fill="white" opacity="0.95" stroke="#b0b0b0" stroke-width="2"/>
+  <rect x="230" y="265" width="52" height="20" rx="4" ry="4" fill="#999"/>
+  <circle cx="256" cy="270" r="5" fill="white"/>
+
+  <!-- Clipboard lines -->
+  <line x1="216" y1="300" x2="296" y2="300" stroke="#ccc" stroke-width="2"/>
+  <line x1="216" y1="320" x2="296" y2="320" stroke="#ccc" stroke-width="2"/>
+  <line x1="216" y1="340" x2="296" y2="340" stroke="#ccc" stroke-width="2"/>
+  <line x1="216" y1="360" x2="260" y2="360" stroke="#ccc" stroke-width="2"/>
+
+  <!-- Checkmarks on clipboard -->
+  <polyline points="218,298 224,304 234,292" fill="none" stroke="#0066cc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="218,318 224,324 234,312" fill="none" stroke="#0066cc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="218,338 224,344 234,332" fill="none" stroke="#0066cc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- "FM" text at bottom with clear space -->
+  <text x="256" y="462" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="52" font-weight="900" fill="white" letter-spacing="8">FM</text>
+</svg>
