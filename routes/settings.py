@@ -1,7 +1,8 @@
 # routes/settings.py - Settings routes (superuser only)
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fasthtml.common import *
 
@@ -28,9 +29,13 @@ def _get_backup_info():
     if last_backup_str:
         try:
             last_dt = datetime.fromisoformat(last_backup_str)
-            last_backup_display = last_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
-            next_dt = last_dt + timedelta(minutes=interval)
-            next_backup_display = next_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=timezone.utc)
+            sydney_tz = ZoneInfo("Australia/Sydney")
+            last_syd = last_dt.astimezone(sydney_tz)
+            last_backup_display = last_syd.strftime("%Y-%m-%d %H:%M:%S %Z")
+            next_syd = (last_dt + timedelta(minutes=interval)).astimezone(sydney_tz)
+            next_backup_display = next_syd.strftime("%Y-%m-%d %H:%M:%S %Z")
         except (ValueError, TypeError):
             last_backup_display = last_backup_str
 
