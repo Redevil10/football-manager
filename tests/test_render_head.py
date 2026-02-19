@@ -54,4 +54,4 @@ class TestRenderHead:
         head = render_head("Test", "body{}")
         html = to_xml(head)
         assert "serviceWorker" in html
-        assert "service-worker.js" in html
+        assert "/sw.js" in html

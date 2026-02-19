@@ -20,13 +20,13 @@ def render_head(title, STYLE, *extra):
         Meta(charset="UTF-8"),
         Meta(name="viewport", content="width=device-width, initial-scale=1"),
         Meta(name="theme-color", content="#0066cc"),
-        Link(rel="manifest", href="/static/manifest.json"),
+        Link(rel="manifest", href="/manifest.json"),
         Title(title),
         Style(STYLE),
         Script(src="https://unpkg.com/htmx.org@1.9.10"),
         Script("""
             if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/static/service-worker.js');
+                navigator.serviceWorker.register('/sw.js', {scope: '/'});
             }
         """),
         *extra,
@@ -204,19 +204,25 @@ def render_navbar(user=None, sess=None, current_url="/"):
             )
         )
 
-    nav_items.extend(right_items)
-
-    # Calculate how many nav items to show (base items + optional clubs link)
-    num_nav_items = len(nav_items) - len(right_items)
-
     return Div(
         cls="navbar",
         style="display: flex; align-items: center; justify-content: space-between;",
     )(
-        Div(style="display: flex; align-items: center; gap: 20px;")(
-            *nav_items[:num_nav_items]
+        # Top row: logo + hamburger toggle
+        Div(cls="navbar-top")(
+            nav_items[0],  # H1 logo
+            Button(
+                "☰",
+                cls="nav-toggle",
+                onclick="document.querySelector('.nav-links').classList.toggle('open');document.querySelector('.navbar-right').classList.toggle('open')",
+            ),
         ),
-        Div(style="display: flex; align-items: center;")(*right_items),
+        # Collapsible nav links
+        Div(cls="nav-links")(*nav_items[1:]),
+        # Right side items
+        Div(cls="navbar-right", style="display: flex; align-items: center;")(
+            *right_items
+        ),
     )
 
 

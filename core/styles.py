@@ -582,14 +582,51 @@ button:hover { background: #0052a3; }
     font-weight: 500;
 }
 
+/* Hamburger menu toggle (hidden on desktop) */
+.nav-toggle {
+    display: none;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+}
+
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
 @media (max-width: 900px) {
-    .navbar {
+    .nav-toggle { display: block; }
+    .nav-links {
+        display: none;
         flex-direction: column;
         align-items: flex-start;
-        gap: 10px;
+        width: 100%;
+        gap: 4px;
     }
-    .navbar > div {
+    .nav-links.open { display: flex; }
+    .navbar-right {
+        display: none;
+        flex-direction: row;
         flex-wrap: wrap;
+        align-items: center;
+        width: 100%;
+        gap: 8px;
+    }
+    .navbar-right.open { display: flex; }
+    .navbar {
+        flex-wrap: wrap;
+    }
+    .navbar-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
     }
     .teams-grid { grid-template-columns: 1fr; }
     .teams-grid-table { grid-template-columns: 1fr; }
@@ -611,6 +648,27 @@ button:hover { background: #0052a3; }
         max-width: 100%;
     }
 
+    /* Rotate landscape pitch (600x390) 90° CW → portrait (390x600) for phones */
+    .pitch-formations-container {
+        flex-direction: column;
+        align-items: center;
+    }
+    .single-pitch-container .interactive-pitch-container {
+        transform: rotate(90deg);
+        transform-origin: top left;
+        /* After rotation the element shifts off-screen; push it back */
+        position: relative;
+        left: 390px;
+    }
+    .single-pitch-container {
+        /* Container sized for the rotated visual: 390w x 600h */
+        width: 390px;
+        height: 600px;
+        max-width: 100%;
+        overflow: hidden;
+        margin: 0 auto 20px;
+    }
+
     .display-mode-toggle {
         flex-wrap: wrap;
     }
@@ -626,15 +684,6 @@ button:hover { background: #0052a3; }
 @media (max-width: 600px) {
     .container {
         padding: 12px;
-    }
-    .navbar h1 {
-        font-size: 18px;
-    }
-    .navbar a {
-        padding: 6px 10px;
-    }
-    .navbar {
-        gap: 8px;
     }
     .input-group {
         flex-direction: column;
