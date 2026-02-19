@@ -140,24 +140,4 @@ register_migration_routes(rt, STYLE)
 register_settings_routes(rt, STYLE)
 register_user_routes(rt, STYLE)
 
-# Serve PWA files that FastHTML's static handler doesn't cover:
-# - manifest.json: .json not a recognised static extension
-# - sw.js at root: service worker scope must cover start_url "/"
-from starlette.responses import FileResponse  # noqa: E402
-
-
-@rt("/manifest.json")
-def manifest():
-    return FileResponse("static/manifest.json", media_type="application/manifest+json")
-
-
-@rt("/sw.js")
-def service_worker():
-    return FileResponse(
-        "static/service-worker.js",
-        media_type="application/javascript",
-        headers={"Service-Worker-Allowed": "/"},
-    )
-
-
 __all__ = ["app", "rt"]

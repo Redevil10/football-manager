@@ -9,7 +9,7 @@ from db import get_match_teams
 
 
 def render_head(title, STYLE, *extra):
-    """Return a shared Head(...) element with viewport, PWA manifest, and HTMX.
+    """Return a shared Head(...) element with viewport and HTMX.
 
     Args:
         title: Page title string.
@@ -19,16 +19,9 @@ def render_head(title, STYLE, *extra):
     return Head(
         Meta(charset="UTF-8"),
         Meta(name="viewport", content="width=device-width, initial-scale=1"),
-        Meta(name="theme-color", content="#0066cc"),
-        Link(rel="manifest", href="/manifest.json"),
         Title(title),
         Style(STYLE),
         Script(src="https://unpkg.com/htmx.org@1.9.10"),
-        Script("""
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js', {scope: '/'});
-            }
-        """),
         *extra,
     )
 

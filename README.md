@@ -17,7 +17,7 @@ short_description: Manage football teams, allocate players, track matches
 [![codecov](https://codecov.io/github/Redevil10/football-manager/graph/badge.svg?token=WNC4Z8DSH0)](https://codecov.io/gh/Redevil10/football-manager)
 [![python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 
-A web app for managing amateur football rosters, balancing teams, and tracking matches. Installable as a PWA on mobile devices.
+A web app for managing amateur football rosters, balancing teams, and tracking matches.
 
 **Live Demo**: [redevil10-football-manager.hf.space](https://redevil10-football-manager.hf.space/) — login with `TestUser` / `TestUser`
 
@@ -28,7 +28,6 @@ A web app for managing amateur football rosters, balancing teams, and tracking m
 - **Match Tracking** — Create matches, import signups, record goals/assists/events
 - **Leagues & Clubs** — Multi-club support with role-based access (viewer/manager/admin)
 - **Smart Import** — AI-powered signup parsing via Gemini API (optional)
-- **PWA Support** — Installable on mobile with offline caching for static assets
 - **Persistent Storage** — Auto-backup to Hugging Face Datasets every 15 minutes
 
 ## Tech Stack
@@ -74,7 +73,6 @@ uv run ruff check . --fix && uv run ruff format .
 ├── logic/               # Business logic (scoring, allocation, import)
 ├── render/              # HTML rendering functions
 ├── routes/              # HTTP route handlers
-├── static/              # PWA manifest, service worker, icons
 ├── migrations/          # Database migrations
 └── tests/               # pytest test suite
 ```

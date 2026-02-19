@@ -76,7 +76,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 button {
-    padding: 10px 20px;
+    padding: 8px 16px;
     background: #0066cc;
     color: white;
     border: none;
@@ -632,12 +632,6 @@ button:hover { background: #0052a3; }
     .teams-grid-table { grid-template-columns: 1fr; }
     .attr-grid { grid-template-columns: 1fr; }
 
-    /* Horizontal scroll for wide tables */
-    .player-table {
-        display: block;
-        overflow-x: auto;
-    }
-
     /* Stack pitches vertically on mobile */
     .dual-pitch-container {
         grid-template-columns: 1fr;
@@ -646,27 +640,6 @@ button:hover { background: #0052a3; }
 
     .pitch-container {
         max-width: 100%;
-    }
-
-    /* Rotate landscape pitch (600x390) 90° CW → portrait (390x600) for phones */
-    .pitch-formations-container {
-        flex-direction: column;
-        align-items: center;
-    }
-    .single-pitch-container .interactive-pitch-container {
-        transform: rotate(90deg);
-        transform-origin: top left;
-        /* After rotation the element shifts off-screen; push it back */
-        position: relative;
-        left: 390px;
-    }
-    .single-pitch-container {
-        /* Container sized for the rotated visual: 390w x 600h */
-        width: 390px;
-        height: 600px;
-        max-width: 100%;
-        overflow: hidden;
-        margin: 0 auto 20px;
     }
 
     .display-mode-toggle {
@@ -678,19 +651,6 @@ button:hover { background: #0052a3; }
         min-width: 80px;
         font-size: 12px;
         padding: 6px 12px;
-    }
-}
-
-@media (max-width: 600px) {
-    .container {
-        padding: 12px;
-    }
-    .input-group {
-        flex-direction: column;
-    }
-    input, select, textarea {
-        width: 100%;
-        box-sizing: border-box;
     }
 }
 """
