@@ -33,7 +33,7 @@ class TestRenderHead:
         """render_head should include the HTMX script"""
         head = render_head("Test", "body{}")
         html = to_xml(head)
-        assert "htmx.org" in html
+        assert "https://unpkg.com/htmx.org" in html
 
     def test_render_head_includes_favicon(self):
         """render_head should include a favicon link"""
