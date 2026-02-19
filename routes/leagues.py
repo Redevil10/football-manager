@@ -16,6 +16,7 @@ from db import (
     get_all_leagues,
     get_league,
     get_matches_by_league,
+    update_league,
 )
 from db.club_leagues import (
     add_club_to_league,
@@ -180,6 +181,98 @@ def register_league_routes(rt, STYLE):
                 ),
             ),
         )
+
+    @rt("/edit_league/{league_id}")
+    def edit_league_page(league_id: int, req: Request = None, sess=None):
+        """Edit league page (superuser only)"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        if not user.get("is_superuser"):
+            return RedirectResponse("/", status_code=303)
+
+        league = get_league(league_id)
+        if not league:
+            return RedirectResponse("/leagues", status_code=303)
+
+        return Html(
+            Head(
+                Title(f"Edit {league['name']} - Football Manager"),
+                Style(STYLE),
+            ),
+            Body(
+                render_navbar(user, sess, req.url.path if req else "/"),
+                Div(cls="container")(
+                    H2(f"Edit {league['name']}"),
+                    Div(cls="container-white")(
+                        Form(
+                            Div(cls="input-group", style="margin-bottom: 15px;")(
+                                Label(
+                                    "League Name:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="text",
+                                    name="name",
+                                    value=league.get("name", ""),
+                                    required=True,
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                            ),
+                            Div(cls="input-group", style="margin-bottom: 15px;")(
+                                Label(
+                                    "Description:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Textarea(
+                                    name="description",
+                                    value=league.get("description", ""),
+                                    style="width: 100%; padding: 8px; min-height: 60px;",
+                                ),
+                            ),
+                            Div(cls="btn-group")(
+                                Button(
+                                    "Update League", type="submit", cls="btn-success"
+                                ),
+                                A(
+                                    Button("Cancel", cls="btn-secondary"),
+                                    href=f"/league/{league_id}",
+                                ),
+                            ),
+                            method="post",
+                            action=f"/update_league/{league_id}",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    @rt("/update_league/{league_id}", methods=["POST"])
+    async def route_update_league(league_id: int, req: Request, sess=None):
+        """Update league (superuser only)"""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        if not user.get("is_superuser"):
+            return RedirectResponse("/", status_code=303)
+
+        try:
+            form = await req.form()
+            name = form.get("name", "").strip()
+            description = form.get("description", "").strip()
+
+            is_valid, error_msg = validate_non_empty_string(name, "League name")
+            if not is_valid:
+                raise ValidationError("name", error_msg)
+
+            update_league(league_id, name=name, description=description)
+            return RedirectResponse(f"/league/{league_id}", status_code=303)
+        except ValidationError as e:
+            return handle_route_error(e, f"/edit_league/{league_id}")
+        except Exception as e:
+            return handle_route_error(e, f"/edit_league/{league_id}")
 
     @rt("/delete_league/{league_id}", methods=["POST"])
     def route_delete_league(league_id: int, req: Request = None, sess=None):

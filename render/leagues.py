@@ -91,15 +91,22 @@ def render_league_matches(league, matches, user=None):
                 H3("Create New Match", style="margin: 0;"),
                 *(
                     [
-                        Form(
-                            method="POST",
-                            action=f"/delete_league/{league['id']}",
-                            style="margin-left: 10px;",
-                            **{
-                                "onsubmit": f"return confirm('你确定删除这个league以及下面{match_count}场match吗？');"
-                            },
-                        )(
-                            Button("Delete League", cls="btn-danger", type="submit"),
+                        Div(style="display: flex; gap: 10px;")(
+                            A(
+                                Button("Edit League", cls="btn-secondary"),
+                                href=f"/edit_league/{league['id']}",
+                            ),
+                            Form(
+                                method="POST",
+                                action=f"/delete_league/{league['id']}",
+                                **{
+                                    "onsubmit": f"return confirm('你确定删除这个league以及下面{match_count}场match吗？');"
+                                },
+                            )(
+                                Button(
+                                    "Delete League", cls="btn-danger", type="submit"
+                                ),
+                            ),
                         )
                     ]
                     if can_delete_league
