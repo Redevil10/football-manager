@@ -208,8 +208,7 @@ def render_single_team_pitch(
     svg_content = "\n".join(svg_parts)
 
     return (
-        f'<svg width="{width}" height="{height}" '
-        f'viewBox="0 0 {width} {height}" '
+        f'<svg viewBox="0 0 {width} {height}" '
         f'xmlns="http://www.w3.org/2000/svg">'
         f"{svg_content}"
         f"</svg>"

@@ -344,7 +344,7 @@ def render_single_team_pitch(
     team_name = team.get("team_name", "Team")
 
     return Div(cls="single-pitch-container", style="margin-bottom: 30px;")(
-        H3(team_name, style="color: black; margin-bottom: 10px;"),
+        H3(team_name, style="color: black; margin-bottom: 10px; text-align: center;"),
         Div(
             cls="interactive-pitch-container",
             style="position: relative; display: inline-block;",

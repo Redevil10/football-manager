@@ -642,6 +642,25 @@ button:hover { background: #0052a3; }
         max-width: 100%;
     }
 
+    /* Scale interactive pitch to fit mobile screen */
+    .pitch-formations-container {
+        flex-direction: column;
+        align-items: center;
+    }
+    .single-pitch-container {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .interactive-pitch-container {
+        transform: scale(0.55);
+        transform-origin: top left;
+    }
+    .single-pitch-container {
+        /* Shrunk height: 390 * 0.55 ≈ 215, plus room for team name */
+        height: 245px;
+    }
+
     .display-mode-toggle {
         flex-wrap: wrap;
     }
