@@ -24,6 +24,7 @@ from db.club_leagues import (
     remove_club_from_league,
 )
 from render import render_league_matches, render_leagues_list, render_navbar
+from render.common import render_head
 from render.leagues import render_league_clubs
 
 
@@ -50,11 +51,7 @@ def register_league_routes(rt, STYLE):
         can_create = user.get("is_superuser")
 
         return Html(
-            Head(
-                Title("Leagues - Football Manager"),
-                Style(STYLE),
-                Script(src="https://unpkg.com/htmx.org@1.9.10"),
-            ),
+            render_head("Leagues - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -157,11 +154,7 @@ def register_league_routes(rt, STYLE):
         all_clubs = get_all_clubs() if user.get("is_superuser") else []
 
         return Html(
-            Head(
-                Title(f"{league['name']} - Football Manager"),
-                Style(STYLE),
-                Script(src="https://unpkg.com/htmx.org@1.9.10"),
-            ),
+            render_head(f"{league['name']} - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -197,10 +190,7 @@ def register_league_routes(rt, STYLE):
             return RedirectResponse("/leagues", status_code=303)
 
         return Html(
-            Head(
-                Title(f"Edit {league['name']} - Football Manager"),
-                Style(STYLE),
-            ),
+            render_head(f"Edit {league['name']} - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(

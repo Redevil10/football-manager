@@ -28,6 +28,7 @@ from db.users import (
     get_user_clubs,
     update_user_password,
 )
+from render.common import render_head
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +77,7 @@ def register_auth_routes(rt, STYLE):
                 error_msg = query.get("error", [None])[0]
 
         return Html(
-            Head(
-                Title("Login - Football Manager"),
-                Style(STYLE),
-            ),
+            render_head("Login - Football Manager", STYLE),
             Body(
                 Div(cls="container", style="max-width: 400px; margin: 100px auto;")(
                     H2("Login"),
@@ -398,10 +396,7 @@ def register_auth_routes(rt, STYLE):
         from render.common import render_navbar
 
         return Html(
-            Head(
-                Title("Register - Football Manager"),
-                Style(STYLE),
-            ),
+            render_head("Register - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container", style="max-width: 400px; margin: 100px auto;")(
@@ -645,10 +640,7 @@ def register_auth_routes(rt, STYLE):
             all_users = get_all_users()
 
         return Html(
-            Head(
-                Title("Change Password - Football Manager"),
-                Style(STYLE),
-            ),
+            render_head("Change Password - Football Manager", STYLE),
             Body(
                 Div(cls="container", style="max-width: 400px; margin: 100px auto;")(
                     H2("Change Password"),

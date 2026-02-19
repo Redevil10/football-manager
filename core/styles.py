@@ -76,7 +76,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 button {
-    padding: 8px 16px;
+    padding: 10px 20px;
     background: #0066cc;
     color: white;
     border: none;
@@ -586,10 +586,20 @@ button:hover { background: #0052a3; }
     .navbar {
         flex-direction: column;
         align-items: flex-start;
+        gap: 10px;
+    }
+    .navbar > div {
+        flex-wrap: wrap;
     }
     .teams-grid { grid-template-columns: 1fr; }
     .teams-grid-table { grid-template-columns: 1fr; }
     .attr-grid { grid-template-columns: 1fr; }
+
+    /* Horizontal scroll for wide tables */
+    .player-table {
+        display: block;
+        overflow-x: auto;
+    }
 
     /* Stack pitches vertically on mobile */
     .dual-pitch-container {
@@ -610,6 +620,28 @@ button:hover { background: #0052a3; }
         min-width: 80px;
         font-size: 12px;
         padding: 6px 12px;
+    }
+}
+
+@media (max-width: 600px) {
+    .container {
+        padding: 12px;
+    }
+    .navbar h1 {
+        font-size: 18px;
+    }
+    .navbar a {
+        padding: 6px 10px;
+    }
+    .navbar {
+        gap: 8px;
+    }
+    .input-group {
+        flex-direction: column;
+    }
+    input, select, textarea {
+        width: 100%;
+        box-sizing: border-box;
     }
 }
 """

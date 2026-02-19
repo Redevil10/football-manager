@@ -30,7 +30,7 @@ from db.users import (
     get_all_users,
     get_user_club_role,
 )
-from render.common import render_navbar
+from render.common import render_head, render_navbar
 
 
 def register_club_routes(rt, STYLE):
@@ -50,10 +50,7 @@ def register_club_routes(rt, STYLE):
         clubs = get_all_clubs()
 
         return Html(
-            Head(
-                Title("Clubs - Football Manager"),
-                Style(STYLE),
-            ),
+            render_head("Clubs - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -165,10 +162,7 @@ def register_club_routes(rt, STYLE):
         all_leagues = get_all_leagues(club_ids=None)
 
         return Html(
-            Head(
-                Title(f"{club['name']} - Football Manager"),
-                Style(STYLE),
-            ),
+            render_head(f"{club['name']} - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -221,10 +215,7 @@ def register_club_routes(rt, STYLE):
             return RedirectResponse("/clubs", status_code=303)
 
         return Html(
-            Head(
-                Title(f"Edit {club['name']} - Football Manager"),
-                Style(STYLE),
-            ),
+            render_head(f"Edit {club['name']} - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(

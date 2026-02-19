@@ -8,6 +8,31 @@ from core.auth import check_club_permission, get_csrf_token, get_current_club_in
 from db import get_match_teams
 
 
+def render_head(title, STYLE, *extra):
+    """Return a shared Head(...) element with viewport, PWA manifest, and HTMX.
+
+    Args:
+        title: Page title string.
+        STYLE: CSS style string.
+        *extra: Additional elements to include (e.g. extra Script tags).
+    """
+    return Head(
+        Meta(charset="UTF-8"),
+        Meta(name="viewport", content="width=device-width, initial-scale=1"),
+        Meta(name="theme-color", content="#0066cc"),
+        Link(rel="manifest", href="/static/manifest.json"),
+        Title(title),
+        Style(STYLE),
+        Script(src="https://unpkg.com/htmx.org@1.9.10"),
+        Script("""
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/static/service-worker.js');
+            }
+        """),
+        *extra,
+    )
+
+
 def format_match_name(match):
     """Format match name based on match status:
     - Not started: YYYY-MM-DD HomeTeamName VS AwayTeamName

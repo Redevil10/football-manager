@@ -62,6 +62,7 @@ from render import (
     render_match_detail,
     render_navbar,
 )
+from render.common import render_head
 
 logger = logging.getLogger(__name__)
 
@@ -79,11 +80,7 @@ def register_match_routes(rt, STYLE):
         club_ids = get_user_club_ids_from_request(req, sess)
         matches = get_all_matches(club_ids)
         return Html(
-            Head(
-                Title("All Matches - Football Manager"),
-                Style(STYLE),
-                Script(src="https://unpkg.com/htmx.org@1.9.10"),
-            ),
+            render_head("All Matches - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -136,11 +133,7 @@ def register_match_routes(rt, STYLE):
         default_location = ""
 
         return Html(
-            Head(
-                Title("Create Match"),
-                Style(STYLE),
-                Script(src="https://unpkg.com/htmx.org@1.9.10"),
-            ),
+            render_head("Create Match", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -759,11 +752,7 @@ def register_match_routes(rt, STYLE):
             )
 
         return Html(
-            Head(
-                Title(f"{format_match_name(match)} - Football Manager"),
-                Style(STYLE),
-                Script(src="https://unpkg.com/htmx.org@1.9.10"),
-            ),
+            render_head(f"{format_match_name(match)} - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -1017,11 +1006,7 @@ def register_match_routes(rt, STYLE):
         ]
 
         return Html(
-            Head(
-                Title(f"Edit {format_match_name(match)}"),
-                Style(STYLE),
-                Script(src="https://unpkg.com/htmx.org@1.9.10"),
-            ),
+            render_head(f"Edit {format_match_name(match)}", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -1495,11 +1480,7 @@ def register_match_routes(rt, STYLE):
         available_players = [p for p in all_players if p["id"] not in team_player_ids]
 
         return Html(
-            Head(
-                Title(f"Edit Team Roster - {format_match_name(match)}"),
-                Style(STYLE),
-                Script(src="https://unpkg.com/htmx.org@1.9.10"),
-            ),
+            render_head(f"Edit Team Roster - {format_match_name(match)}", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -1843,11 +1824,7 @@ def register_match_routes(rt, STYLE):
         available_players = [p for p in all_players if p["id"] in match_player_ids]
 
         return Html(
-            Head(
-                Title(f"Add Event - {format_match_name(match)}"),
-                Style(STYLE),
-                Script(src="https://unpkg.com/htmx.org@1.9.10"),
-            ),
+            render_head(f"Add Event - {format_match_name(match)}", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -2029,10 +2006,7 @@ def register_match_routes(rt, STYLE):
             return RedirectResponse("/matches", status_code=303)
 
         return Html(
-            Head(
-                Title(f"Import Players - {format_match_name(match)}"),
-                Style(STYLE),
-            ),
+            render_head(f"Import Players - {format_match_name(match)}", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -2107,9 +2081,8 @@ def register_match_routes(rt, STYLE):
                 if results:
                     match = get_match(match_id)
                     return Html(
-                        Head(
-                            Title(f"Confirm Import - {format_match_name(match)}"),
-                            Style(STYLE),
+                        render_head(
+                            f"Confirm Import - {format_match_name(match)}", STYLE
                         ),
                         Body(
                             render_navbar(user, sess, req.url.path if req else "/"),
@@ -2152,10 +2125,7 @@ def register_match_routes(rt, STYLE):
             if results:
                 match = get_match(match_id)
                 return Html(
-                    Head(
-                        Title(f"Confirm Import - {format_match_name(match)}"),
-                        Style(STYLE),
-                    ),
+                    render_head(f"Confirm Import - {format_match_name(match)}", STYLE),
                     Body(
                         render_navbar(user, sess, req.url.path if req else "/"),
                         Div(cls="container")(
@@ -2257,10 +2227,7 @@ def register_match_routes(rt, STYLE):
 
         if not available_players:
             return Html(
-                Head(
-                    Title(f"Add Player - {format_match_name(match)}"),
-                    Style(STYLE),
-                ),
+                render_head(f"Add Player - {format_match_name(match)}", STYLE),
                 Body(
                     render_navbar(user, sess, req.url.path if req else "/"),
                     Div(cls="container")(
@@ -2280,10 +2247,7 @@ def register_match_routes(rt, STYLE):
             )
 
         return Html(
-            Head(
-                Title(f"Add Player - {format_match_name(match)}"),
-                Style(STYLE),
-            ),
+            render_head(f"Add Player - {format_match_name(match)}", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(

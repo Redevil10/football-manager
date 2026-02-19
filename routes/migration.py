@@ -7,6 +7,7 @@ from fasthtml.common import *
 from core.auth import get_current_user
 from migrations.migrate_all import migrate_all
 from render import render_navbar
+from render.common import render_head
 
 
 def register_migration_routes(rt, STYLE):
@@ -26,11 +27,7 @@ def register_migration_routes(rt, STYLE):
             return RedirectResponse("/", status_code=303)
 
         return Html(
-            Head(
-                Title("Database Migration - Football Manager"),
-                Style(STYLE),
-                Script(src="https://unpkg.com/htmx.org@1.9.10"),
-            ),
+            render_head("Database Migration - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(

@@ -4,7 +4,7 @@ import os
 
 from fasthtml.common import *
 
-from render.common import render_csrf_input, render_navbar
+from render.common import render_csrf_input, render_head, render_navbar
 
 
 def render_settings_page(user, sess, smart_import_enabled, STYLE="", backup_info=None):
@@ -35,11 +35,7 @@ def render_settings_page(user, sess, smart_import_enabled, STYLE="", backup_info
     sections.append(render_migration_section(sess))
 
     return Html(
-        Head(
-            Title("Settings - Football Manager"),
-            Style(STYLE),
-            Script(src="https://unpkg.com/htmx.org@1.9.10"),
-        ),
+        render_head("Settings - Football Manager", STYLE),
         Body(
             render_navbar(user, sess),
             Div(cls="container")(H2("Settings"), *sections),

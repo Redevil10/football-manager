@@ -56,7 +56,7 @@ from render import (
     render_player_table,
     render_teams,
 )
-from render.common import can_user_delete, can_user_edit
+from render.common import can_user_delete, can_user_edit, render_head
 
 logger = logging.getLogger(__name__)
 
@@ -97,11 +97,7 @@ def register_player_routes(rt, STYLE):
             )
 
         return Html(
-            Head(
-                Title("All Players - Football Manager"),
-                Style(STYLE),
-                Script(src="https://unpkg.com/htmx.org@1.9.10"),
-            ),
+            render_head("All Players - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -123,10 +119,7 @@ def register_player_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         return Html(
-            Head(
-                Title("Import Players - Football Manager"),
-                Style(STYLE),
-            ),
+            render_head("Import Players - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -163,7 +156,7 @@ def register_player_routes(rt, STYLE):
 
         if not player:
             return Html(
-                Head(Title("Player Not Found"), Style(STYLE)),
+                render_head("Player Not Found", STYLE),
                 Body(
                     render_navbar(user, sess, req.url.path if req else "/"),
                     Div(cls="container")(P("Player not found")),
@@ -179,10 +172,7 @@ def register_player_routes(rt, STYLE):
             back_href = "/players"
 
         return Html(
-            Head(
-                Title(f"{player['name']} - Football Manager"),
-                Style(STYLE),
-            ),
+            render_head(f"{player['name']} - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(

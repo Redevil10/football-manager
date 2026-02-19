@@ -20,7 +20,7 @@ from db.users import (
     update_user_club_role,
     update_user_superuser_status,
 )
-from render.common import render_navbar
+from render.common import render_head, render_navbar
 
 logger = logging.getLogger(__name__)
 
@@ -308,10 +308,7 @@ def register_user_routes(rt, STYLE):
         can_create = user.get("is_superuser") or user_role == USER_ROLES["ADMIN"]
 
         return Html(
-            Head(
-                Title("User - Football Manager"),
-                Style(STYLE),
-            ),
+            render_head("User - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -388,10 +385,7 @@ def register_user_routes(rt, STYLE):
         is_own_profile = user.get("id") == user_id
 
         return Html(
-            Head(
-                Title(f"User: {target_user['username']} - Football Manager"),
-                Style(STYLE),
-            ),
+            render_head(f"User: {target_user['username']} - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -653,9 +647,8 @@ def register_user_routes(rt, STYLE):
                 error_msg = query.get("error", [None])[0]
 
         return Html(
-            Head(
-                Title(f"Edit User: {target_user['username']} - Football Manager"),
-                Style(STYLE),
+            render_head(
+                f"Edit User: {target_user['username']} - Football Manager", STYLE
             ),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),

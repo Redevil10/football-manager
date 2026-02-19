@@ -7,6 +7,7 @@ from db import (
     get_next_matches_by_all_leagues,
 )
 from render import render_navbar, render_next_matches_by_league, render_recent_matches
+from render.common import render_head
 
 
 def register_home_routes(rt, STYLE):
@@ -53,11 +54,7 @@ def register_home_routes(rt, STYLE):
         recent_matches = get_recent_matches(limit=5, club_ids=club_ids)
 
         return Html(
-            Head(
-                Title("Football Manager"),
-                Style(STYLE),
-                Script(src="https://unpkg.com/htmx.org@1.9.10"),
-            ),
+            render_head("Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
