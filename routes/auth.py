@@ -174,23 +174,25 @@ def register_auth_routes(rt, STYLE):
 
     @rt("/register", methods=["POST"])
     async def route_register(req: Request, sess=None):
-        """Handle registration form submission - accessible to superusers and managers"""
+        """Handle registration form submission - accessible to superusers and admins"""
         user = get_current_user(req, sess)
 
         # Require authentication
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        # Require superuser or manager status
+        # Require superuser or admin status
         current_user_is_superuser = user.get("is_superuser", False)
-        is_manager = False
+        is_admin = False
         if not current_user_is_superuser:
             from db.users import get_user_clubs
 
             user_clubs = get_user_clubs(user["id"])
-            is_manager = any(club.get("role") == "manager" for club in user_clubs)
+            is_admin = any(
+                club.get("role") == USER_ROLES["ADMIN"] for club in user_clubs
+            )
 
-        if not (current_user_is_superuser or is_manager):
+        if not (current_user_is_superuser or is_admin):
             return RedirectResponse("/", status_code=303)
 
         try:
@@ -259,11 +261,11 @@ def register_auth_routes(rt, STYLE):
                     f"/register?error={error_msg.replace(' ', '+')}", status_code=303
                 )
 
-            # For managers, verify they can assign users to this club
+            # For admins, verify they can assign users to this club
             if not current_user_is_superuser:
                 from core.auth import check_club_permission
 
-                if not check_club_permission(user, club_id, USER_ROLES["MANAGER"]):
+                if not check_club_permission(user, club_id, USER_ROLES["ADMIN"]):
                     raise PermissionError("create users", f"club {club_id}")
 
             # Check if user already exists
@@ -347,30 +349,30 @@ def register_auth_routes(rt, STYLE):
 
     @rt("/register")
     def register_page(req: Request = None, sess=None):
-        """Registration page - accessible to superusers and managers"""
+        """Registration page - accessible to superusers and admins"""
         user = get_current_user(req, sess)
 
         # Require authentication
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        # Require superuser or manager status
+        # Require superuser or admin status
         is_superuser = user.get("is_superuser", False)
-        is_manager = False
+        is_admin = False
         user_club_ids = []
         if not is_superuser:
             user_clubs = get_user_clubs(user["id"])
-            is_manager = any(
-                club.get("role") == USER_ROLES["MANAGER"] for club in user_clubs
+            is_admin = any(
+                club.get("role") == USER_ROLES["ADMIN"] for club in user_clubs
             )
-            if is_manager:
+            if is_admin:
                 user_club_ids = [
                     club["id"]
                     for club in user_clubs
-                    if club.get("role") == USER_ROLES["MANAGER"]
+                    if club.get("role") == USER_ROLES["ADMIN"]
                 ]
 
-        if not (is_superuser or is_manager):
+        if not (is_superuser or is_admin):
             return RedirectResponse("/", status_code=303)
 
         # Get error from query params if present
@@ -390,7 +392,7 @@ def register_auth_routes(rt, STYLE):
         if is_superuser:
             clubs = get_all_clubs()
         else:
-            # Managers can only see clubs they manage
+            # Admins can only see clubs they admin
             clubs = [get_club(cid) for cid in user_club_ids if get_club(cid)]
 
         from render.common import render_navbar
@@ -452,6 +454,11 @@ def register_auth_routes(rt, STYLE):
                                 ),
                                 Option("Viewer", value=USER_ROLES["VIEWER"]),
                                 Option("Manager", value=USER_ROLES["MANAGER"]),
+                                *(
+                                    [Option("Admin", value=USER_ROLES["ADMIN"])]
+                                    if is_superuser
+                                    else []
+                                ),
                                 name="role",
                                 required=True,
                                 style="width: 100%; padding: 8px;",

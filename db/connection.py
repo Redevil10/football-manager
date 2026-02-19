@@ -40,7 +40,7 @@ def init_db():
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   user_id INTEGER NOT NULL,
                   club_id INTEGER NOT NULL,
-                  role TEXT NOT NULL CHECK(role IN ('viewer', 'manager')),
+                  role TEXT NOT NULL CHECK(role IN ('viewer', 'manager', 'admin')),
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                   FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,

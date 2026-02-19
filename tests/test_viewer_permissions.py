@@ -185,35 +185,47 @@ class TestUserEditPermissions:
         assert result is False
 
     @patch("routes.users.get_user_role_in_clubs")
+    def test_manager_cannot_edit_other_users(self, mock_get_role):
+        """Test that manager cannot edit other users (only admin can)"""
+        from routes.users import can_user_edit_target_user
+
+        mock_get_role.return_value = USER_ROLES["MANAGER"]
+
+        manager = {"id": 1, "is_superuser": False}
+        viewer = {"id": 2, "is_superuser": False}
+
+        result = can_user_edit_target_user(manager, viewer)
+        assert result is False
+
+    @patch("routes.users.get_user_role_in_clubs")
     @patch("routes.users.get_user_accessible_club_ids")
     @patch("routes.users.get_user_clubs")
     @patch("routes.users.get_user_club_role")
-    def test_manager_can_edit_viewer_in_club(
+    def test_admin_can_edit_viewer_in_club(
         self,
         mock_get_club_role,
         mock_get_clubs,
         mock_get_accessible_clubs,
         mock_get_role,
     ):
-        """Test that manager can edit viewer in their club"""
+        """Test that admin can edit viewer in their club"""
         from routes.users import can_user_edit_target_user
 
-        mock_get_role.return_value = USER_ROLES["MANAGER"]
+        mock_get_role.return_value = USER_ROLES["ADMIN"]
         mock_get_accessible_clubs.return_value = [1]
         mock_get_clubs.return_value = [{"id": 1, "role": USER_ROLES["VIEWER"]}]
 
-        # First call for current user's role, second for target in club
         def club_role_side_effect(user_id, club_id):
-            if user_id == 1:  # Manager
-                return USER_ROLES["MANAGER"]
+            if user_id == 1:
+                return USER_ROLES["ADMIN"]
             return USER_ROLES["VIEWER"]
 
         mock_get_club_role.side_effect = club_role_side_effect
 
-        manager = {"id": 1, "is_superuser": False}
+        admin = {"id": 1, "is_superuser": False}
         viewer = {"id": 2, "is_superuser": False}
 
-        result = can_user_edit_target_user(manager, viewer)
+        result = can_user_edit_target_user(admin, viewer)
         assert result is True
 
 
@@ -290,24 +302,38 @@ class TestViewerVisibility:
         assert result[0]["id"] == 1
 
     @patch("routes.users.get_user_role_in_clubs")
-    @patch("routes.users.get_user_accessible_club_ids")
-    @patch("routes.users.get_users_by_club_ids")
-    def test_manager_sees_club_users(
-        self, mock_get_users, mock_get_club_ids, mock_get_role
-    ):
-        """Test that manager sees users in their clubs"""
+    def test_manager_sees_only_self(self, mock_get_role):
+        """Test that manager only sees themselves (not club users)"""
         from routes.users import get_visible_users_for_user
 
         mock_get_role.return_value = USER_ROLES["MANAGER"]
-        mock_get_club_ids.return_value = [1]
-        mock_get_users.return_value = [
-            {"id": 1, "username": "manager", "is_superuser": False},
-            {"id": 2, "username": "viewer1", "is_superuser": False},
-        ]
 
         manager = {"id": 1, "username": "manager", "is_superuser": False}
 
         result = get_visible_users_for_user(manager)
+
+        assert len(result) == 1
+        assert result[0]["id"] == 1
+
+    @patch("routes.users.get_user_role_in_clubs")
+    @patch("routes.users.get_user_accessible_club_ids")
+    @patch("routes.users.get_users_by_club_ids")
+    def test_admin_sees_club_users(
+        self, mock_get_users, mock_get_club_ids, mock_get_role
+    ):
+        """Test that admin sees users in their clubs"""
+        from routes.users import get_visible_users_for_user
+
+        mock_get_role.return_value = USER_ROLES["ADMIN"]
+        mock_get_club_ids.return_value = [1]
+        mock_get_users.return_value = [
+            {"id": 1, "username": "admin", "is_superuser": False},
+            {"id": 2, "username": "viewer1", "is_superuser": False},
+        ]
+
+        admin = {"id": 1, "username": "admin", "is_superuser": False}
+
+        result = get_visible_users_for_user(admin)
 
         assert len(result) == 2
 

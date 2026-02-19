@@ -27,18 +27,20 @@ logger = logging.getLogger(__name__)
 
 def get_user_role_in_clubs(user: dict) -> str:
     """Get the highest role a user has across all their clubs.
-    Returns 'manager' if they're a manager in any club, otherwise 'viewer'
 
     Args:
         user: User dictionary
 
     Returns:
-        str: Role string ("superuser", USER_ROLES["MANAGER"], or USER_ROLES["VIEWER"])
+        str: Role string ("superuser", "admin", "manager", or "viewer")
     """
     if user.get("is_superuser"):
         return "superuser"
 
     user_clubs = get_user_clubs(user["id"])
+    for club in user_clubs:
+        if club.get("role") == USER_ROLES["ADMIN"]:
+            return USER_ROLES["ADMIN"]
     for club in user_clubs:
         if club.get("role") == USER_ROLES["MANAGER"]:
             return USER_ROLES["MANAGER"]
@@ -69,24 +71,21 @@ def can_user_edit_target_user(current_user: dict, target_user: dict) -> bool:
             return True
         return True
 
-    # Managers can edit viewers in their clubs
-    if get_user_role_in_clubs(current_user) == USER_ROLES["MANAGER"]:
-        # Check if target_user is a viewer in any of current_user's clubs
+    # Admins can edit non-admin, non-superuser users in their clubs
+    if get_user_role_in_clubs(current_user) == USER_ROLES["ADMIN"]:
         current_user_club_ids = get_user_accessible_club_ids(current_user)
         target_user_clubs = get_user_clubs(target_user["id"])
 
         for club in target_user_clubs:
             if club["id"] in current_user_club_ids:
-                # Check if current_user is manager of this club
                 if (
                     get_user_club_role(current_user["id"], club["id"])
-                    == USER_ROLES["MANAGER"]
+                    == USER_ROLES["ADMIN"]
                 ):
-                    # Check if target_user is a viewer (not manager, not superuser)
                     if target_user.get("is_superuser"):
-                        return False  # Can't edit superusers
+                        return False
                     target_role = get_user_club_role(target_user["id"], club["id"])
-                    if target_role == USER_ROLES["VIEWER"]:
+                    if target_role in (USER_ROLES["VIEWER"], USER_ROLES["MANAGER"]):
                         return True
 
     return False
@@ -110,24 +109,21 @@ def can_user_delete_target_user(current_user: dict, target_user: dict) -> bool:
     if current_user.get("is_superuser"):
         return True
 
-    # Managers can delete viewers in their clubs
-    if get_user_role_in_clubs(current_user) == USER_ROLES["MANAGER"]:
-        # Check if target_user is a viewer in any of current_user's clubs
+    # Admins can delete non-admin, non-superuser users in their clubs
+    if get_user_role_in_clubs(current_user) == USER_ROLES["ADMIN"]:
         current_user_club_ids = get_user_accessible_club_ids(current_user)
         target_user_clubs = get_user_clubs(target_user["id"])
 
         for club in target_user_clubs:
             if club["id"] in current_user_club_ids:
-                # Check if current_user is manager of this club
                 if (
                     get_user_club_role(current_user["id"], club["id"])
-                    == USER_ROLES["MANAGER"]
+                    == USER_ROLES["ADMIN"]
                 ):
-                    # Check if target_user is a viewer (not manager, not superuser)
                     if target_user.get("is_superuser"):
-                        return False  # Can't delete superusers
+                        return False
                     target_role = get_user_club_role(target_user["id"], club["id"])
-                    if target_role == USER_ROLES["VIEWER"]:
+                    if target_role in (USER_ROLES["VIEWER"], USER_ROLES["MANAGER"]):
                         return True
 
     return False
@@ -154,13 +150,11 @@ def can_user_change_role_in_club(
     if target_user.get("is_superuser"):
         return False
 
-    # Managers can change roles in clubs they manage
-    if get_user_role_in_clubs(current_user) == USER_ROLES["MANAGER"]:
-        # Check if current_user is manager of this club
-        if get_user_club_role(current_user["id"], club_id) == USER_ROLES["MANAGER"]:
-            # Check if target_user is in this club
+    # Admins can change roles in clubs they admin (can assign viewer/manager only)
+    if get_user_role_in_clubs(current_user) == USER_ROLES["ADMIN"]:
+        if get_user_club_role(current_user["id"], club_id) == USER_ROLES["ADMIN"]:
             target_role = get_user_club_role(target_user["id"], club_id)
-            if target_role in VALID_ROLES:
+            if target_role in (USER_ROLES["VIEWER"], USER_ROLES["MANAGER"]):
                 return True
 
     return False
@@ -174,12 +168,8 @@ def get_visible_users_for_user(current_user):
 
     user_role = get_user_role_in_clubs(current_user)
 
-    if user_role == USER_ROLES["VIEWER"]:
-        # Viewers only see themselves
-        return [current_user]
-
-    elif user_role == USER_ROLES["MANAGER"]:
-        # Managers see themselves + all users in their clubs (excluding superusers)
+    if user_role == USER_ROLES["ADMIN"]:
+        # Admins see themselves + all users in their clubs (excluding superusers)
         club_ids = get_user_accessible_club_ids(current_user)
         club_users = get_users_by_club_ids(club_ids)
 
@@ -193,7 +183,8 @@ def get_visible_users_for_user(current_user):
 
         return club_users
 
-    return []
+    # Managers and viewers only see themselves
+    return [current_user]
 
 
 def render_users_list(users, current_user=None):
@@ -313,8 +304,8 @@ def register_user_routes(rt, STYLE):
         user_role = get_user_role_in_clubs(user)
         visible_users = get_visible_users_for_user(user)
 
-        # Determine if user can create new users
-        can_create = user.get("is_superuser") or user_role == USER_ROLES["MANAGER"]
+        # Determine if user can create new users (admin or superuser only)
+        can_create = user.get("is_superuser") or user_role == USER_ROLES["ADMIN"]
 
         return Html(
             Head(
@@ -544,6 +535,28 @@ def register_user_routes(rt, STYLE):
                                                                     ]
                                                                 ),
                                                             ),
+                                                            *(
+                                                                [
+                                                                    Option(
+                                                                        "Admin",
+                                                                        value=USER_ROLES[
+                                                                            "ADMIN"
+                                                                        ],
+                                                                        selected=(
+                                                                            club.get(
+                                                                                "role"
+                                                                            )
+                                                                            == USER_ROLES[
+                                                                                "ADMIN"
+                                                                            ]
+                                                                        ),
+                                                                    )
+                                                                ]
+                                                                if user.get(
+                                                                    "is_superuser"
+                                                                )
+                                                                else []
+                                                            ),
                                                             name="role",
                                                             **{
                                                                 "onchange": "this.form.submit();",
@@ -603,29 +616,31 @@ def register_user_routes(rt, STYLE):
         is_own_profile = user.get("id") == user_id
         current_user_role = get_user_role_in_clubs(user)
         can_edit_roles = is_superuser or (
-            current_user_role == USER_ROLES["MANAGER"] and not is_own_profile
+            current_user_role == USER_ROLES["ADMIN"] and not is_own_profile
         )
         can_edit_superuser_status = is_superuser
 
-        # Viewers cannot edit their own role
-        if is_own_profile and current_user_role == USER_ROLES["VIEWER"]:
+        # Non-admin users cannot edit their own role
+        if is_own_profile and current_user_role not in (
+            "superuser",
+            USER_ROLES["ADMIN"],
+        ):
             can_edit_roles = False
 
         # Filter clubs to only show those the current user can edit
         editable_clubs = []
         if can_edit_roles:
             if is_superuser:
-                # Superusers can see all clubs
                 editable_clubs = target_user_clubs
             else:
-                # For managers, only show clubs they manage
+                # For admins, only show clubs they admin
                 current_user_club_ids = get_user_accessible_club_ids(user)
                 editable_clubs = [
                     club
                     for club in target_user_clubs
                     if club["id"] in current_user_club_ids
                     and get_user_club_role(user["id"], club["id"])
-                    == USER_ROLES["MANAGER"]
+                    == USER_ROLES["ADMIN"]
                 ]
 
         # Get error from query params if present
@@ -726,6 +741,20 @@ def register_user_routes(rt, STYLE):
                                                     == USER_ROLES["MANAGER"]
                                                 ),
                                             ),
+                                            *(
+                                                [
+                                                    Option(
+                                                        "Admin",
+                                                        value=USER_ROLES["ADMIN"],
+                                                        selected=(
+                                                            club.get("role")
+                                                            == USER_ROLES["ADMIN"]
+                                                        ),
+                                                    )
+                                                ]
+                                                if is_superuser
+                                                else []
+                                            ),
                                             name=f"club_role_{club['id']}",
                                             style="padding: 4px 8px; border-radius: 3px; min-width: 100px;",
                                         ),
@@ -780,12 +809,15 @@ def register_user_routes(rt, STYLE):
             is_own_profile = user.get("id") == user_id
             current_user_role = get_user_role_in_clubs(user)
             can_edit_roles = is_superuser or (
-                current_user_role == USER_ROLES["MANAGER"] and not is_own_profile
+                current_user_role == USER_ROLES["ADMIN"] and not is_own_profile
             )
             can_edit_superuser_status = is_superuser
 
-            # Viewers cannot edit their own role
-            if is_own_profile and current_user_role == USER_ROLES["VIEWER"]:
+            # Non-admin users cannot edit their own role
+            if is_own_profile and current_user_role not in (
+                "superuser",
+                USER_ROLES["ADMIN"],
+            ):
                 can_edit_roles = False
 
             # Update superuser status (only superusers can do this)

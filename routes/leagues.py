@@ -3,7 +3,6 @@
 from fasthtml.common import *
 
 from core.auth import (
-    can_user_edit_league,
     get_current_user,
     get_user_club_ids_from_request,
 )
@@ -184,13 +183,13 @@ def register_league_routes(rt, STYLE):
 
     @rt("/delete_league/{league_id}", methods=["POST"])
     def route_delete_league(league_id: int, req: Request = None, sess=None):
-        """Delete a league"""
+        """Delete a league (superuser only)"""
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        # Check authorization
-        if not can_user_edit_league(user, league_id):
+        # Only superuser can delete leagues (matches create permission)
+        if not user.get("is_superuser"):
             raise PermissionError("delete", resource=f"league {league_id}")
 
         try:

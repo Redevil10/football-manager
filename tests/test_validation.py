@@ -231,15 +231,22 @@ class TestValidateInList:
 
     def test_valid_value_in_list(self):
         """Test that valid values in list pass validation"""
-        valid_values = ["viewer", "manager"]
+        valid_values = ["viewer", "manager", "admin"]
         is_valid, error_msg = validate_in_list("viewer", valid_values, "role")
+        assert is_valid is True
+        assert error_msg is None
+
+    def test_admin_valid_in_list(self):
+        """Test that admin is a valid value in role list"""
+        valid_values = ["viewer", "manager", "admin"]
+        is_valid, error_msg = validate_in_list("admin", valid_values, "role")
         assert is_valid is True
         assert error_msg is None
 
     def test_value_not_in_list(self):
         """Test that values not in list fail validation"""
-        valid_values = ["viewer", "manager"]
-        is_valid, error_msg = validate_in_list("admin", valid_values, "role")
+        valid_values = ["viewer", "manager", "admin"]
+        is_valid, error_msg = validate_in_list("superadmin", valid_values, "role")
         assert is_valid is False
         assert "must be one of" in error_msg.lower()
         assert "viewer" in error_msg
@@ -247,21 +254,21 @@ class TestValidateInList:
 
     def test_empty_string(self):
         """Test that empty strings fail validation"""
-        valid_values = ["viewer", "manager"]
+        valid_values = ["viewer", "manager", "admin"]
         is_valid, error_msg = validate_in_list("", valid_values, "role")
         assert is_valid is False
         assert "cannot be empty" in error_msg.lower()
 
     def test_whitespace_only(self):
         """Test that whitespace-only strings fail validation"""
-        valid_values = ["viewer", "manager"]
+        valid_values = ["viewer", "manager", "admin"]
         is_valid, error_msg = validate_in_list("   ", valid_values, "role")
         assert is_valid is False
         assert "cannot be empty" in error_msg.lower()
 
     def test_none_value(self):
         """Test that None values fail validation"""
-        valid_values = ["viewer", "manager"]
+        valid_values = ["viewer", "manager", "admin"]
         is_valid, error_msg = validate_in_list(None, valid_values, "role")
         assert is_valid is False
         assert "required" in error_msg.lower()
@@ -275,7 +282,7 @@ class TestValidateInList:
 
     def test_case_sensitive(self):
         """Test that validation is case-sensitive"""
-        valid_values = ["viewer", "manager"]
+        valid_values = ["viewer", "manager", "admin"]
         is_valid, error_msg = validate_in_list("Viewer", valid_values, "role")
         assert is_valid is False
         assert "must be one of" in error_msg.lower()

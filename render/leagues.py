@@ -24,7 +24,7 @@ def render_leagues_list(leagues, user=None):
         matches = get_matches_by_league(league["id"])
         match_count = len(matches)
 
-        can_delete = can_user_edit_league(user, league["id"]) if user else False
+        can_delete = user.get("is_superuser", False) if user else False
 
         items.append(
             Div(
@@ -80,6 +80,7 @@ def render_league_matches(league, matches, user=None):
 
     match_count = len(matches) if matches else 0
     can_edit_league = can_user_edit_league(user, league["id"]) if user else False
+    can_delete_league = user.get("is_superuser", False) if user else False
 
     content = [
         H2(league["name"]),
@@ -101,7 +102,7 @@ def render_league_matches(league, matches, user=None):
                             Button("Delete League", cls="btn-danger", type="submit"),
                         )
                     ]
-                    if can_edit_league
+                    if can_delete_league
                     else []
                 ),
             ),

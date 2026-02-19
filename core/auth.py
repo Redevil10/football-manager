@@ -11,7 +11,7 @@ import bcrypt
 from fasthtml.common import RedirectResponse, Request
 from starlette.exceptions import HTTPException
 
-from core.config import USER_ROLES, VALID_ROLES
+from core.config import ROLE_HIERARCHY, USER_ROLES
 from db import get_clubs_in_league, get_match
 from db.clubs import get_all_clubs, get_club
 from db.users import (
@@ -272,7 +272,10 @@ def check_club_access(user: dict, club_id: int) -> bool:
 
 
 def check_club_permission(user: dict, club_id: int, required_role: str = None) -> bool:
-    """Check if user has required permission (viewer or manager) for a club
+    """Check if user has required permission for a club using role hierarchy.
+
+    Role hierarchy: admin > manager > viewer.
+    A user with a higher role satisfies a lower role requirement.
 
     Args:
         user: User dictionary
@@ -292,12 +295,9 @@ def check_club_permission(user: dict, club_id: int, required_role: str = None) -
     if not user_role:
         return False
 
-    if required_role == USER_ROLES["MANAGER"]:
-        return user_role == USER_ROLES["MANAGER"]
-    elif required_role == USER_ROLES["VIEWER"]:
-        return user_role in VALID_ROLES  # Both viewer and manager can view
-
-    return False
+    required_level = ROLE_HIERARCHY.get(required_role, -1)
+    user_level = ROLE_HIERARCHY.get(user_role, -1)
+    return user_level >= required_level
 
 
 def require_auth(f):

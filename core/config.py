@@ -109,5 +109,13 @@ POSITION_DISTRIBUTION = {
 USER_ROLES = {
     "VIEWER": "viewer",
     "MANAGER": "manager",
+    "ADMIN": "admin",
 }
-VALID_ROLES = [USER_ROLES["VIEWER"], USER_ROLES["MANAGER"]]  # List of valid role values
+VALID_ROLES = [USER_ROLES["VIEWER"], USER_ROLES["MANAGER"], USER_ROLES["ADMIN"]]
+
+# Role hierarchy for permission checks (higher index = more privilege)
+ROLE_HIERARCHY = {
+    USER_ROLES["VIEWER"]: 0,
+    USER_ROLES["MANAGER"]: 1,
+    USER_ROLES["ADMIN"]: 2,
+}

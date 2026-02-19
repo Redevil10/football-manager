@@ -115,16 +115,25 @@ class TestConfigConstants:
 
         assert "VIEWER" in config.USER_ROLES
         assert "MANAGER" in config.USER_ROLES
+        assert "ADMIN" in config.USER_ROLES
 
     def test_valid_roles_defined(self):
         """Test that VALID_ROLES is properly defined"""
         assert hasattr(config, "VALID_ROLES")
         assert isinstance(config.VALID_ROLES, list)
-        assert len(config.VALID_ROLES) > 0
+        assert len(config.VALID_ROLES) == 3
+        assert "admin" in config.VALID_ROLES
 
         # Check that all valid roles are in USER_ROLES values
         for role in config.VALID_ROLES:
             assert role in config.USER_ROLES.values()
+
+    def test_role_hierarchy_defined(self):
+        """Test that ROLE_HIERARCHY is properly defined"""
+        assert hasattr(config, "ROLE_HIERARCHY")
+        assert isinstance(config.ROLE_HIERARCHY, dict)
+        assert config.ROLE_HIERARCHY["viewer"] < config.ROLE_HIERARCHY["manager"]
+        assert config.ROLE_HIERARCHY["manager"] < config.ROLE_HIERARCHY["admin"]
 
     def test_db_path_defined(self):
         """Test that DB_PATH is properly defined"""
