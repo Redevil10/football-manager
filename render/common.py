@@ -141,7 +141,13 @@ def get_match_score_display(match_id):
 def render_navbar(user=None, sess=None, current_url="/"):
     """Render navigation bar"""
     nav_items = [
-        H1("⚽ Football Manager"),
+        H1(
+            Img(
+                src="/static/logo.svg",
+                style="height: 32px; vertical-align: middle; margin-right: 8px;",
+            ),
+            "Football Manager",
+        ),
         A("Home", href="/"),
         A("Matches", href="/matches"),
         A("Players", href="/players"),

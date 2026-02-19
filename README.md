@@ -10,7 +10,11 @@ license: mit
 short_description: Manage football teams, allocate players, track matches
 ---
 
-# ⚽ Football Manager
+<p align="center">
+  <img src="static/logo.svg" width="120" alt="Football Manager logo">
+</p>
+
+<h1 align="center">Football Manager</h1>
 
 [![lint](https://github.com/Redevil10/football-manager/actions/workflows/lint.yml/badge.svg)](https://github.com/Redevil10/football-manager/actions/workflows/lint.yml)
 [![tests](https://github.com/Redevil10/football-manager/actions/workflows/test.yml/badge.svg)](https://github.com/Redevil10/football-manager/actions/workflows/test.yml)

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0077ee"/>
+      <stop offset="100%" stop-color="#003388"/>
+    </linearGradient>
+    <linearGradient id="ball" x1="30%" y1="20%" x2="70%" y2="80%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e0e0e0"/>
+    </linearGradient>
+    <!-- Subtle pitch line pattern -->
+    <pattern id="pitch" x="0" y="0" width="80" height="80" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="80" y2="0" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+      <line x1="0" y1="0" x2="0" y2="80" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#pitch)"/>
+
+  <!-- Decorative pitch markings (faded) -->
+  <circle cx="640" cy="320" r="120" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/>
+  <line x1="640" y1="0" x2="640" y2="640" stroke="rgba(255,255,255,0.06)" stroke-width="3"/>
+
+  <!-- Soccer ball (left side, within safe zone) -->
+  <circle cx="240" cy="270" r="120" fill="url(#ball)" stroke="rgba(200,200,200,0.5)" stroke-width="2"/>
+
+  <!-- Ball pentagons -->
+  <polygon points="240,242 256,250 250,267 230,267 224,250" fill="#333"/>
+  <polygon points="240,198 253,206 248,220 232,220 227,206" fill="#333"/>
+  <polygon points="188,302 201,310 196,324 180,324 175,310" fill="#333"/>
+  <polygon points="292,302 305,310 300,324 284,324 279,310" fill="#333"/>
+  <polygon points="186,220 199,228 194,243 178,243 173,228" fill="#333"/>
+  <polygon points="294,220 307,228 302,243 286,243 281,228" fill="#333"/>
+
+  <!-- Ball connecting lines -->
+  <line x1="224" y1="250" x2="199" y2="228" stroke="#555" stroke-width="2"/>
+  <line x1="256" y1="250" x2="281" y2="228" stroke="#555" stroke-width="2"/>
+  <line x1="230" y1="267" x2="201" y2="302" stroke="#555" stroke-width="2"/>
+  <line x1="250" y1="267" x2="279" y2="302" stroke="#555" stroke-width="2"/>
+  <line x1="240" y1="242" x2="240" y2="220" stroke="#555" stroke-width="2"/>
+  <line x1="232" y1="220" x2="194" y2="228" stroke="#555" stroke-width="2"/>
+  <line x1="248" y1="220" x2="286" y2="228" stroke="#555" stroke-width="2"/>
+  <line x1="182" y1="243" x2="184" y2="302" stroke="#555" stroke-width="2"/>
+  <line x1="298" y1="243" x2="296" y2="302" stroke="#555" stroke-width="2"/>
+  <line x1="196" y1="324" x2="284" y2="324" stroke="#555" stroke-width="2"/>
+
+  <!-- Clipboard (tucked under ball, within safe zone) -->
+  <rect x="280" y="305" width="95" height="105" rx="6" ry="6" fill="white" opacity="0.95" stroke="#b0b0b0" stroke-width="1.5"/>
+  <rect x="304" y="297" width="46" height="16" rx="3" ry="3" fill="#999"/>
+  <circle cx="327" cy="301" r="4" fill="white"/>
+
+  <!-- Clipboard lines -->
+  <line x1="295" y1="325" x2="360" y2="325" stroke="#ddd" stroke-width="1.5"/>
+  <line x1="295" y1="342" x2="360" y2="342" stroke="#ddd" stroke-width="1.5"/>
+  <line x1="295" y1="359" x2="360" y2="359" stroke="#ddd" stroke-width="1.5"/>
+  <line x1="295" y1="376" x2="336" y2="376" stroke="#ddd" stroke-width="1.5"/>
+
+  <!-- Checkmarks -->
+  <polyline points="297,323 301,327 309,317" fill="none" stroke="#0066cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="297,340 301,344 309,334" fill="none" stroke="#0066cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="297,357 301,361 309,351" fill="none" stroke="#0066cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Title text (right side, within safe zone) -->
+  <text x="810" y="260" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="68" font-weight="800" fill="white" letter-spacing="-1">Football Manager</text>
+
+  <!-- Subtitle -->
+  <text x="810" y="325" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="26" fill="rgba(255,255,255,0.75)" letter-spacing="1">Manage rosters, balance teams, track matches</text>
+
+  <!-- Tech badges -->
+  <rect x="668" y="365" rx="14" ry="14" width="90" height="28" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+  <text x="713" y="384" text-anchor="middle" font-family="monospace" font-size="14" fill="rgba(255,255,255,0.85)">FastHTML</text>
+
+  <rect x="770" y="365" rx="14" ry="14" width="70" height="28" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+  <text x="805" y="384" text-anchor="middle" font-family="monospace" font-size="14" fill="rgba(255,255,255,0.85)">HTMX</text>
+
+  <rect x="852" y="365" rx="14" ry="14" width="75" height="28" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+  <text x="890" y="384" text-anchor="middle" font-family="monospace" font-size="14" fill="rgba(255,255,255,0.85)">SQLite</text>
+
+  <!-- GitHub URL (within safe zone, above bottom border) -->
+  <text x="640" y="575" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.45)">github.com/Redevil10/football-manager</text>
+</svg>
