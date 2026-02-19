@@ -23,3 +23,5 @@ REFACTORING_SUMMARY.md
 .cursor/
 docs/
 CLAUDE.md
+.claude/
+.ruff_cache/
