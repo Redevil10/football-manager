@@ -7,9 +7,32 @@ from fasthtml.common import *
 from render.common import render_csrf_input, render_navbar
 
 
-def render_settings_page(user, sess, smart_import_enabled, STYLE=""):
+def render_settings_page(user, sess, smart_import_enabled, STYLE="", backup_info=None):
     """Render the settings page."""
     has_api_key = bool(os.environ.get("GEMINI_API_KEY"))
+
+    sections = [
+        Div(cls="container-white", style="padding: 20px; margin-bottom: 20px;")(
+            H3("Smart Import (AI)"),
+            P(
+                "Uses Gemini API to intelligently parse player signup text.",
+                style="color: #666; margin-bottom: 10px;",
+            ),
+            P(
+                "API Key: ",
+                Span(
+                    "Configured" if has_api_key else "Not set",
+                    style=f"color: {'green' if has_api_key else 'red'}; font-weight: bold;",
+                ),
+            ),
+            render_smart_import_toggle(sess, smart_import_enabled, has_api_key),
+        ),
+    ]
+
+    if backup_info is not None:
+        sections.append(render_backup_status(backup_info))
+
+    sections.append(render_migration_section(sess))
 
     return Html(
         Head(
@@ -19,26 +42,38 @@ def render_settings_page(user, sess, smart_import_enabled, STYLE=""):
         ),
         Body(
             render_navbar(user, sess),
-            Div(cls="container")(
-                H2("Settings"),
-                Div(cls="container-white", style="padding: 20px; margin-bottom: 20px;")(
-                    H3("Smart Import (AI)"),
-                    P(
-                        "Uses Gemini API to intelligently parse player signup text.",
-                        style="color: #666; margin-bottom: 10px;",
-                    ),
-                    P(
-                        "API Key: ",
-                        Span(
-                            "Configured" if has_api_key else "Not set",
-                            style=f"color: {'green' if has_api_key else 'red'}; font-weight: bold;",
-                        ),
-                    ),
-                    render_smart_import_toggle(sess, smart_import_enabled, has_api_key),
-                ),
-                render_migration_section(sess),
-            ),
+            Div(cls="container")(H2("Settings"), *sections),
         ),
+    )
+
+
+def render_backup_status(backup_info):
+    """Render the database backup status section."""
+    active = backup_info.get("active", False)
+    interval = backup_info.get("interval", 15)
+    last_backup = backup_info.get("last_backup")
+    next_backup = backup_info.get("next_backup")
+
+    status_color = "#28a745" if active else "#666"
+    status_text = "Active" if active else "Inactive"
+
+    rows = [
+        P(
+            "Status: ",
+            Span(status_text, style=f"color: {status_color}; font-weight: bold;"),
+        ),
+        P(f"Interval: Every {interval} minutes"),
+        P(f"Last backup: {last_backup or 'No backups recorded yet'}"),
+        P(f"Next backup: {next_backup or 'N/A'}"),
+    ]
+
+    return Div(cls="container-white", style="padding: 20px; margin-bottom: 20px;")(
+        H3("Database Backup"),
+        P(
+            "Automatic backup of the SQLite database to Hugging Face Datasets.",
+            style="color: #666; margin-bottom: 10px;",
+        ),
+        *rows,
     )
 
 

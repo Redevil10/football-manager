@@ -91,6 +91,25 @@ except Exception as e:
 # Setup Hugging Face backup for persistent storage (only on Hugging Face Spaces)
 if os.environ.get("HF_TOKEN"):
     logger.info("Setting up Hugging Face backup for persistent storage")
+
+    # Wrap upload() to record timestamp after each successful backup
+    from datetime import datetime, timezone
+
+    import fasthtml_hf.backup as _hf_backup
+
+    _original_upload = _hf_backup.upload
+
+    def _upload_with_timestamp():
+        _original_upload()
+        try:
+            from db.settings import set_setting
+
+            set_setting("last_backup_time", datetime.now(timezone.utc).isoformat())
+        except Exception:
+            logger.warning("Failed to record backup timestamp", exc_info=True)
+
+    _hf_backup.upload = _upload_with_timestamp
+
     setup_hf_backup(app)
 else:
     logger.debug("HF_TOKEN not found, skipping Hugging Face backup setup")
