@@ -23,7 +23,7 @@ short_description: Manage football teams, allocate players, track matches
 
 A web app for managing amateur football rosters, balancing teams, and tracking matches.
 
-**Live Demo**: [redevil10-football-manager.hf.space](https://redevil10-football-manager.hf.space/) — login with `TestUser` / `TestUser`
+**Live Demo**: [redevil10-football-manager.hf.space](https://redevil10-football-manager.hf.space/) — click **Try as Guest** to explore
 
 ## Features
 

@@ -11,6 +11,7 @@ from core.auth import (
     initialize_current_club_id,
     login_user,
     logout_user,
+    set_user_session,
     verify_password,
 )
 from core.config import USER_ROLES, VALID_ROLES
@@ -61,6 +62,20 @@ def register_auth_routes(rt, STYLE):
             error_detail = str(e)
             logger.error(f"Login error: {error_detail}", exc_info=True)
             return RedirectResponse("/login?error=Login+failed", status_code=303)
+
+    @rt("/demo-login")
+    def route_demo_login(sess=None):
+        """Log in as DemoUser (guest/viewer access)."""
+        demo_user = get_user_by_username("DemoUser")
+        if not demo_user:
+            return RedirectResponse(
+                "/login?error=Demo+account+unavailable", status_code=303
+            )
+
+        if set_user_session(sess, demo_user):
+            return RedirectResponse("/", status_code=303)
+
+        return RedirectResponse("/login?error=Demo+login+failed", status_code=303)
 
     @rt("/login")
     def login_page(req: Request = None):
@@ -122,6 +137,18 @@ def register_auth_routes(rt, STYLE):
                         ),
                         method="post",
                         action="/login",
+                    ),
+                    Div(
+                        style="display: flex; align-items: center; margin: 20px 0; gap: 10px;"
+                    )(
+                        Hr(style="flex: 1; border: none; border-top: 1px solid #ccc;"),
+                        Span("or", style="color: #888; font-size: 14px;"),
+                        Hr(style="flex: 1; border: none; border-top: 1px solid #ccc;"),
+                    ),
+                    A(
+                        "Try as Guest (View Only)",
+                        href="/demo-login",
+                        style="display: block; text-align: center; padding: 10px; border: 1px solid #6c757d; border-radius: 4px; color: #6c757d; text-decoration: none; font-size: 14px;",
                     ),
                 ),
             ),

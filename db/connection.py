@@ -1,9 +1,14 @@
 # db/connection.py - Database connection and initialization
 
+import logging
 import os
 import sqlite3
+import uuid
+from datetime import date, timedelta
 
-from core.config import DB_PATH
+from core.config import DB_PATH, USER_ROLES
+
+logger = logging.getLogger(__name__)
 
 
 def init_db():
@@ -160,6 +165,106 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+    ensure_demo_user()
+
+
+def ensure_demo_user():
+    """Ensure the DemoUser and Demo Club exist for guest login."""
+    from core.auth import hash_password
+    from db.clubs import create_club, get_club_by_name
+    from db.users import add_user_to_club, create_user, get_user_by_username
+
+    # Create Demo Club if it doesn't exist
+    demo_club = get_club_by_name("Demo Club")
+    if not demo_club:
+        club_id = create_club("Demo Club", "Demo club for guest visitors")
+        if not club_id:
+            logger.warning("Failed to create Demo Club")
+            return
+    else:
+        club_id = demo_club["id"]
+
+    # Create DemoUser if it doesn't exist
+    demo_user = get_user_by_username("DemoUser")
+    if not demo_user:
+        random_password = uuid.uuid4().hex
+        password_hash, password_salt = hash_password(random_password)
+        user_id = create_user("DemoUser", password_hash, password_salt, None, False)
+        if not user_id:
+            logger.warning("Failed to create DemoUser")
+            return
+        add_user_to_club(user_id, club_id, USER_ROLES["VIEWER"])
+        logger.info("Created DemoUser with viewer role for Demo Club")
+
+    _setup_demo_data(club_id)
+
+
+def _setup_demo_data(club_id):
+    """Populate Demo Club with sample players, league, and match."""
+    from db.club_leagues import add_club_to_league
+    from db.leagues import create_league
+    from db.match_players import add_match_player
+    from db.match_teams import create_match_team
+    from db.matches import create_match, delete_match, get_matches_by_league
+    from db.players import add_player_with_score, get_all_players
+    from examples.demo_players import DEMO_PLAYERS
+    from logic.allocation import allocate_match_teams
+
+    # a) Create "Demo League" if it doesn't exist
+    conn = get_db()
+    league_row = conn.execute(
+        "SELECT id FROM leagues WHERE name = 'Demo League'"
+    ).fetchone()
+    conn.close()
+
+    if league_row:
+        league_id = league_row["id"]
+    else:
+        league_id = create_league("Demo League", "Demo league for guest visitors")
+        if not league_id:
+            logger.warning("Failed to create Demo League")
+            return
+        add_club_to_league(club_id, league_id)
+
+    # b) Create 28 players (one-time)
+    existing_players = get_all_players([club_id])
+    if not existing_players:
+        for name, score in DEMO_PLAYERS:
+            add_player_with_score(name, club_id, score)
+
+    # c) Ensure a future match exists
+    matches = get_matches_by_league(league_id)
+    today = date.today().isoformat()
+    has_future_match = any(m.get("date", "") >= today for m in matches)
+
+    if not has_future_match:
+        # Delete old demo matches for this league
+        for m in matches:
+            delete_match(m["id"])
+
+        # Create a match 1 year from today
+        future_date = (date.today() + timedelta(days=365)).isoformat()
+        match_id = create_match(
+            league_id,
+            date=future_date,
+            start_time="14:00:00",
+            end_time="16:00:00",
+            location="Demo Stadium",
+            num_teams=2,
+            max_players_per_team=11,
+        )
+
+        create_match_team(match_id, 1, "Team A", "Red")
+        create_match_team(match_id, 2, "Team B", "Blue")
+
+        # Sign up all players
+        players = get_all_players([club_id])
+        for player in players:
+            add_match_player(match_id, player["id"])
+
+        # Auto-balance into teams
+        allocate_match_teams(match_id)
 
 
 def get_db():

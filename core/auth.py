@@ -143,6 +143,29 @@ def get_session_from_request(req: Request) -> dict:
     return {}
 
 
+def set_user_session(sess: dict, user: dict) -> bool:
+    """Set session for an authenticated user.
+
+    Args:
+        sess: Session dictionary
+        user: User dictionary (must contain 'id')
+
+    Returns:
+        bool: True if session was set successfully, False otherwise
+    """
+    if sess is None:
+        return False
+
+    try:
+        sess["user_id"] = user["id"]
+        generate_csrf_token(sess)
+        update_last_login(user["id"])
+        return True
+    except Exception as e:
+        logger.error(f"Error setting session: {e}")
+        return False
+
+
 def login_user(req: Request, username: str, password: str, sess: dict = None) -> bool:
     """Attempt to login a user.
 
@@ -164,20 +187,7 @@ def login_user(req: Request, username: str, password: str, sess: dict = None) ->
 
     # Verify password using bcrypt
     if verify_password(password, password_hash, password_salt):
-        # FastHTML injects the session as a parameter - use it directly
-        # The session parameter persists via cookies automatically
-        if sess is None:
-            return False
-
-        try:
-            sess["user_id"] = user["id"]
-            # Generate CSRF token on login for protection against CSRF attacks
-            generate_csrf_token(sess)
-            update_last_login(user["id"])
-            return True
-        except Exception as e:
-            logger.error(f"Error setting session: {e}")
-            return False
+        return set_user_session(sess, user)
 
     return False
 
