@@ -21,3 +21,9 @@ hooks = [
     { id = "ruff-check", args = ["--fix", "--extend-select=I"] },
     { id = "ruff-format" },
 ]
+
+[[repos]]
+repo = "local"
+hooks = [
+    { id = "uv-lock", name = "uv-lock", entry = "bash -c 'uv lock && git add uv.lock'", language = "system", files = "pyproject\\.toml$", pass_filenames = false },
+]
