@@ -6,7 +6,7 @@ colorTo: red
 sdk: docker
 app_port: 7860
 pinned: false
-license: mit
+license: agpl-3.0
 short_description: Manage football teams, allocate players, track matches
 ---
 
@@ -87,4 +87,4 @@ Players are sorted by overall score (10–200), then distributed to minimize the
 
 ## License
 
-MIT
+AGPL-3.0 — see [LICENSE](LICENSE) for details.
