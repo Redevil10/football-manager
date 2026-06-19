@@ -115,27 +115,34 @@ def test_public_match_shows_info(client, seeded):
     resp = client.get(f"/public/match/{seeded['match_id']}")
     assert resp.status_code == 200
     text = resp.text
-    # Match info, line-up names + positions, goals, recordings are all shown
+    # Reuses the real match-detail view: pitch, line-ups, goals, recordings
+    assert "pitch-view-container" in text
     assert "Test Park" in text
     assert "Alice Striker" in text
     assert "Bob Keeper" in text
-    assert "Forward" in text
-    assert "Goalkeeper" in text
     assert "https://youtu.be/test123" in text
-    assert "Goals &amp; Events" in text or "Goals & Events" in text
+    assert "Match Events" in text
 
 
-def test_public_match_hides_player_values(client, seeded):
+def test_public_match_shows_scores_read_only(client, seeded):
     set_league_public(seeded["league_id"], True)
     resp = client.get(f"/public/match/{seeded['match_id']}")
     text = resp.text
-    # No player rating surfaces of any kind
-    assert "Overall" not in text
-    assert "Technical:" not in text
-    assert "Mental:" not in text
-    # No edit affordances leak into the public view
-    assert "/edit_match" not in text
-    assert "/update_player" not in text
+
+    # Scores ARE shown (same as a club viewer's match page)
+    assert "Score: 3 - 1" in text
+    assert "Overall:" in text
+
+    # ...but strictly read-only: no edit/delete/allocate controls, no drag-and-drop
+    for forbidden in (
+        "Edit Match",
+        "Delete Match",
+        "Allocate Teams",
+        'draggable="true"',
+        "/edit_match/",
+        "/delete_match/",
+    ):
+        assert forbidden not in text
 
 
 # --- Toggle route security ------------------------------------------------

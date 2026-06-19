@@ -1,10 +1,12 @@
 # render/public.py - Anonymous (not logged in) read-only rendering
 #
-# These renderers power the /public/league/{id} and /public/match/{id} pages
-# that a superuser can expose for casual visitors. They deliberately show ONLY
-# match information (schedule, location, score, line-up names, goals, recording
-# links) and never any player attribute values / overall scores, and never any
-# edit controls or links into the authenticated app.
+# The public pages reuse the real authenticated views to stay visually
+# identical to what a club viewer sees:
+#   - the league page lists matches (links point at /public/match/{id})
+#   - the match page renders the full render_match_detail() with user=None,
+#     which collapses to a read-only view (no edit/delete/allocate controls)
+#     while keeping the pitch / line-ups / scores / goals / recordings.
+# Only this page shell (no authenticated navbar) lives here.
 
 from fasthtml.common import *
 
@@ -14,7 +16,6 @@ from render.common import (
     is_match_completed,
     render_head,
 )
-from render.matches import render_match_recordings
 
 
 def _public_header():
@@ -124,86 +125,3 @@ def render_public_league(league, matches, STYLE):
         )
 
     return render_public_page(f"{league['name']} - Football Manager", STYLE, *content)
-
-
-def _render_public_team(team, players):
-    """Render one team's line-up: names + positions only, no values."""
-    header = team.get("team_name") or f"Team {team.get('team_number', '?')}"
-    color = team.get("jersey_color")
-    if color:
-        header = f"{header} ({color})"
-
-    starters = [p for p in players if p.get("is_starter")]
-    subs = [p for p in players if not p.get("is_starter")]
-
-    def _player_line(p):
-        pos = p.get("position")
-        label = f"{p['name']} — {pos}" if pos else p["name"]
-        return Li(label, style="margin-bottom: 4px;")
-
-    blocks = [H4(f"{header} — {team.get('score', 0)}", style="margin: 0 0 8px;")]
-    if starters:
-        blocks.append(P("Starters", style="margin: 8px 0 4px; font-weight: bold;"))
-        blocks.append(
-            Ul(*[_player_line(p) for p in starters], style="padding-left: 20px;")
-        )
-    if subs:
-        blocks.append(P("Substitutes", style="margin: 8px 0 4px; font-weight: bold;"))
-        blocks.append(Ul(*[_player_line(p) for p in subs], style="padding-left: 20px;"))
-    if not starters and not subs:
-        blocks.append(P("No players listed.", style="color: #666;"))
-
-    return Div(cls="container-white", style="margin-bottom: 10px;")(*blocks)
-
-
-def render_public_match(match, teams, players_by_team, events, recordings, STYLE):
-    """Render a single match for anonymous visitors (read-only, no values)."""
-    content = [H2(format_match_name(match))]
-
-    info = []
-    if match.get("date"):
-        info.append(f"Date: {match['date']}")
-    if match.get("start_time"):
-        info.append(f"Start: {match['start_time']}")
-    if match.get("end_time"):
-        info.append(f"End: {match['end_time']}")
-    if match.get("location"):
-        info.append(f"Location: {match['location']}")
-    if info:
-        content.append(
-            Div(cls="container-white", style="margin-bottom: 10px;")(
-                P(" | ".join(info), style="margin: 0; color: #444;")
-            )
-        )
-
-    # Line-ups
-    for team in sorted(teams, key=lambda t: t.get("team_number", 0)):
-        content.append(_render_public_team(team, players_by_team.get(team["id"], [])))
-
-    # Goals / events
-    if events:
-        event_items = []
-        for e in events:
-            minute = e.get("minute")
-            minute_str = f"{minute}' " if minute is not None else ""
-            who = e.get("player_name") or ""
-            team_name = e.get("team_name") or ""
-            etype = (e.get("event_type") or "").replace("_", " ").title()
-            parts = [p for p in [etype, who] if p]
-            line = f"{minute_str}{' - '.join(parts)}"
-            if team_name:
-                line += f" ({team_name})"
-            event_items.append(Li(line, style="margin-bottom: 4px;"))
-        content.append(
-            Div(cls="container-white", style="margin-bottom: 10px;")(
-                H3("Goals & Events"),
-                Ul(*event_items, style="padding-left: 20px;"),
-            )
-        )
-
-    # Recordings (read-only links). can_edit=False renders plain links only.
-    content.append(render_match_recordings(match["id"], recordings, can_edit=False))
-
-    return render_public_page(
-        f"{format_match_name(match)} - Football Manager", STYLE, *content
-    )
