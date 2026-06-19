@@ -18,6 +18,7 @@ from render.matches import (
     render_captain_selection,
     render_import_confirmation,
     render_match_detail,
+    render_match_recordings,
     render_match_teams,
     render_next_match,
     render_next_matches_by_league,
@@ -46,6 +47,7 @@ __all__ = [
     "render_match_available_players",
     # Matches
     "render_match_detail",
+    "render_match_recordings",
     "render_match_teams",
     "render_next_match",
     "render_next_matches_by_league",

@@ -16,14 +16,16 @@ from core.auth import (
 from core.config import USER_ROLES
 from core.error_handling import handle_route_error
 from core.exceptions import DatabaseError
-from core.validation import parse_int, validate_non_empty_string
+from core.validation import parse_int, validate_non_empty_string, validate_url
 from db import (
     add_match_event,
     add_match_player,
+    add_match_recording,
     create_match,
     create_match_team,
     delete_match,
     delete_match_event,
+    delete_match_recording,
     find_player_by_name_or_alias,
     get_all_leagues,
     get_all_matches,
@@ -35,6 +37,8 @@ from db import (
     get_match,
     get_match_events,
     get_match_players,
+    get_match_recording,
+    get_match_recordings,
     get_match_signup_players,
     get_match_teams,
     get_or_create_friendly_league,
@@ -60,11 +64,52 @@ from render import (
     render_all_matches,
     render_import_confirmation,
     render_match_detail,
+    render_match_recordings,
     render_navbar,
 )
 from render.common import render_head
 
 logger = logging.getLogger(__name__)
+
+
+def parse_recording_links(
+    links_text: Optional[str],
+) -> List[Tuple[str, Optional[str]]]:
+    """Parse a textarea of recording links into (url, label) pairs.
+
+    Each non-empty line is treated as one link. A line may optionally carry a
+    label using the format ``url | label``. Lines whose URL fails validation
+    are skipped so that the remaining valid links are still saved.
+
+    Args:
+        links_text: Raw textarea content (possibly multi-line)
+
+    Returns:
+        List of (url, label) tuples for the valid links, in input order.
+        ``label`` is None when no label is provided.
+    """
+    parsed: List[Tuple[str, Optional[str]]] = []
+    for line in (links_text or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+
+        # Optional "url | label" format
+        if "|" in line:
+            url_part, label_part = line.split("|", 1)
+            url = url_part.strip()
+            label = label_part.strip() or None
+        else:
+            url = line
+            label = None
+
+        is_valid, _ = validate_url(url, "Recording link")
+        if not is_valid:
+            # Silently skip invalid lines so valid ones still get saved
+            continue
+
+        parsed.append((url, label))
+    return parsed
 
 
 def register_match_routes(rt, STYLE):
@@ -2365,3 +2410,51 @@ def register_match_routes(rt, STYLE):
 
         remove_all_match_signup_players(match_id)
         return RedirectResponse(f"/match/{match_id}", status_code=303)
+
+    # ============ MATCH RECORDINGS (video links) ============
+
+    @rt("/add_match_recordings/{match_id}", methods=["POST"])
+    async def route_add_match_recordings(match_id: int, req: Request, sess=None):
+        """Add one or more recording links to a match.
+
+        Accepts a textarea where each non-empty line is a link. A line may
+        optionally include a label using the format: ``url | label``.
+        Only managers/admins can add recordings.
+        """
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers/admins can add recordings
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
+        form = await req.form()
+        links_text = form.get("links", "")
+
+        for url, label in parse_recording_links(links_text):
+            add_match_recording(match_id, url, label)
+
+        recordings = get_match_recordings(match_id)
+        return render_match_recordings(match_id, recordings, can_edit=True)
+
+    @rt("/delete_match_recording/{match_id}/{recording_id}", methods=["POST"])
+    def route_delete_match_recording(
+        match_id: int, recording_id: int, req: Request = None, sess=None
+    ):
+        """Delete a recording link from a match. Managers/admins only."""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        # Check authorization - only managers/admins can delete recordings
+        if not can_user_edit_match(user, match_id):
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
+        # Ensure the recording belongs to this match before deleting
+        recording = get_match_recording(recording_id)
+        if recording and recording.get("match_id") == match_id:
+            delete_match_recording(recording_id)
+
+        recordings = get_match_recordings(match_id)
+        return render_match_recordings(match_id, recordings, can_edit=True)

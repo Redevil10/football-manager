@@ -163,6 +163,17 @@ def init_db():
                   FOREIGN KEY (team_id) REFERENCES match_teams(id))"""
     )
 
+    # Match recordings table (video links uploaded after a match)
+    c.execute(
+        """CREATE TABLE IF NOT EXISTS match_recordings
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  match_id INTEGER NOT NULL,
+                  url TEXT NOT NULL,
+                  label TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE)"""
+    )
+
     conn.commit()
     conn.close()
 
