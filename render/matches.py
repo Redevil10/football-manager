@@ -714,12 +714,15 @@ def render_match_recordings(match_id, recordings=None, can_edit=False):
                     "hx-swap": "outerHTML",
                 },
             )(
+                P(
+                    "One link per line. To name a link, add ",
+                    Code("| label"),
+                    " after the URL (the label is optional).",
+                    style="color: #666; font-size: 13px; margin: 0 0 8px;",
+                ),
                 Textarea(
                     name="links",
-                    placeholder=(
-                        "Paste one link per line.\n"
-                        "Optional label: https://youtu.be/xxx | First half"
-                    ),
+                    placeholder=("https://youtu.be/xxx | First half"),
                     rows="3",
                     style="width: 100%; padding: 8px; margin-bottom: 8px; box-sizing: border-box;",
                 ),
@@ -821,6 +824,9 @@ def render_match_detail(
             ),
         ),
     ]
+
+    # Match recordings (video links) — shown right under the score for visibility
+    content.append(render_match_recordings(match["id"], can_edit=can_edit))
 
     # Team Allocation section
     if is_completed:
@@ -999,9 +1005,6 @@ def render_match_detail(
         content.append(
             Div(cls="container-white")(P(no_events_text, style="color: #666;"))
         )
-
-    # Match recordings (video links) section
-    content.append(render_match_recordings(match["id"], can_edit=can_edit))
 
     return Div(*content)
 
