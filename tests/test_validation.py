@@ -7,6 +7,7 @@ from core.validation import (
     validate_non_empty_string,
     validate_required_fields,
     validate_required_int,
+    validate_url,
 )
 
 
@@ -357,3 +358,43 @@ class TestValidateRequiredInt:
         value, error_msg = validate_required_int("  42  ", "field")
         assert value == 42
         assert error_msg is None
+
+
+class TestValidateUrl:
+    """Test validate_url function"""
+
+    def test_valid_https_url(self):
+        """Test that https URLs pass validation"""
+        is_valid, error_msg = validate_url("https://youtu.be/abc")
+        assert is_valid is True
+        assert error_msg is None
+
+    def test_valid_http_url(self):
+        """Test that http URLs pass validation"""
+        is_valid, error_msg = validate_url("http://example.com/video")
+        assert is_valid is True
+        assert error_msg is None
+
+    def test_url_with_surrounding_whitespace(self):
+        """Test that surrounding whitespace is tolerated"""
+        is_valid, error_msg = validate_url("  https://example.com  ")
+        assert is_valid is True
+        assert error_msg is None
+
+    def test_missing_scheme(self):
+        """Test that URLs without http(s):// scheme fail"""
+        is_valid, error_msg = validate_url("youtu.be/abc")
+        assert is_valid is False
+        assert "http" in error_msg.lower()
+
+    def test_empty_url(self):
+        """Test that empty strings fail validation"""
+        is_valid, error_msg = validate_url("")
+        assert is_valid is False
+        assert "empty" in error_msg.lower()
+
+    def test_none_url(self):
+        """Test that None fails validation"""
+        is_valid, error_msg = validate_url(None)
+        assert is_valid is False
+        assert error_msg is not None

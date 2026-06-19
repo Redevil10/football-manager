@@ -239,18 +239,25 @@ class TestRenderCaptainSelection:
 class TestRenderMatchDetail:
     """Tests for render_match_detail function"""
 
+    @patch("render.matches.get_match_recordings")
     @patch("render.matches.format_match_name")
     @patch("render.matches.can_user_edit_match")
     @patch("render.matches.calculate_overall_score")
     @patch("render.matches.is_match_completed")
     def test_render_match_detail_with_match(
-        self, mock_is_completed, mock_calculate, mock_can_edit, mock_format_name
+        self,
+        mock_is_completed,
+        mock_calculate,
+        mock_can_edit,
+        mock_format_name,
+        mock_get_recordings,
     ):
         """Test rendering match detail with match data"""
         mock_format_name.return_value = "2024-01-15 Team A VS Team B"
         mock_can_edit.return_value = False
         mock_calculate.return_value = 85.5
         mock_is_completed.return_value = False
+        mock_get_recordings.return_value = []
 
         match = {
             "id": 1,

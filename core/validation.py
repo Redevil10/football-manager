@@ -147,6 +147,34 @@ def validate_in_list(
     return True, None
 
 
+def validate_url(
+    value: Optional[str], field_name: str = "URL"
+) -> Tuple[bool, Optional[str]]:
+    """Validate that a value is a non-empty http(s) URL.
+
+    This is a lightweight check: it ensures the value is present and starts
+    with http:// or https://. It does not verify that the URL is reachable.
+
+    Args:
+        value: The value to validate (can be None)
+        field_name: Name of the field for error messages
+
+    Returns:
+        Tuple[bool, Optional[str]]: (is_valid, error_message)
+        - If valid: (True, None)
+        - If invalid: (False, error_message)
+    """
+    is_valid, error_msg = validate_non_empty_string(value, field_name)
+    if not is_valid or value is None:
+        return False, error_msg
+
+    stripped = value.strip()
+    if not (stripped.startswith("http://") or stripped.startswith("https://")):
+        return False, f"{field_name} must start with http:// or https://"
+
+    return True, None
+
+
 def validate_required_int(
     value: Optional[str],
     field_name: str = "field",

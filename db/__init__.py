@@ -30,6 +30,12 @@ from db.match_events import (
     delete_match_event,
     get_match_events,
 )
+from db.match_recordings import (
+    add_match_recording,
+    delete_match_recording,
+    get_match_recording,
+    get_match_recordings,
+)
 from db.match_players import (
     add_match_player,
     get_match_players,
@@ -148,6 +154,11 @@ __all__ = [
     "get_match_events",
     "add_match_event",
     "delete_match_event",
+    # Match Recordings
+    "get_match_recordings",
+    "get_match_recording",
+    "add_match_recording",
+    "delete_match_recording",
     # Users
     "create_user",
     "get_user_by_username",

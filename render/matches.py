@@ -3,6 +3,7 @@
 from fasthtml.common import *
 
 from core.auth import can_user_edit_match
+from db.match_recordings import get_match_recordings
 from logic import calculate_overall_score
 from render.common import format_match_name, get_match_score_display, is_match_completed
 from render.interactive_pitch import render_interactive_pitch
@@ -631,6 +632,106 @@ def render_captain_selection(match_id, teams, match_players_dict, is_completed=F
     return content
 
 
+def render_match_recordings(match_id, recordings=None, can_edit=False):
+    """Render the match recordings (video links) section.
+
+    Args:
+        match_id: ID of the match
+        recordings: List of recording dicts (fetched if None)
+        can_edit: Whether the current user can add/delete recordings
+            (managers/admins). Viewers see read-only links.
+
+    Returns:
+        A container Div with id="match-recordings" suitable for HTMX swapping.
+    """
+    if recordings is None:
+        recordings = get_match_recordings(match_id)
+
+    # Existing links list
+    if recordings:
+        link_items = []
+        for rec in recordings:
+            url = rec.get("url", "")
+            label = rec.get("label")
+            link_text = label if label else url
+
+            item_children = [
+                A(
+                    f"📹 {link_text}",
+                    href=url,
+                    target="_blank",
+                    rel="noopener noreferrer",
+                    style="word-break: break-all;",
+                ),
+            ]
+            if can_edit:
+                item_children.append(
+                    Form(
+                        method="POST",
+                        action=f"/delete_match_recording/{match_id}/{rec['id']}",
+                        style="display: inline; margin: 0;",
+                        **{
+                            "hx-post": f"/delete_match_recording/{match_id}/{rec['id']}",
+                            "hx-target": "#match-recordings",
+                            "hx-swap": "outerHTML",
+                            "hx-confirm": "Delete this recording link?",
+                        },
+                    )(
+                        Button(
+                            "Delete",
+                            type="submit",
+                            cls="btn-danger",
+                            style="padding: 2px 8px; font-size: 12px;",
+                        ),
+                    )
+                )
+            link_items.append(
+                Li(
+                    *item_children,
+                    style="margin-bottom: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
+                )
+            )
+        links_block = Ul(*link_items, style="list-style: none; padding-left: 0;")
+    else:
+        empty_text = (
+            "No recordings yet. Paste video links below to add them."
+            if can_edit
+            else "No recordings available."
+        )
+        links_block = P(empty_text, style="color: #666;")
+
+    children = [H3("Match Recordings"), links_block]
+
+    # Add form (managers/admins only)
+    if can_edit:
+        children.append(
+            Form(
+                method="POST",
+                action=f"/add_match_recordings/{match_id}",
+                **{
+                    "hx-post": f"/add_match_recordings/{match_id}",
+                    "hx-target": "#match-recordings",
+                    "hx-swap": "outerHTML",
+                },
+            )(
+                Textarea(
+                    name="links",
+                    placeholder=(
+                        "Paste one link per line.\n"
+                        "Optional label: https://youtu.be/xxx | First half"
+                    ),
+                    rows="3",
+                    style="width: 100%; padding: 8px; margin-bottom: 8px; box-sizing: border-box;",
+                ),
+                Button("Add Links", type="submit", cls="btn-success"),
+            )
+        )
+
+    return Div(cls="container-white", id="match-recordings", style="margin-top: 20px;")(
+        *children
+    )
+
+
 def render_match_detail(
     match,
     teams,
@@ -898,6 +999,9 @@ def render_match_detail(
         content.append(
             Div(cls="container-white")(P(no_events_text, style="color: #666;"))
         )
+
+    # Match recordings (video links) section
+    content.append(render_match_recordings(match["id"], can_edit=can_edit))
 
     return Div(*content)
 
