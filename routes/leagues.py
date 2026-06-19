@@ -16,6 +16,7 @@ from db import (
     get_all_leagues,
     get_league,
     get_matches_by_league,
+    set_league_public,
     update_league,
 )
 from db.club_leagues import (
@@ -26,6 +27,75 @@ from db.club_leagues import (
 from render import render_league_matches, render_leagues_list, render_navbar
 from render.common import render_head
 from render.leagues import render_league_clubs
+
+
+def _render_public_sharing(league, req=None):
+    """Superuser-only block to toggle and show a league's public read-only link.
+
+    When public, anonymous visitors can view the league's matches (schedule,
+    score, line-up names, goals, recordings) at /public/league/{id} — never any
+    player attribute values.
+    """
+    league_id = league["id"]
+    is_public = bool(league.get("is_public"))
+
+    if req is not None:
+        public_url = str(req.base_url).rstrip("/") + f"/public/league/{league_id}"
+    else:
+        public_url = f"/public/league/{league_id}"
+
+    children = [
+        H3("Public Sharing"),
+        P(
+            "Allow anyone with the link to view this league's matches "
+            "(schedule, scores, line-ups, goals, recordings) without logging in. "
+            "Player ratings are never shown.",
+            style="color: #666; margin-bottom: 10px;",
+        ),
+        P(
+            Strong("Status: "),
+            Span(
+                "Public" if is_public else "Private",
+                style=f"color: {'#28a745' if is_public else '#666'}; font-weight: bold;",
+            ),
+        ),
+        Form(
+            Input(type="hidden", name="is_public", value="0" if is_public else "1"),
+            Button(
+                "Make Private" if is_public else "Make Public",
+                type="submit",
+                cls="btn-danger" if is_public else "btn-success",
+            ),
+            method="POST",
+            action=f"/toggle_league_public/{league_id}",
+        ),
+    ]
+
+    if is_public:
+        children.append(
+            Div(style="margin-top: 15px;")(
+                Label(
+                    "Shareable link:",
+                    style="display: block; margin-bottom: 5px; font-weight: bold;",
+                ),
+                Input(
+                    type="text",
+                    value=public_url,
+                    readonly=True,
+                    onclick="this.select()",
+                    style="width: 100%; padding: 8px; box-sizing: border-box;",
+                ),
+                A(
+                    "Open public page ↗",
+                    href=public_url,
+                    target="_blank",
+                    rel="noopener noreferrer",
+                    style="display: inline-block; margin-top: 8px; color: #007bff;",
+                ),
+            )
+        )
+
+    return Div(cls="container-white", style="margin-top: 20px;")(*children)
 
 
 def register_league_routes(rt, STYLE):
@@ -161,12 +231,13 @@ def register_league_routes(rt, STYLE):
                     render_league_matches(league, matches, user),
                     *(
                         [
+                            _render_public_sharing(league, req),
                             Div(cls="container-white", style="margin-top: 20px;")(
                                 H3("Clubs in League"),
                                 render_league_clubs(
                                     league_id, clubs_in_league, all_clubs, user
                                 ),
-                            )
+                            ),
                         ]
                         if user.get("is_superuser")
                         else []
@@ -174,6 +245,21 @@ def register_league_routes(rt, STYLE):
                 ),
             ),
         )
+
+    @rt("/toggle_league_public/{league_id}", methods=["POST"])
+    async def route_toggle_league_public(league_id: int, req: Request, sess=None):
+        """Enable/disable anonymous public viewing of a league (superuser only)."""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        if not user.get("is_superuser"):
+            return RedirectResponse("/", status_code=303)
+
+        form = await req.form()
+        make_public = form.get("is_public") == "1"
+        set_league_public(league_id, make_public)
+        return RedirectResponse(f"/league/{league_id}", status_code=303)
 
     @rt("/edit_league/{league_id}")
     def edit_league_page(league_id: int, req: Request = None, sess=None):

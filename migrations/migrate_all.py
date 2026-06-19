@@ -32,6 +32,16 @@ def migrate_all():
         else:
             all_messages.append("match_recordings table already exists")
 
+        # Add is_public column to leagues if it doesn't exist (public read-only sharing)
+        league_cols = [
+            row[1] for row in conn.execute("PRAGMA table_info(leagues)").fetchall()
+        ]
+        if "is_public" not in league_cols:
+            conn.execute("ALTER TABLE leagues ADD COLUMN is_public INTEGER DEFAULT 0")
+            all_messages.append("Added is_public column to leagues")
+        else:
+            all_messages.append("leagues.is_public column already exists")
+
         conn.commit()
     finally:
         conn.close()
