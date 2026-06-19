@@ -72,6 +72,46 @@ from render.common import render_head
 logger = logging.getLogger(__name__)
 
 
+def parse_recording_links(
+    links_text: Optional[str],
+) -> List[Tuple[str, Optional[str]]]:
+    """Parse a textarea of recording links into (url, label) pairs.
+
+    Each non-empty line is treated as one link. A line may optionally carry a
+    label using the format ``url | label``. Lines whose URL fails validation
+    are skipped so that the remaining valid links are still saved.
+
+    Args:
+        links_text: Raw textarea content (possibly multi-line)
+
+    Returns:
+        List of (url, label) tuples for the valid links, in input order.
+        ``label`` is None when no label is provided.
+    """
+    parsed: List[Tuple[str, Optional[str]]] = []
+    for line in (links_text or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+
+        # Optional "url | label" format
+        if "|" in line:
+            url_part, label_part = line.split("|", 1)
+            url = url_part.strip()
+            label = label_part.strip() or None
+        else:
+            url = line
+            label = None
+
+        is_valid, _ = validate_url(url, "Recording link")
+        if not is_valid:
+            # Silently skip invalid lines so valid ones still get saved
+            continue
+
+        parsed.append((url, label))
+    return parsed
+
+
 def register_match_routes(rt, STYLE):
     """Register match-related routes"""
 
@@ -2392,25 +2432,7 @@ def register_match_routes(rt, STYLE):
         form = await req.form()
         links_text = form.get("links", "")
 
-        for line in links_text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-
-            # Optional "url | label" format
-            if "|" in line:
-                url_part, label_part = line.split("|", 1)
-                url = url_part.strip()
-                label = label_part.strip() or None
-            else:
-                url = line
-                label = None
-
-            is_valid, _ = validate_url(url, "Recording link")
-            if not is_valid:
-                # Silently skip invalid lines so valid ones still get saved
-                continue
-
+        for url, label in parse_recording_links(links_text):
             add_match_recording(match_id, url, label)
 
         recordings = get_match_recordings(match_id)

@@ -2,10 +2,13 @@
 
 from unittest.mock import patch
 
+from fasthtml.common import to_xml
+
 from render.matches import (
     render_all_matches,
     render_captain_selection,
     render_match_detail,
+    render_match_recordings,
     render_match_teams,
     render_next_match,
     render_next_matches_by_league,
@@ -272,6 +275,71 @@ class TestRenderMatchDetail:
         result = render_match_detail(match, teams, match_players_dict, events, None)
 
         assert result is not None
+
+
+class TestRenderMatchRecordings:
+    """Tests for render_match_recordings function"""
+
+    def test_empty_with_edit_shows_add_form(self):
+        """Managers see the add form and the empty hint when there are none"""
+        result = render_match_recordings(1, recordings=[], can_edit=True)
+        xml = to_xml(result)
+
+        assert 'id="match-recordings"' in xml
+        assert "Match Recordings" in xml
+        assert "No recordings yet" in xml
+        # Add form present
+        assert 'name="links"' in xml
+        assert "Add Links" in xml
+        assert "/add_match_recordings/1" in xml
+
+    def test_empty_viewer_has_no_form(self):
+        """Viewers see a read-only empty state with no add form"""
+        result = render_match_recordings(1, recordings=[], can_edit=False)
+        xml = to_xml(result)
+
+        assert "No recordings available" in xml
+        assert 'name="links"' not in xml
+        assert "Add Links" not in xml
+
+    def test_viewer_sees_links_without_controls(self):
+        """Viewers see clickable links but no delete or add controls"""
+        recordings = [
+            {"id": 10, "url": "https://youtu.be/abc", "label": None},
+            {"id": 11, "url": "https://drive.google.com/x", "label": "Half 2"},
+        ]
+        result = render_match_recordings(1, recordings=recordings, can_edit=False)
+        xml = to_xml(result)
+
+        assert "https://youtu.be/abc" in xml
+        # Label shown when present
+        assert "Half 2" in xml
+        # No manager controls
+        assert "Delete" not in xml
+        assert "Add Links" not in xml
+
+    def test_manager_sees_delete_and_add_controls(self):
+        """Managers see per-link delete buttons and the add form"""
+        recordings = [{"id": 10, "url": "https://youtu.be/abc", "label": None}]
+        result = render_match_recordings(1, recordings=recordings, can_edit=True)
+        xml = to_xml(result)
+
+        assert "https://youtu.be/abc" in xml
+        assert "Delete" in xml
+        assert "/delete_match_recording/1/10" in xml
+        assert "Add Links" in xml
+
+    @patch("render.matches.get_match_recordings")
+    def test_fetches_recordings_when_not_provided(self, mock_get_recordings):
+        """When recordings is None, they are fetched from the DB layer"""
+        mock_get_recordings.return_value = [
+            {"id": 5, "url": "https://youtu.be/fetched", "label": None}
+        ]
+        result = render_match_recordings(7, can_edit=False)
+        xml = to_xml(result)
+
+        mock_get_recordings.assert_called_once_with(7)
+        assert "https://youtu.be/fetched" in xml
 
 
 class TestRenderTeams:
