@@ -22,6 +22,13 @@ dev = [
     "pytest-asyncio>=0.23.0",
 ]
 
+[tool.coverage.run]
+# deploy_hf.py is an ops/deploy script (only orchestrates huggingface_hub
+# API calls); it never runs in the app and isn't meaningfully unit-testable.
+omit = [
+    "deploy_hf.py",
+]
+
 [tool.ruff.lint]
 # Ignore F403 and F405 for star imports from fasthtml.common
 # FastHTML is designed to work with star imports (from fasthtml.common import *)
