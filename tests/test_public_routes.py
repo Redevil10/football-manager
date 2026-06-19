@@ -197,3 +197,110 @@ def test_superuser_can_toggle_and_see_link(client, seeded):
     page = client.get(f"/league/{league_id}")
     assert f"/public/league/{league_id}" in page.text
     assert "Make Private" in page.text
+
+
+def test_non_superuser_cannot_toggle(client, seeded):
+    from core.auth import hash_password
+    from db.users import add_user_to_club, create_user
+
+    league_id = seeded["league_id"]
+    pw_hash, pw_salt = hash_password("secret123")
+    uid = create_user("mgr", pw_hash, pw_salt, None, False)
+    add_user_to_club(uid, seeded["club_id"], "manager")
+
+    login = client.post(
+        "/login",
+        data={"username": "mgr", "password": "secret123"},
+        follow_redirects=False,
+    )
+    assert login.status_code in (302, 303)
+
+    resp = client.post(
+        f"/toggle_league_public/{league_id}",
+        data={"is_public": "1"},
+        follow_redirects=False,
+    )
+    # Logged-in non-superuser is bounced to home and nothing changes
+    assert resp.status_code in (302, 303)
+    assert resp.headers.get("location", "") == "/"
+    assert not get_league(league_id).get("is_public")
+
+
+def test_public_league_with_no_matches(client, temp_db):
+    league_id = create_league("Empty League", "")
+    set_league_public(league_id, True)
+    resp = client.get(f"/public/league/{league_id}")
+    assert resp.status_code == 200
+    assert "No matches yet" in resp.text
+
+
+def test_public_nonexistent_match_not_found(client):
+    assert client.get("/public/match/987654").status_code == 404
+
+
+def test_public_sharing_block_uses_relative_url_without_request():
+    """_render_public_sharing falls back to a relative link when req is None."""
+    from fasthtml.common import to_xml
+
+    from routes.leagues import _render_public_sharing
+
+    html = to_xml(_render_public_sharing({"id": 7, "is_public": 1}, req=None))
+    assert "/public/league/7" in html
+
+
+def test_migrate_all_adds_is_public_to_legacy_db(tmp_path, monkeypatch):
+    """migrate_all() backfills is_public on a pre-existing leagues table."""
+    import sqlite3
+
+    import migrations.migrate_all as migrate_mod
+
+    db_file = str(tmp_path / "legacy.db")
+    conn = sqlite3.connect(db_file)
+    conn.execute("CREATE TABLE matches (id INTEGER PRIMARY KEY, league_id INTEGER)")
+    conn.execute(
+        "CREATE TABLE leagues (id INTEGER PRIMARY KEY, name TEXT, description TEXT)"
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(migrate_mod, "DB_PATH", db_file)
+    ok, messages = migrate_mod.migrate_all()
+    assert ok
+
+    conn = sqlite3.connect(db_file)
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(leagues)").fetchall()]
+    conn.close()
+    assert "is_public" in cols
+    assert any("Added is_public" in m for m in messages)
+
+    # Running again is idempotent and reports the column already exists
+    ok2, messages2 = migrate_mod.migrate_all()
+    assert ok2
+    assert any("already exists" in m for m in messages2)
+
+
+def test_init_db_backfills_is_public_on_legacy_leagues(tmp_path, monkeypatch):
+    """init_db() adds is_public to a leagues table created without it."""
+    import sqlite3
+
+    import core.config
+    import db.connection
+
+    db_file = str(tmp_path / "legacy.db")
+    conn = sqlite3.connect(db_file)
+    conn.execute(
+        "CREATE TABLE leagues (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "name TEXT NOT NULL UNIQUE, description TEXT, "
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(core.config, "DB_PATH", db_file)
+    monkeypatch.setattr(db.connection, "DB_PATH", db_file)
+    db.connection.init_db()
+
+    conn = sqlite3.connect(db_file)
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(leagues)").fetchall()]
+    conn.close()
+    assert "is_public" in cols
