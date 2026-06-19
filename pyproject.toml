@@ -8,6 +8,7 @@ dependencies = [
     "python-fasthtml",
     "uvicorn>=0.38.0",
     "fasthtml-hf",
+    "huggingface-hub",  # direct dep for deploy_hf.py (also pulled in by fasthtml-hf)
     "bcrypt>=4.0.0",
     "filelock>=3.20.3",  # Security: Fix Dependabot alert
     "google-genai>=1.0.0",
