@@ -457,6 +457,7 @@ dependencies = [
     { name = "fasthtml-hf" },
     { name = "filelock" },
     { name = "google-genai" },
+    { name = "huggingface-hub" },
     { name = "python-fasthtml" },
     { name = "uvicorn" },
 ]
@@ -475,6 +476,7 @@ requires-dist = [
     { name = "fasthtml-hf" },
     { name = "filelock", specifier = ">=3.20.3" },
     { name = "google-genai", specifier = ">=1.0.0" },
+    { name = "huggingface-hub" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
