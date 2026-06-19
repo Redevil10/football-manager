@@ -340,6 +340,7 @@ def render_player_table(
     team_color: str,
     show_scores: bool = False,
     match_id: int = None,
+    read_only: bool = False,
 ) -> Div:
     """
     Render players in a table/list format (multi-row display).
@@ -349,6 +350,8 @@ def render_player_table(
         team_name: Team name for header
         team_color: Color for styling
         show_scores: Whether to show player scores
+        read_only: When True, player names are plain text (no link to the
+            authenticated /player profile page). Used by the public view.
 
     Returns:
         Div containing player table
@@ -397,7 +400,7 @@ def render_player_table(
                 onmouseover="this.style.textDecoration='underline'",
                 onmouseout="this.style.textDecoration='none'",
             )
-            if player_id
+            if player_id and not read_only
             else player_name
         )
 
@@ -448,7 +451,7 @@ def render_player_table(
                     onmouseover="this.style.textDecoration='underline'",
                     onmouseout="this.style.textDecoration='none'",
                 )
-                if player_id
+                if player_id and not read_only
                 else player_name
             )
 

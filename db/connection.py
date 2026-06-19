@@ -73,13 +73,22 @@ def init_db():
     )
 
     # Leagues table (independent entities, not tied to a single club)
+    # is_public: when 1, the league's matches are viewable by anonymous (not
+    # logged in) visitors via the /public/league/{id} read-only page. Only a
+    # superuser can flip this on. Default 0 (private).
     c.execute(
         """CREATE TABLE IF NOT EXISTS leagues
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   name TEXT NOT NULL UNIQUE,
                   description TEXT,
+                  is_public INTEGER DEFAULT 0,
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"""
     )
+
+    # Migration for existing databases: add is_public to leagues if missing
+    league_cols = [row[1] for row in c.execute("PRAGMA table_info(leagues)").fetchall()]
+    if "is_public" not in league_cols:
+        c.execute("ALTER TABLE leagues ADD COLUMN is_public INTEGER DEFAULT 0")
 
     # Club-League relationship (many-to-many)
     c.execute(

@@ -186,6 +186,39 @@ def update_league(
         return False
 
 
+def set_league_public(league_id: int, is_public: bool) -> bool:
+    """Set whether a league is publicly viewable by anonymous visitors.
+
+    Only callers with superuser privilege should reach this (enforced in the
+    route layer). When enabled, the league's matches become readable via the
+    /public/league/{id} read-only page without logging in.
+
+    Args:
+        league_id: ID of the league
+        is_public: True to make the league public, False to make it private
+
+    Returns:
+        bool: True on success, False on error (e.g. league not found)
+    """
+    try:
+        with db_transaction("set_league_public") as conn:
+            cursor = conn.execute(
+                "UPDATE leagues SET is_public = ? WHERE id = ?",
+                (1 if is_public else 0, league_id),
+            )
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(
+                    f"Set league public: No league found with ID {league_id}"
+                )
+                return False
+            logger.info(f"League {league_id} is_public set to {bool(is_public)}")
+            return True
+    except DatabaseError:
+        logger.error(f"Failed to set is_public for league {league_id}", exc_info=True)
+        return False
+
+
 def delete_league(league_id: int) -> bool:
     """Delete a league (cascade deletes matches).
 

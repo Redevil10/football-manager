@@ -372,8 +372,13 @@ def render_match_teams(
     is_completed=False,
     show_scores=True,
     display_mode="combined",
+    read_only=False,
 ):
-    """Render match teams with multiple display modes"""
+    """Render match teams with multiple display modes.
+
+    read_only: when True (public view), drag-and-drop is disabled and player
+    names in the tables are not linked to the authenticated /player page.
+    """
     if not teams or len(teams) < 1:
         return Div(cls="container-white")(
             P("No teams allocated. Click 'Allocate Teams' to start.", cls="empty-state")
@@ -552,7 +557,8 @@ def render_match_teams(
                 team2_dict,
                 team1_players,
                 team2_players,
-                is_completed,
+                # read_only reuses the completed-match path, which disables drag
+                is_completed or read_only,
             )
         ),
         Div(cls="teams-grid-table", style="margin-top: 30px;")(
@@ -562,6 +568,7 @@ def render_match_teams(
                 team1_dict.get("jersey_color", "#0066cc"),
                 show_scores=show_scores,
                 match_id=match_id,
+                read_only=read_only,
             )
             if team1
             else Div(),
@@ -571,6 +578,7 @@ def render_match_teams(
                 team2_dict.get("jersey_color", "#dc3545"),
                 show_scores=show_scores,
                 match_id=match_id,
+                read_only=read_only,
             )
             if team2
             else Div(),
@@ -745,8 +753,15 @@ def render_match_detail(
     signup_players=None,
     user=None,
     display_mode="combined",
+    read_only=False,
 ):
-    """Render detailed match information"""
+    """Render detailed match information.
+
+    read_only: when True (anonymous public view), suppresses drag-and-drop and
+    links into the authenticated app. Edit/delete controls are already hidden
+    whenever user is None, so this only neutralises the leftover interactive
+    affordances (player-profile links, draggable chips).
+    """
     # Check if match is completed
     is_completed = is_match_completed(match)
 
@@ -845,6 +860,7 @@ def render_match_detail(
                         match_players_dict,
                         is_completed=True,
                         display_mode=display_mode,
+                        read_only=read_only,
                     )
                 ),
             ),
@@ -887,6 +903,7 @@ def render_match_detail(
                         match_players_dict,
                         is_completed=False,
                         display_mode=display_mode,
+                        read_only=read_only,
                     )
                 ),
                 # Captain selection for each team (only for managers)
@@ -936,7 +953,9 @@ def render_match_detail(
             Div(cls="container-white", style="margin-top: 20px;")(
                 H3(f"Available Players ({len(signup_players)})"),
                 *player_action_buttons,
-                render_match_available_players(match["id"], signup_players, can_edit),
+                render_match_available_players(
+                    match["id"], signup_players, can_edit, read_only=read_only
+                ),
             ),
         )
     else:
