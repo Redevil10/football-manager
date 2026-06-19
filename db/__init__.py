@@ -30,12 +30,6 @@ from db.match_events import (
     delete_match_event,
     get_match_events,
 )
-from db.match_recordings import (
-    add_match_recording,
-    delete_match_recording,
-    get_match_recording,
-    get_match_recordings,
-)
 from db.match_players import (
     add_match_player,
     get_match_players,
@@ -44,6 +38,12 @@ from db.match_players import (
     remove_match_player,
     swap_match_players,
     update_match_player,
+)
+from db.match_recordings import (
+    add_match_recording,
+    delete_match_recording,
+    get_match_recording,
+    get_match_recordings,
 )
 from db.match_teams import (
     create_match_team,

@@ -2,13 +2,13 @@
 
 import pytest
 
+from db.leagues import create_league
 from db.match_recordings import (
     add_match_recording,
     delete_match_recording,
     get_match_recording,
     get_match_recordings,
 )
-from db.leagues import create_league
 from db.matches import create_match
 
 
