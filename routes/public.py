@@ -89,6 +89,7 @@ def register_public_routes(rt, STYLE):
             signup_players=available_signup_players,
             user=None,
             display_mode=display,
+            read_only=True,
         )
         return render_public_page(
             f"{match.get('date', 'Match')} - Football Manager",

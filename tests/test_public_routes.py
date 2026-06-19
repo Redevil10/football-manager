@@ -133,7 +133,8 @@ def test_public_match_shows_scores_read_only(client, seeded):
     assert "Score: 3 - 1" in text
     assert "Overall:" in text
 
-    # ...but strictly read-only: no edit/delete/allocate controls, no drag-and-drop
+    # ...but strictly read-only and neutralised: no edit/delete/allocate
+    # controls, no drag-and-drop, and no links into the authenticated app.
     for forbidden in (
         "Edit Match",
         "Delete Match",
@@ -141,6 +142,7 @@ def test_public_match_shows_scores_read_only(client, seeded):
         'draggable="true"',
         "/edit_match/",
         "/delete_match/",
+        "/player/",
     ):
         assert forbidden not in text
 
