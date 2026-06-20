@@ -124,18 +124,20 @@ def test_public_match_shows_info(client, seeded):
     assert "Match Events" in text
 
 
-def test_public_match_shows_scores_read_only(client, seeded):
+def test_public_match_team_total_but_no_player_scores(client, seeded):
     set_league_public(seeded["league_id"], True)
     resp = client.get(f"/public/match/{seeded['match_id']}")
     text = resp.text
 
-    # Scores ARE shown (same as a club viewer's match page)
+    # Match score and the team total are shown...
     assert "Score: 3 - 1" in text
     assert "Overall:" in text
 
-    # ...but strictly read-only and neutralised: no edit/delete/allocate
-    # controls, no drag-and-drop, and no links into the authenticated app.
+    # ...but NOT individual player ratings, and it is strictly read-only and
+    # neutralised: no per-player score column, no edit/delete/allocate controls,
+    # no drag-and-drop, no links into the authenticated app.
     for forbidden in (
+        'class="player-score"',  # the per-player rating column
         "Edit Match",
         "Delete Match",
         "Allocate Teams",
