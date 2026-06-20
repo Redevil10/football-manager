@@ -360,6 +360,10 @@ def render_player_table(
 
     from logic.scoring import calculate_overall_score
 
+    # In the read-only public view we still show the team total (below) but hide
+    # each player's individual rating column.
+    show_player_scores = show_scores and not read_only
+
     # Separate starters and substitutes
     starters = [p for p in players if p.get("is_starter", 1)]
     substitutes = [p for p in players if not p.get("is_starter", 1)]
@@ -410,7 +414,7 @@ def render_player_table(
             Td(get_position_abbreviation(player["position"]), cls="player-position"),
         ]
 
-        if show_scores:
+        if show_player_scores:
             score = calculate_overall_score(player)
             row_cells.append(Td(f"{score}", cls="player-score"))
 
@@ -418,7 +422,7 @@ def render_player_table(
 
     # Substitutes header
     if substitutes:
-        colspan = 4 if show_scores else 3
+        colspan = 4 if show_player_scores else 3
         rows.append(
             Tr(
                 Td(
@@ -463,7 +467,7 @@ def render_player_table(
                 ),
             ]
 
-            if show_scores:
+            if show_player_scores:
                 score = calculate_overall_score(player)
                 row_cells.append(Td(f"{score}", cls="player-score"))
 
@@ -476,7 +480,7 @@ def render_player_table(
         Th("Pos", cls="col-position"),
     ]
 
-    if show_scores:
+    if show_player_scores:
         headers.append(Th("Score", cls="col-score"))
 
     table = Table(Thead(Tr(*headers)), Tbody(*rows), cls="player-table")
