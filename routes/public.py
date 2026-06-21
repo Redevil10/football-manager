@@ -19,10 +19,12 @@ from db import (
     get_match_signup_players,
     get_match_teams,
     get_matches_by_league,
+    get_public_leagues,
 )
 from render import render_match_detail
 from render.public import (
     render_public_league,
+    render_public_leagues_index,
     render_public_not_found,
     render_public_page,
 )
@@ -36,6 +38,12 @@ def register_public_routes(rt, STYLE):
     def _not_found():
         # Same response for missing and non-public leagues (don't leak existence)
         return HTMLResponse(to_xml(render_public_not_found(STYLE)), status_code=404)
+
+    @rt("/public")
+    def public_leagues_index():
+        """Discoverable list of all publicly shared leagues (no login)."""
+        leagues = get_public_leagues()
+        return render_public_leagues_index(leagues, STYLE)
 
     @rt("/public/league/{league_id}")
     def public_league_page(league_id: int):

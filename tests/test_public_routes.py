@@ -102,6 +102,41 @@ def test_nonexistent_league_not_found(client):
     assert client.get("/public/league/424242").status_code == 404
 
 
+# --- Public leagues index -------------------------------------------------
+
+
+def test_get_public_leagues_only_returns_public(seeded):
+    from db.leagues import get_public_leagues
+
+    # Demo/Friendly leagues from init_db are private, so nothing is public yet.
+    assert get_public_leagues() == []
+
+    set_league_public(seeded["league_id"], True)
+    public = get_public_leagues()
+    assert [lg["id"] for lg in public] == [seeded["league_id"]]
+
+
+def test_public_index_lists_only_public_leagues(client, seeded):
+    # Private by default -> not listed, but the page still renders.
+    resp = client.get("/public")
+    assert resp.status_code == 200
+    assert "Public Leagues" in resp.text
+    assert "Public Test League" not in resp.text
+
+    # After being made public -> listed and linked to its read-only page.
+    set_league_public(seeded["league_id"], True)
+    resp = client.get("/public")
+    assert resp.status_code == 200
+    assert "Public Test League" in resp.text
+    assert f"/public/league/{seeded['league_id']}" in resp.text
+
+
+def test_login_page_links_to_public_index(client):
+    resp = client.get("/login")
+    assert resp.status_code == 200
+    assert 'href="/public"' in resp.text
+
+
 # --- Public match page ----------------------------------------------------
 
 
