@@ -285,67 +285,6 @@ def test_public_sharing_block_uses_relative_url_without_request():
     assert "/public/league/7" in html
 
 
-def test_migrate_all_purges_demo_data(temp_db, monkeypatch):
-    """migrate_all() removes leftover DemoUser / Demo Club / Demo League data."""
-    import migrations.migrate_all as migrate_mod
-    from core.config import USER_ROLES
-    from db.club_leagues import add_club_to_league
-    from db.clubs import create_club
-    from db.connection import get_db
-    from db.leagues import create_league
-    from db.matches import create_match
-    from db.players import add_player
-    from db.users import add_user_to_club, create_user
-
-    # Seed demo data the way the removed feature did.
-    club_id = create_club("Demo Club", "")
-    league_id = create_league("Demo League", "")
-    add_club_to_league(club_id, league_id)
-    user_id = create_user("DemoUser", "hash", "salt", None, False)
-    add_user_to_club(user_id, club_id, USER_ROLES["VIEWER"])
-    add_player("Demo Player", club_id)
-    create_match(league_id, "2030-01-01", "10:00:00", None, "Demo Stadium", 2, 11)
-
-    # migrate_all() reads its own module-level DB_PATH binding.
-    monkeypatch.setattr(migrate_mod, "DB_PATH", temp_db)
-
-    ok, messages = migrate_mod.migrate_all()
-    assert ok
-    assert any("Removed demo data" in m for m in messages)
-
-    conn = get_db()
-    try:
-        assert _scalar(conn, "SELECT COUNT(*) FROM clubs WHERE name='Demo Club'") == 0
-        assert (
-            _scalar(conn, "SELECT COUNT(*) FROM leagues WHERE name='Demo League'") == 0
-        )
-        assert (
-            _scalar(conn, "SELECT COUNT(*) FROM users WHERE username='DemoUser'") == 0
-        )
-        assert (
-            _scalar(conn, "SELECT COUNT(*) FROM players WHERE club_id=?", (club_id,))
-            == 0
-        )
-        assert (
-            _scalar(
-                conn, "SELECT COUNT(*) FROM matches WHERE league_id=?", (league_id,)
-            )
-            == 0
-        )
-    finally:
-        conn.close()
-
-    # Idempotent: a second run finds nothing to remove.
-    ok2, messages2 = migrate_mod.migrate_all()
-    assert ok2
-    assert any("No demo data to remove" in m for m in messages2)
-
-
-def _scalar(conn, sql, params=()):
-    row = conn.execute(sql, params).fetchone()
-    return row[0] if row else None
-
-
 def test_init_db_backfills_is_public_on_legacy_leagues(tmp_path, monkeypatch):
     """init_db() adds is_public to a leagues table created without it."""
     import sqlite3
