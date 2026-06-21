@@ -397,6 +397,11 @@ class TestGetRecentMatches:
         # Newest first, and the most recent past match is not dropped.
         assert locations.index("B-new") < locations.index("A-old")
 
+    def test_get_recent_matches_club_not_in_any_league(self, temp_db, sample_club):
+        """A club that belongs to no league yields no recent matches."""
+        # sample_club isn't added to any league -> league_ids is empty.
+        assert get_recent_matches(limit=5, club_ids=[sample_club]) == []
+
 
 class TestUpdateMatch:
     """Tests for update_match function"""
