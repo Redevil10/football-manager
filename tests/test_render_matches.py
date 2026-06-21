@@ -69,10 +69,11 @@ class TestRenderNextMatchesByLeague:
     """Tests for render_next_matches_by_league function"""
 
     def test_render_next_matches_by_league_empty(self):
-        """Test rendering next matches when empty"""
+        """Empty data renders nothing so the section is hidden entirely."""
         result = render_next_matches_by_league({})
 
-        assert result is not None
+        # No upcoming matches -> the whole section is omitted.
+        assert result == ""
 
     @patch("render.matches.format_match_name")
     def test_render_next_matches_by_league_with_data(self, mock_format_name):
