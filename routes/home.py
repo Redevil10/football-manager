@@ -50,8 +50,8 @@ def register_home_routes(rt, STYLE):
                 "match_players_dict": match_players_dict,
             }
 
-        # Get recent matches (excluding the next matches)
-        recent_matches = get_recent_matches(limit=5, club_ids=club_ids)
+        # Get recent (past) matches across all leagues, newest first
+        recent_matches = get_recent_matches(limit=10, club_ids=club_ids)
 
         return Html(
             render_head("Football Manager", STYLE),

@@ -210,12 +210,10 @@ class TestGetNextMatch:
         assert match is not None
 
     def test_get_next_match_empty(self, temp_db, sample_league):
-        """Test getting next match when no user-created matches exist returns demo match"""
+        """With no matches created, there is no next match."""
         match = get_next_match()
 
-        # Demo data creates a future match, so this is no longer None
-        assert match is not None
-        assert match["location"] == "Demo Stadium"
+        assert match is None
 
 
 class TestGetNextMatchByLeague:
@@ -332,9 +330,9 @@ class TestGetRecentMatches:
 
         matches = get_recent_matches(limit=5, club_ids=[])
 
-        # Empty club_ids falls through to the no-filter branch (returns all)
-        # The demo match is the "next" match (most recent by date) so it's excluded,
-        # but other matches are returned as recent.
+        # Empty club_ids falls through to the no-filter branch (all leagues).
+        # Only past matches are returned; the demo match is in the future so it
+        # is naturally excluded.
         assert isinstance(matches, list)
 
     def test_get_recent_matches_with_limit(self, temp_db, sample_league):
@@ -352,8 +350,57 @@ class TestGetRecentMatches:
 
         matches = get_recent_matches(limit=3)
 
-        # Should return at most limit matches (excluding next match)
+        # Should return at most `limit` matches
         assert len(matches) <= 3
+
+    def test_get_recent_matches_past_only_across_leagues(self, temp_db):
+        """Recent = past matches across all leagues, newest first, no future ones."""
+        league_a = create_league("League A")
+        league_b = create_league("League B")
+
+        today = date.today()
+        older = (today - timedelta(days=30)).isoformat()
+        newer = (today - timedelta(days=10)).isoformat()
+        future = (today + timedelta(days=30)).isoformat()
+
+        create_match(
+            league_id=league_a,
+            date=older,
+            start_time="10:00:00",
+            end_time=None,
+            location="A-old",
+            num_teams=2,
+        )
+        create_match(
+            league_id=league_b,
+            date=newer,
+            start_time="10:00:00",
+            end_time=None,
+            location="B-new",
+            num_teams=2,
+        )
+        create_match(
+            league_id=league_a,
+            date=future,
+            start_time="10:00:00",
+            end_time=None,
+            location="A-future",
+            num_teams=2,
+        )
+
+        locations = [m["location"] for m in get_recent_matches(limit=10)]
+
+        # Future match excluded; both leagues' past matches present.
+        assert "A-future" not in locations
+        assert "A-old" in locations
+        assert "B-new" in locations
+        # Newest first, and the most recent past match is not dropped.
+        assert locations.index("B-new") < locations.index("A-old")
+
+    def test_get_recent_matches_club_not_in_any_league(self, temp_db, sample_club):
+        """A club that belongs to no league yields no recent matches."""
+        # sample_club isn't added to any league -> league_ids is empty.
+        assert get_recent_matches(limit=5, club_ids=[sample_club]) == []
 
 
 class TestUpdateMatch:
@@ -431,16 +478,14 @@ class TestGetMatchInfo:
         assert "time" in match_info  # Backward compatibility field
 
     def test_get_match_info_empty(self, temp_db):
-        """Test getting match info when no user-created matches exist returns demo match"""
+        """With no matches created, match info is None."""
         match_info = get_match_info()
 
-        # Demo data creates a match, so this is no longer None
-        assert match_info is not None
-        assert match_info["location"] == "Demo Stadium"
+        assert match_info is None
 
     def test_get_match_info_returns_most_recent(self, temp_db, sample_league):
         """Test that get_match_info returns most recent match by date"""
-        # Create a match far in the future (after demo match)
+        # Create a match far in the future
         far_future = (date.today() + timedelta(days=730)).isoformat()
         create_match(
             league_id=sample_league,

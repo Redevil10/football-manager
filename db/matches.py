@@ -261,7 +261,13 @@ def get_last_created_match() -> Optional[Dict[str, Any]]:
 def get_recent_matches(
     limit: int = 5, club_ids: Optional[List[int]] = None
 ) -> List[Dict[str, Any]]:
-    """Get recent matches (excluding the next match), optionally filtered by club_ids
+    """Get recent (past/completed) matches across all accessible leagues.
+
+    "Recent" means the match has already started: its date is in the past, or it
+    is today and the start time has passed. Upcoming matches are intentionally
+    excluded (they appear in the separate upcoming section), so this complements
+    that view without overlap. Results span every league the clubs belong to and
+    are ordered newest first.
 
     Args:
         limit: Maximum number of matches to return (default: 5)
@@ -270,44 +276,34 @@ def get_recent_matches(
     Returns:
         List[Dict[str, Any]]: List of match dictionaries with league_name
     """
-    # Constant for excluding the next match
-    NEXT_MATCH_EXCLUSION_OFFSET = 1
+    # SQLite stores dates/times as ISO TEXT, so string comparison is correct.
+    today = date.today().isoformat()
+    now = datetime.now().strftime("%H:%M:%S")
+    # Past = already started (mirror of the upcoming filter in get_next_match_by_league).
+    past_clause = "((m.date < ?) OR (m.date = ? AND m.start_time < ?))"
+    past_params = (today, today, now)
 
     conn = get_db()
     try:
         if club_ids is not None and len(club_ids) > 0:
-            # Get leagues that the clubs participate in
+            # Limit to leagues that the clubs participate in.
             league_ids = get_league_ids_for_clubs(club_ids)
-            if league_ids:
-                placeholders = ",".join("?" * len(league_ids))
-                where_clause = f"m.league_id IN ({placeholders})"
-                # Note: LIMIT with parameter requires different approach for SQLite
-                query = f"""SELECT m.*, l.name as league_name
+            if not league_ids:
+                return []
+            placeholders = ",".join("?" * len(league_ids))
+            where_clause = f"m.league_id IN ({placeholders}) AND {past_clause}"
+            params = tuple(league_ids) + past_params + (limit,)
+        else:
+            where_clause = past_clause
+            params = past_params + (limit,)
+
+        query = f"""SELECT m.*, l.name as league_name
                    FROM matches m
                    LEFT JOIN leagues l ON m.league_id = l.id
                    WHERE {where_clause}
                    ORDER BY m.date DESC, m.start_time DESC LIMIT ?"""
-                matches = conn.execute(
-                    query, tuple(league_ids) + (limit + NEXT_MATCH_EXCLUSION_OFFSET,)
-                ).fetchall()
-            else:
-                matches = []
-        else:
-            query = """SELECT m.*, l.name as league_name
-                   FROM matches m
-                   LEFT JOIN leagues l ON m.league_id = l.id
-                   ORDER BY m.date DESC, m.start_time DESC LIMIT ?"""
-            matches = conn.execute(
-                query, (limit + NEXT_MATCH_EXCLUSION_OFFSET,)
-            ).fetchall()
-        matches_list = [dict(match) for match in matches]
-        # Return all except the first one (which is the next match)
-        # If there's only one match, return empty list (it's the next match)
-        if len(matches_list) <= 1:
-            return []
-        return matches_list[
-            1 : limit + 1
-        ]  # Return up to limit matches, excluding the first
+        matches = conn.execute(query, params).fetchall()
+        return [dict(match) for match in matches]
     finally:
         conn.close()
 

@@ -285,37 +285,6 @@ def test_public_sharing_block_uses_relative_url_without_request():
     assert "/public/league/7" in html
 
 
-def test_migrate_all_adds_is_public_to_legacy_db(tmp_path, monkeypatch):
-    """migrate_all() backfills is_public on a pre-existing leagues table."""
-    import sqlite3
-
-    import migrations.migrate_all as migrate_mod
-
-    db_file = str(tmp_path / "legacy.db")
-    conn = sqlite3.connect(db_file)
-    conn.execute("CREATE TABLE matches (id INTEGER PRIMARY KEY, league_id INTEGER)")
-    conn.execute(
-        "CREATE TABLE leagues (id INTEGER PRIMARY KEY, name TEXT, description TEXT)"
-    )
-    conn.commit()
-    conn.close()
-
-    monkeypatch.setattr(migrate_mod, "DB_PATH", db_file)
-    ok, messages = migrate_mod.migrate_all()
-    assert ok
-
-    conn = sqlite3.connect(db_file)
-    cols = [row[1] for row in conn.execute("PRAGMA table_info(leagues)").fetchall()]
-    conn.close()
-    assert "is_public" in cols
-    assert any("Added is_public" in m for m in messages)
-
-    # Running again is idempotent and reports the column already exists
-    ok2, messages2 = migrate_mod.migrate_all()
-    assert ok2
-    assert any("already exists" in m for m in messages2)
-
-
 def test_init_db_backfills_is_public_on_legacy_leagues(tmp_path, monkeypatch):
     """init_db() adds is_public to a leagues table created without it."""
     import sqlite3

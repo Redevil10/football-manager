@@ -320,7 +320,6 @@ class TestLeagueFiltering:
     def test_get_all_leagues_no_filter(self, temp_db, sample_leagues):
         """Test getting all leagues without club filter"""
         leagues = get_all_leagues(club_ids=None)
-        # Demo League is also created during init_db
         assert len(leagues) >= 3
         league_ids = {league["id"] for league in leagues}
         assert {
