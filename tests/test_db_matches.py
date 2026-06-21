@@ -210,12 +210,10 @@ class TestGetNextMatch:
         assert match is not None
 
     def test_get_next_match_empty(self, temp_db, sample_league):
-        """Test getting next match when no user-created matches exist returns demo match"""
+        """With no matches created, there is no next match."""
         match = get_next_match()
 
-        # Demo data creates a future match, so this is no longer None
-        assert match is not None
-        assert match["location"] == "Demo Stadium"
+        assert match is None
 
 
 class TestGetNextMatchByLeague:
@@ -475,16 +473,14 @@ class TestGetMatchInfo:
         assert "time" in match_info  # Backward compatibility field
 
     def test_get_match_info_empty(self, temp_db):
-        """Test getting match info when no user-created matches exist returns demo match"""
+        """With no matches created, match info is None."""
         match_info = get_match_info()
 
-        # Demo data creates a match, so this is no longer None
-        assert match_info is not None
-        assert match_info["location"] == "Demo Stadium"
+        assert match_info is None
 
     def test_get_match_info_returns_most_recent(self, temp_db, sample_league):
         """Test that get_match_info returns most recent match by date"""
-        # Create a match far in the future (after demo match)
+        # Create a match far in the future
         far_future = (date.today() + timedelta(days=730)).isoformat()
         create_match(
             league_id=sample_league,
