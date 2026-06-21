@@ -285,35 +285,65 @@ def test_public_sharing_block_uses_relative_url_without_request():
     assert "/public/league/7" in html
 
 
-def test_migrate_all_adds_is_public_to_legacy_db(tmp_path, monkeypatch):
-    """migrate_all() backfills is_public on a pre-existing leagues table."""
-    import sqlite3
-
+def test_migrate_all_purges_demo_data(temp_db, monkeypatch):
+    """migrate_all() removes leftover DemoUser / Demo Club / Demo League data."""
     import migrations.migrate_all as migrate_mod
+    from core.config import USER_ROLES
+    from db.club_leagues import add_club_to_league
+    from db.clubs import create_club
+    from db.connection import get_db
+    from db.leagues import create_league
+    from db.matches import create_match
+    from db.players import add_player
+    from db.users import add_user_to_club, create_user
 
-    db_file = str(tmp_path / "legacy.db")
-    conn = sqlite3.connect(db_file)
-    conn.execute("CREATE TABLE matches (id INTEGER PRIMARY KEY, league_id INTEGER)")
-    conn.execute(
-        "CREATE TABLE leagues (id INTEGER PRIMARY KEY, name TEXT, description TEXT)"
-    )
-    conn.commit()
-    conn.close()
+    # Seed demo data the way the removed feature did.
+    club_id = create_club("Demo Club", "")
+    league_id = create_league("Demo League", "")
+    add_club_to_league(club_id, league_id)
+    user_id = create_user("DemoUser", "hash", "salt", None, False)
+    add_user_to_club(user_id, club_id, USER_ROLES["VIEWER"])
+    add_player("Demo Player", club_id)
+    create_match(league_id, "2030-01-01", "10:00:00", None, "Demo Stadium", 2, 11)
 
-    monkeypatch.setattr(migrate_mod, "DB_PATH", db_file)
+    # migrate_all() reads its own module-level DB_PATH binding.
+    monkeypatch.setattr(migrate_mod, "DB_PATH", temp_db)
+
     ok, messages = migrate_mod.migrate_all()
     assert ok
+    assert any("Removed demo data" in m for m in messages)
 
-    conn = sqlite3.connect(db_file)
-    cols = [row[1] for row in conn.execute("PRAGMA table_info(leagues)").fetchall()]
-    conn.close()
-    assert "is_public" in cols
-    assert any("Added is_public" in m for m in messages)
+    conn = get_db()
+    try:
+        assert _scalar(conn, "SELECT COUNT(*) FROM clubs WHERE name='Demo Club'") == 0
+        assert (
+            _scalar(conn, "SELECT COUNT(*) FROM leagues WHERE name='Demo League'") == 0
+        )
+        assert (
+            _scalar(conn, "SELECT COUNT(*) FROM users WHERE username='DemoUser'") == 0
+        )
+        assert (
+            _scalar(conn, "SELECT COUNT(*) FROM players WHERE club_id=?", (club_id,))
+            == 0
+        )
+        assert (
+            _scalar(
+                conn, "SELECT COUNT(*) FROM matches WHERE league_id=?", (league_id,)
+            )
+            == 0
+        )
+    finally:
+        conn.close()
 
-    # Running again is idempotent and reports the column already exists
+    # Idempotent: a second run finds nothing to remove.
     ok2, messages2 = migrate_mod.migrate_all()
     assert ok2
-    assert any("already exists" in m for m in messages2)
+    assert any("No demo data to remove" in m for m in messages2)
+
+
+def _scalar(conn, sql, params=()):
+    row = conn.execute(sql, params).fetchone()
+    return row[0] if row else None
 
 
 def test_init_db_backfills_is_public_on_legacy_leagues(tmp_path, monkeypatch):
