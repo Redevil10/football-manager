@@ -150,6 +150,11 @@ def register_auth_routes(rt, STYLE):
                         href="/demo-login",
                         style="display: block; text-align: center; padding: 10px; border: 1px solid #6c757d; border-radius: 4px; color: #6c757d; text-decoration: none; font-size: 14px;",
                     ),
+                    A(
+                        "Browse Public Leagues",
+                        href="/public",
+                        style="display: block; text-align: center; padding: 10px; margin-top: 10px; border: 1px solid #007bff; border-radius: 4px; color: #007bff; text-decoration: none; font-size: 14px;",
+                    ),
                 ),
             ),
         )

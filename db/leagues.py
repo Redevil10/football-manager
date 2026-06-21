@@ -44,6 +44,20 @@ def get_all_leagues(club_ids: Optional[list[int]] = None) -> list[dict]:
     return [dict(league) for league in leagues]
 
 
+def get_public_leagues() -> list[dict]:
+    """Get all leagues marked public (is_public=1), for the anonymous index.
+
+    Returns:
+        list[dict]: Public leagues ordered by name.
+    """
+    conn = get_db()
+    leagues = conn.execute(
+        "SELECT * FROM leagues WHERE is_public = 1 ORDER BY name"
+    ).fetchall()
+    conn.close()
+    return [dict(league) for league in leagues]
+
+
 def get_league(league_id: int, club_ids: Optional[list[int]] = None) -> Optional[dict]:
     """Get a league by ID, optionally checking if user's clubs participate in it.
 

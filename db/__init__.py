@@ -23,6 +23,7 @@ from db.leagues import (
     get_all_leagues,
     get_league,
     get_or_create_friendly_league,
+    get_public_leagues,
     set_league_public,
     update_league,
 )
@@ -121,6 +122,7 @@ __all__ = [
     "update_league",
     "delete_league",
     "set_league_public",
+    "get_public_leagues",
     "get_or_create_friendly_league",
     # Matches
     "get_match_info",
