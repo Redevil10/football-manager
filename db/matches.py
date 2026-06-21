@@ -155,20 +155,36 @@ def get_next_match() -> Optional[Dict[str, Any]]:
 
 
 def get_next_match_by_league(league_id: int) -> Optional[Dict[str, Any]]:
-    """Get the next/upcoming match for a specific league (most recent match by date and time)
+    """Get the next upcoming match for a specific league.
+
+    "Upcoming" means the match has not started yet: its date is in the future,
+    or it is today but the start time has not passed. Returns the soonest such
+    match. Past/completed matches are ignored, so a league with no future match
+    returns None.
 
     Args:
         league_id: The ID of the league
 
     Returns:
-        Optional[Dict[str, Any]]: Match dictionary with league_name, or None if no matches exist
+        Optional[Dict[str, Any]]: Match dictionary with league_name, or None if
+            the league has no upcoming match
     """
     conn = get_db()
     try:
-        query, params = _build_match_query_with_league(
-            "m.league_id = ?", (league_id,), limit=1
+        # SQLite stores dates/times as ISO TEXT, so string comparison is correct.
+        today = date.today().isoformat()
+        now = datetime.now().strftime("%H:%M:%S")
+        # Upcoming = not yet started (complement of get_last_completed_match).
+        where_clause = (
+            "m.league_id = ? AND ((m.date > ?) OR (m.date = ? AND m.start_time >= ?))"
         )
-        match = conn.execute(query, params).fetchone()
+        query = """SELECT m.*, l.name as league_name
+                   FROM matches m
+                   LEFT JOIN leagues l ON m.league_id = l.id"""
+        query += f" WHERE {where_clause}"
+        # Order ascending to pick the soonest upcoming match.
+        query += " ORDER BY m.date ASC, m.start_time ASC LIMIT 1"
+        match = conn.execute(query, (league_id, today, today, now)).fetchone()
         return dict(match) if match else None
     finally:
         conn.close()

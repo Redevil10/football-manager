@@ -87,20 +87,26 @@ def render_next_match(match, teams, match_players_dict):
 
 
 def render_next_matches_by_league(next_matches_data):
-    """Render next match for each league"""
+    """Render the next upcoming match for each league.
+
+    Leagues without an upcoming match are not included in ``next_matches_data``,
+    so when it is empty the whole section is hidden (renders nothing).
+    """
     if not next_matches_data:
-        return Div(cls="container-white")(
-            H2("Next Matches by League"),
-            P("No upcoming matches scheduled.", style="color: #666;"),
-        )
+        return ""
 
     content = [
-        H2("Next Matches by League"),
+        H2("Upcoming Matches"),
     ]
 
-    # Sort by league name for consistent display
+    # Sort by match date/time descending (latest match first) across leagues.
     sorted_leagues = sorted(
-        next_matches_data.items(), key=lambda x: x[1]["league"].get("name", "Friendly")
+        next_matches_data.items(),
+        key=lambda x: (
+            x[1]["match"].get("date", ""),
+            x[1]["match"].get("start_time", ""),
+        ),
+        reverse=True,
     )
 
     for league_id, data in sorted_leagues:
