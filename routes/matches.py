@@ -65,11 +65,34 @@ from render import (
     render_import_confirmation,
     render_match_detail,
     render_match_recordings,
+    render_match_teams,
     render_navbar,
 )
-from render.common import render_head
+from render.common import is_match_completed, render_head
 
 logger = logging.getLogger(__name__)
+
+
+def render_match_teams_section(match_id: int, display: str = "pitch"):
+    """Render just the teams section of a match, for HTMX partial swaps.
+
+    Produces exactly what render_match_detail puts inside #match-teams-result,
+    so a swap can update the pitch without re-rendering (and re-scrolling) the
+    whole page.
+    """
+    match = get_match(match_id)
+    teams = get_match_teams(match_id)
+    match_players_dict = {
+        team["id"]: get_match_players(match_id, team["id"]) for team in teams
+    }
+
+    return render_match_teams(
+        match_id,
+        teams,
+        match_players_dict,
+        is_completed=is_match_completed(match),
+        display_mode=display,
+    )
 
 
 def parse_recording_links(
@@ -818,9 +841,13 @@ def register_match_routes(rt, STYLE):
             ),
         )
 
-    @rt("/swap_pitch_players/{match_id}/{player_id}/{target_position}")
     @rt(
-        "/swap_pitch_players/{match_id}/{player_id}/{target_position}/{target_player_id}"
+        "/swap_pitch_players/{match_id}/{player_id}/{target_position}",
+        methods=["GET", "POST"],
+    )
+    @rt(
+        "/swap_pitch_players/{match_id}/{player_id}/{target_position}/{target_player_id}",
+        methods=["GET", "POST"],
     )
     def swap_pitch_players(
         match_id: int,
@@ -833,6 +860,10 @@ def register_match_routes(rt, STYLE):
     ):
         """Handle player position swaps on interactive pitch
 
+        Drag-and-drop calls this over HTMX and gets back just the teams section,
+        so the pitch updates in place without reloading the page. A direct visit
+        (no HX-Request header) still redirects to the match page.
+
         Args:
             match_id: Match ID
             player_id: ID of the player being dragged (match_player_id)
@@ -840,6 +871,8 @@ def register_match_routes(rt, STYLE):
             target_player_id: Optional ID of player in target position to swap with (match_player_id)
             display: Display mode to redirect to
         """
+        is_htmx = bool(req and req.headers.get("HX-Request"))
+
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
@@ -858,6 +891,9 @@ def register_match_routes(rt, STYLE):
                 # Dragging to an empty tactical position - just update the tactical position
                 update_match_player(player_id, tactical_position=target_position)
 
+            if is_htmx:
+                return render_match_teams_section(match_id, display)
+
             # Redirect back to match page with current display mode
             return RedirectResponse(
                 f"/match/{match_id}?display={display}", status_code=303
@@ -865,6 +901,13 @@ def register_match_routes(rt, STYLE):
 
         except Exception as e:
             logger.error(f"Error swapping pitch players: {e}", exc_info=True)
+            if is_htmx:
+                return Div(cls="container-white")(
+                    P(
+                        "Failed to move player, please try again.",
+                        style="text-align: center; color: #dc3545;",
+                    )
+                )
             return RedirectResponse(
                 f"/match/{match_id}?display={display}", status_code=303
             )
@@ -962,6 +1005,9 @@ def register_match_routes(rt, STYLE):
                     update_match_player(
                         mp["id"], team_id=None, position=None, is_starter=0
                     )
+                # An empty team has no captain; leaving the old id behind makes
+                # it reappear on whichever side that player lands on next
+                update_team_captain(team["id"], None)
 
             # Get updated teams and players
             teams = get_match_teams(match_id)

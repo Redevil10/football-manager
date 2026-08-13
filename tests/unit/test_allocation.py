@@ -3,8 +3,9 @@
 import itertools
 from unittest.mock import patch
 
-from core.config import ALLOCATION_BALANCE_TOLERANCE
+from core.config import ALLOCATION_BALANCE_TOLERANCE, CAPTAIN_MIN_SCORE_RATIO
 from logic.allocation import (
+    assign_random_captain,
     build_teammate_weights,
     pick_balanced_split,
     repeat_penalty,
@@ -342,6 +343,81 @@ class TestTeammateHistory:
         """A match with no date cannot compare against anything"""
         with patch("logic.allocation.get_teammate_pairs", return_value=[]):
             assert build_teammate_weights(99, {"league_id": 1, "date": None}) == {}
+
+
+class TestAssignRandomCaptain:
+    """Tests for automatic captain selection"""
+
+    @staticmethod
+    def team_of(scores, starters=None):
+        """Build match-player dicts; `starters` marks which indexes start"""
+        players = []
+        for i, score in enumerate(scores):
+            player = make_player(i + 1, score)
+            player["is_starter"] = 1 if starters is None or i in starters else 0
+            players.append(player)
+        return players
+
+    def run(self, players, times=1):
+        """Call assign_random_captain and collect the ids it wrote"""
+        picked = []
+        with (
+            patch("logic.allocation.get_match_players", return_value=players),
+            patch("logic.allocation.update_team_captain") as update,
+        ):
+            for _ in range(times):
+                picked.append(assign_random_captain(1, 99))
+            written = [call.args for call in update.call_args_list]
+        return picked, written
+
+    def test_captain_comes_from_the_team(self):
+        players = self.team_of([120, 110, 100, 90])
+        picked, written = self.run(players, times=20)
+
+        assert all(p in {x["id"] for x in players} for p in picked)
+        assert all(args[0] == 99 for args in written)
+
+    def test_never_picks_below_the_threshold(self):
+        # One player far below the rest: 5 vs an average pulled down to ~86
+        players = self.team_of([120, 120, 100, 100, 5])
+        scores = {p["id"]: calculate_overall_score(p) for p in players}
+        threshold = (sum(scores.values()) / len(scores)) * CAPTAIN_MIN_SCORE_RATIO
+
+        picked, _ = self.run(players, times=50)
+
+        assert all(scores[p] >= threshold for p in picked)
+        # The weak player must never get the armband
+        weakest = min(scores, key=lambda k: scores[k])
+        assert weakest not in picked
+
+    def test_captain_rotates(self):
+        """Repeated allocations must not keep handing it to the same player"""
+        players = self.team_of([120, 118, 116, 114, 112])
+        picked, _ = self.run(players, times=40)
+
+        assert len(set(picked)) > 1
+
+    def test_substitutes_are_not_eligible(self):
+        # Indexes 0 and 1 start; 2 and 3 are on the bench despite high scores
+        players = self.team_of([100, 100, 150, 150], starters={0, 1})
+        picked, _ = self.run(players, times=25)
+
+        starter_ids = {p["id"] for p in players if p["is_starter"] == 1}
+        assert set(picked) <= starter_ids
+
+    def test_falls_back_when_nobody_starts(self):
+        players = self.team_of([100, 90], starters=set())
+        picked, _ = self.run(players, times=10)
+
+        assert set(picked) <= {p["id"] for p in players}
+
+    def test_empty_team_clears_the_captain(self):
+        with (
+            patch("logic.allocation.get_match_players", return_value=[]),
+            patch("logic.allocation.update_team_captain") as update,
+        ):
+            assert assign_random_captain(1, 99) is None
+            update.assert_called_once_with(99, None)
 
 
 class TestSelectStarters:

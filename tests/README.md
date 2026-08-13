@@ -1,6 +1,11 @@
 # Tests
 
-This directory contains unit tests for the football-manager application.
+Tests for the football-manager application.
+
+- `unit/` — fast tests, no server or browser. These run by default.
+- `e2e/` — browser tests driving a real server with Playwright. Excluded
+  from the default run; see [Browser tests](#browser-tests).
+- `conftest.py` — fixtures shared by both.
 
 ## Running Tests
 
@@ -16,13 +21,13 @@ pytest --cov=. --cov-report=html
 
 ### Run specific test file
 ```bash
-pytest tests/test_scoring.py
+pytest tests/unit/test_scoring.py
 ```
 
 ### Run specific test class or function
 ```bash
-pytest tests/test_scoring.py::TestCalculateOverallScore
-pytest tests/test_scoring.py::TestCalculateOverallScore::test_minimum_overall_score
+pytest tests/unit/test_scoring.py::TestCalculateOverallScore
+pytest tests/unit/test_scoring.py::TestCalculateOverallScore::test_minimum_overall_score
 ```
 
 ### Run with verbose output
@@ -34,6 +39,24 @@ pytest -v
 ```bash
 pytest -k "test_calculate"
 ```
+
+### Browser tests
+Excluded from the default run because they start a server and a browser
+(about 45s). One-time setup:
+```bash
+uv pip install -e '.[e2e]'
+playwright install chromium
+```
+Then:
+```bash
+pytest -m e2e
+```
+They are skipped automatically when playwright is not installed.
+
+They cover what unit tests structurally cannot see — page navigation,
+event listeners surviving HTMX swaps, and layout. Each test in
+`e2e/test_match_page.py` was written for a bug that the unit suite passed
+straight through.
 
 ## Test Structure
 
@@ -59,6 +82,10 @@ pytest -k "test_calculate"
 ### Render Tests
 - `test_render_common.py` - Tests for common rendering functions
 - `test_render_players.py` - Tests for player rendering functions
+
+### Browser Tests
+- `e2e/test_match_page.py` - Drag-and-drop, allocate/reset, captain selection
+- `e2e/conftest.py` - Seeded database, live server and logged-in page fixtures
 
 ### Configuration
 - `conftest.py` - Pytest fixtures and configuration
@@ -162,6 +189,7 @@ Tests can be marked with:
 - `@pytest.mark.unit` - Unit tests (fast, no external dependencies)
 - `@pytest.mark.integration` - Integration tests (may use database)
 - `@pytest.mark.slow` - Slow running tests
+- `@pytest.mark.e2e` - Browser tests (excluded from the default run)
 
 Run only unit tests:
 ```bash

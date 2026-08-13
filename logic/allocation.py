@@ -13,6 +13,7 @@ from core.config import (
     ALLOCATION_MAX_ITERATIONS,
     ALLOCATION_RANDOM_RESTARTS,
     ALLOCATION_SUB_BAND,
+    CAPTAIN_MIN_SCORE_RATIO,
     POSITION_DISTRIBUTION,
 )
 from db import (
@@ -25,6 +26,7 @@ from db import (
     get_teammate_pairs,
     update_match_player,
     update_player_team,
+    update_team_captain,
 )
 from logic.scoring import calculate_overall_score
 
@@ -207,6 +209,34 @@ def pick_balanced_split(players, size1, weights=None):
     return team1, team2
 
 
+def assign_random_captain(match_id, team_id):
+    """Give a team a captain picked at random from its stronger players.
+
+    Re-allocating shuffles everyone, so a captain set before the shuffle usually
+    ends up on the other team -- the old armband silently disappeared from one
+    side. Every allocation now picks fresh captains for both teams.
+
+    Candidates are the starters scoring at least CAPTAIN_MIN_SCORE_RATIO of the
+    team average; if that leaves nobody, the whole team is eligible.
+
+    Returns:
+        int: The match_player id of the new captain, or None for an empty team
+    """
+    team_players = get_match_players(match_id, team_id)
+    if not team_players:
+        update_team_captain(team_id, None)
+        return None
+
+    candidates = [p for p in team_players if p.get("is_starter") == 1] or team_players
+    scores = {p["id"]: calculate_overall_score(p) for p in candidates}
+    threshold = (sum(scores.values()) / len(scores)) * CAPTAIN_MIN_SCORE_RATIO
+
+    eligible = [p for p in candidates if scores[p["id"]] >= threshold] or candidates
+    captain = random.choice(eligible)
+    update_team_captain(team_id, captain["id"])
+    return captain["id"]
+
+
 def select_starters(players, num_starters):
     """Split players into starters and substitutes by score.
 
@@ -364,6 +394,7 @@ def allocate_single_team(match_id, players, match, allocated_teams):
 
     # Assign positions for starters and substitutes
     assign_match_positions_with_subs(starters, substitutes, team1_id, match_id)
+    assign_random_captain(match_id, team1_id)
 
     return True, "Team allocated"
 
@@ -416,6 +447,10 @@ def allocate_two_teams(match_id, players, match, allocated_teams):
     assign_match_positions_with_subs(
         team2_starters, team2_substitutes, team2_id, match_id
     )
+
+    # Both teams get a fresh captain -- the previous ones just changed sides
+    assign_random_captain(match_id, team1_id)
+    assign_random_captain(match_id, team2_id)
 
     return True, "Teams allocated"
 

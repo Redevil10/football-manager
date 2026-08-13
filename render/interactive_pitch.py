@@ -239,108 +239,6 @@ def render_single_team_pitch(
         )
         position_slots.append(slot_html)
 
-    # JavaScript for drag-and-drop
-    drag_script = ""
-    if not is_completed:
-        drag_script = f"""
-        <script>
-        (function() {{
-            let draggedElement = null;
-            let draggedPlayerId = null;
-            let draggedPosition = null;
-
-            function handleDragStart(event) {{
-                draggedElement = event.currentTarget;
-                draggedPlayerId = event.currentTarget.dataset.playerId;
-                draggedPosition = event.currentTarget.dataset.position;
-                console.log('Drag start - Player ID:', draggedPlayerId, 'Position:', draggedPosition);
-                event.currentTarget.style.opacity = '0.4';
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('text/plain', draggedPlayerId);
-            }}
-
-            function handleDragEnd(event) {{
-                event.currentTarget.style.opacity = '1';
-                // Remove all drag-over classes
-                document.querySelectorAll('.position-slot').forEach(slot => {{
-                    slot.classList.remove('drag-over');
-                }});
-            }}
-
-            function handleDragOver(event) {{
-                event.preventDefault();
-                event.dataTransfer.dropEffect = 'move';
-                return false;
-            }}
-
-            function handleDragEnter(event) {{
-                event.currentTarget.classList.add('drag-over');
-            }}
-
-            function handleDragLeave(event) {{
-                event.currentTarget.classList.remove('drag-over');
-            }}
-
-            function handleDrop(event) {{
-                event.stopPropagation();
-                event.preventDefault();
-
-                const dropSlot = event.currentTarget;
-                dropSlot.classList.remove('drag-over');
-
-                const targetPosition = dropSlot.dataset.position;
-                const targetPlayerId = dropSlot.dataset.playerId;
-
-                console.log('Drop - Target Position:', targetPosition, 'Target Player ID:', targetPlayerId);
-                console.log('Dragged Player ID:', draggedPlayerId);
-
-                if (!draggedPlayerId) {{
-                    console.log('No dragged player ID, returning');
-                    return;
-                }}
-
-                // Build swap URL
-                let url = `/swap_pitch_players/{match_id}/${{draggedPlayerId}}/${{targetPosition}}`;
-                if (targetPlayerId) {{
-                    url += `/${{targetPlayerId}}`;
-                }}
-
-                console.log('Redirecting to:', url + '?display=pitch');
-
-                // Redirect to perform swap
-                window.location.href = url + '?display=pitch';
-
-                return false;
-            }}
-
-            function initDragDrop() {{
-                const draggables = document.querySelectorAll('.draggable-player');
-                console.log('Found', draggables.length, 'draggable players');
-                draggables.forEach(el => {{
-                    el.addEventListener('dragstart', handleDragStart);
-                    el.addEventListener('dragend', handleDragEnd);
-                }});
-
-                const allSlots = document.querySelectorAll('.position-slot');
-                console.log('Found', allSlots.length, 'position slots');
-                allSlots.forEach(el => {{
-                    el.addEventListener('dragover', handleDragOver);
-                    el.addEventListener('dragenter', handleDragEnter);
-                    el.addEventListener('dragleave', handleDragLeave);
-                    el.addEventListener('drop', handleDrop);
-                }});
-            }}
-
-            // Run when DOM is loaded
-            if (document.readyState === 'loading') {{
-                document.addEventListener('DOMContentLoaded', initDragDrop);
-            }} else {{
-                initDragDrop();
-            }}
-        }})();
-        </script>
-        """
-
     team_name = team.get("team_name", "Team")
 
     return Div(cls="single-pitch-container", style="margin-bottom: 30px;")(
@@ -362,10 +260,97 @@ def render_single_team_pitch(
                 cls="position-slots-container",
                 style=f"position: relative; width: {width}px; height: {height}px;",
             )(*[NotStr(slot) for slot in position_slots]),
-            # Drag-drop script
-            NotStr(drag_script),
         ),
     )
+
+
+def render_drag_drop_script(match_id: int) -> str:
+    """Build the drag-and-drop script for the pitch.
+
+    Listeners are delegated from ``document`` and installed once per page, so
+    they keep working after HTMX replaces the pitch markup and are never bound
+    twice when both team pitches render.
+
+    The drop itself goes through ``htmx.ajax`` rather than a navigation: it swaps
+    the teams section in place, which keeps the page from reloading and scrolling
+    back to the top.
+    """
+    return f"""
+        <script>
+        (function() {{
+            if (window.__pitchDragInit) return;
+            window.__pitchDragInit = true;
+
+            const MATCH_ID = {match_id};
+            let draggedPlayerId = null;
+
+            function slotOf(event) {{
+                return event.target.closest ? event.target.closest('.position-slot') : null;
+            }}
+
+            function clearHighlights() {{
+                document.querySelectorAll('.position-slot.drag-over').forEach(slot => {{
+                    slot.classList.remove('drag-over');
+                }});
+            }}
+
+            document.addEventListener('dragstart', function(event) {{
+                const player = event.target.closest && event.target.closest('.draggable-player');
+                if (!player) return;
+                draggedPlayerId = player.dataset.playerId;
+                player.style.opacity = '0.4';
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', draggedPlayerId);
+            }});
+
+            document.addEventListener('dragend', function(event) {{
+                const player = event.target.closest && event.target.closest('.draggable-player');
+                if (player) player.style.opacity = '1';
+                clearHighlights();
+            }});
+
+            document.addEventListener('dragover', function(event) {{
+                if (!slotOf(event)) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+            }});
+
+            document.addEventListener('dragenter', function(event) {{
+                const slot = slotOf(event);
+                if (slot) slot.classList.add('drag-over');
+            }});
+
+            document.addEventListener('dragleave', function(event) {{
+                const slot = slotOf(event);
+                // Ignore moves between a slot's own children
+                if (slot && !slot.contains(event.relatedTarget)) {{
+                    slot.classList.remove('drag-over');
+                }}
+            }});
+
+            document.addEventListener('drop', function(event) {{
+                const slot = slotOf(event);
+                if (!slot) return;
+                event.preventDefault();
+                event.stopPropagation();
+                clearHighlights();
+
+                if (!draggedPlayerId) return;
+                const targetPlayerId = slot.dataset.playerId;
+                let url = `/swap_pitch_players/${{MATCH_ID}}/${{draggedPlayerId}}/${{slot.dataset.position}}`;
+                if (targetPlayerId) {{
+                    url += `/${{targetPlayerId}}`;
+                }}
+                draggedPlayerId = null;
+
+                htmx.ajax('POST', url + '?display=pitch', {{
+                    target: '#match-teams-result',
+                    swap: 'innerHTML'
+                }});
+            }});
+        }})();
+        </script>
+    """
 
 
 def render_interactive_pitch(
@@ -400,6 +385,7 @@ def render_interactive_pitch(
         cls="pitch-formations-container",
         style="display: flex; gap: 30px; justify-content: center; flex-wrap: wrap;",
     )(
+        NotStr(render_drag_drop_script(match_id) if not is_completed else ""),
         render_single_team_pitch(
             match_id,
             home_team,

@@ -2,6 +2,7 @@
 
 import pytest
 
+from core.config import CAPTAIN_MIN_SCORE_RATIO
 from db.clubs import create_club
 from db.connection import get_db
 from db.leagues import create_league
@@ -15,9 +16,11 @@ from db.match_players import (
     swap_match_players,
     update_match_player,
 )
-from db.match_teams import create_match_team
+from db.match_teams import create_match_team, get_match_teams
 from db.matches import create_match
-from db.players import add_player
+from db.players import add_player, add_player_with_score
+from logic.allocation import allocate_match_teams
+from logic.scoring import calculate_overall_score
 
 
 @pytest.fixture
@@ -411,6 +414,82 @@ class TestRemoveMatchPlayerEdgeCases:
 
         # Should return False when match player not found
         assert result is False
+
+
+class TestCaptainSurvivesReallocation:
+    """Regression: re-allocating used to leave one team without a captain.
+
+    match_teams.captain_id points at a match_players row. Re-allocating moves
+    players between teams, so a captain set beforehand would end up on the other
+    side -- its own team's dropdown no longer listed it and the armband vanished.
+    """
+
+    @pytest.fixture
+    def allocated_match(self, temp_db):
+        club_id = create_club("Test Club")
+        league_id = create_league("L")
+        match_id = create_match(
+            league_id=league_id,
+            date="2026-08-20",
+            start_time="10:00:00",
+            end_time=None,
+            location="Field",
+            num_teams=2,
+        )
+        create_match_team(match_id, 1, "Team 1", "Red")
+        create_match_team(match_id, 2, "Team 2", "Blue")
+        for i, score in enumerate([120, 115, 110, 105, 100, 95, 90, 85, 80, 75]):
+            player_id = add_player_with_score(f"P{i + 1}", club_id, score)
+            add_match_player(match_id, player_id)
+        return match_id
+
+    def captain_state(self, match_id):
+        """Map each team id to (captain_id, team the captain actually plays for)"""
+        state = {}
+        for team in get_match_teams(match_id):
+            captain_id = team["captain_id"]
+            actual = None
+            if captain_id is not None:
+                for mp in get_match_players(match_id):
+                    if mp["id"] == captain_id:
+                        actual = mp["team_id"]
+                        break
+            state[team["id"]] = (captain_id, actual)
+        return state
+
+    def test_both_teams_get_a_valid_captain(self, temp_db, allocated_match):
+        success, _ = allocate_match_teams(allocated_match)
+        assert success
+
+        state = self.captain_state(allocated_match)
+        assert len(state) == 2
+        for team_id, (captain_id, plays_for) in state.items():
+            assert captain_id is not None, f"team {team_id} has no captain"
+            assert plays_for == team_id, f"team {team_id} captain plays for {plays_for}"
+
+    def test_captains_stay_valid_across_repeated_allocations(
+        self, temp_db, allocated_match
+    ):
+        for _ in range(8):
+            allocate_match_teams(allocated_match)
+            for team_id, (captain_id, plays_for) in self.captain_state(
+                allocated_match
+            ).items():
+                assert captain_id is not None
+                assert plays_for == team_id
+
+    def test_captain_is_never_the_weakest_starter(self, temp_db, allocated_match):
+        picked_scores = []
+        for _ in range(15):
+            allocate_match_teams(allocated_match)
+            for team in get_match_teams(allocated_match):
+                players = get_match_players(allocated_match, team["id"])
+                starters = [p for p in players if p.get("is_starter") == 1] or players
+                scores = {p["id"]: calculate_overall_score(p) for p in starters}
+                average = sum(scores.values()) / len(scores)
+                picked_scores.append(scores[team["captain_id"]] / average)
+
+        assert min(picked_scores) >= CAPTAIN_MIN_SCORE_RATIO
 
 
 class TestGetTeammatePairs:

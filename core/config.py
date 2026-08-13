@@ -117,6 +117,11 @@ ALLOCATION_SUB_BAND = (
     3  # Players within 3 points of the starter cutoff compete for the last spots
 )
 
+# Captains are picked at random from the players at or above this share of their
+# team's average score, so the armband moves around but never lands on the
+# weakest player on the pitch.
+CAPTAIN_MIN_SCORE_RATIO = 1.00
+
 # Teammate history: players who were recently on the same team are pulled apart.
 ALLOCATION_HISTORY_LOOKBACK = 10  # Past matches to consider (perf guard; decay
 # already makes anything beyond ~4 matches negligible)

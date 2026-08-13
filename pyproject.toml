@@ -21,6 +21,12 @@ dev = [
     "pytest-randomly>=3.0.0",
     "pytest-asyncio>=0.23.0",
 ]
+# Browser tests (tests/e2e). Kept separate because they also need a browser
+# binary: `playwright install chromium`. They are excluded from the default
+# pytest run and skipped entirely when playwright is not installed.
+e2e = [
+    "playwright>=1.40.0",
+]
 
 [tool.coverage.run]
 # deploy_hf.py is an ops/deploy script (only orchestrates huggingface_hub
