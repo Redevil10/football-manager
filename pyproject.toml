@@ -5,7 +5,7 @@ description = "Football Team Assignment App"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "python-fasthtml",
+    "python-fasthtml>=0.14.11",  # Security: Fix Dependabot alert (starlette CVEs)
     "uvicorn>=0.38.0",
     "fasthtml-hf",
     "huggingface-hub",  # direct dep for deploy_hf.py (also pulled in by fasthtml-hf)
