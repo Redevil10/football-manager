@@ -13,13 +13,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  # Must match the ruff-pre-commit rev in prek.toml. Unpinned, `uvx ruff` takes
-  # whatever is newest, so a ruff release that changes the default rule set
-  # turns CI red without a single line of this repo changing -- 0.16 did exactly
-  # that, reporting 359 findings against an untouched main. Bump both together.
-  RUFF_VERSION: "0.15.4"
-
 jobs:
   lint-and-format:
     runs-on: ubuntu-latest
@@ -34,8 +27,13 @@ jobs:
       - name: Check lockfile is up to date
         run: uv lock --check
 
+      # ruff comes from the dev extra, so uv.lock is the only place its version
+      # is written down -- and `uv lock --check` above guarantees CI is using it.
+      - name: Install dependencies
+        run: uv sync --extra dev
+
       - name: Run ruff lint
-        run: uvx ruff@${{ env.RUFF_VERSION }} check --extend-select=I
+        run: uv run ruff check --extend-select=I
 
       - name: Run ruff format
-        run: uvx ruff@${{ env.RUFF_VERSION }} format --check --diff
+        run: uv run ruff format --check --diff

@@ -20,6 +20,11 @@ dev = [
     "pytest-cov>=4.0.0",
     "pytest-randomly>=3.0.0",
     "pytest-asyncio>=0.23.0",
+    # Pinned exactly, and the single place the version lives: CI and the
+    # pre-commit hook both run it through `uv run ruff`. An unpinned `uvx ruff`
+    # takes whatever is newest, so a release that changes the default rule set
+    # turns CI red with no change to this repo -- 0.16 did exactly that.
+    "ruff==0.15.4",
 ]
 # Browser tests (tests/e2e). Kept separate because they also need a browser
 # binary: `playwright install chromium`. They are excluded from the default
@@ -31,8 +36,15 @@ e2e = [
 [tool.coverage.run]
 # deploy_hf.py is an ops/deploy script (only orchestrates huggingface_hub
 # API calls); it never runs in the app and isn't meaningfully unit-testable.
+#
+# The test suite itself is measured by nothing meaningful: a test file that runs
+# is ~100% "covered" and one that does not is 0%, which says something about
+# which tests ran, not about how well the app is tested. Counting them also
+# inflated the headline number, and made the e2e suite -- deliberately
+# deselected in the unit job -- look like 260 lines of dead code.
 omit = [
     "deploy_hf.py",
+    "tests/*",
 ]
 
 [tool.ruff.lint]
