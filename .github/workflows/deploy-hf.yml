@@ -9,9 +9,13 @@ permissions:
 
 jobs:
   deploy:
-    # Defence in depth: workflow_dispatch already requires write access, but
-    # this also blocks any collaborator added later. Only the owner may deploy.
-    if: github.actor == 'Redevil10'
+    # workflow_dispatch takes no `branches:` filter -- the ref is chosen when the
+    # run is started, so it has to be checked here instead. Without this, a
+    # dispatch from a feature branch would ship that branch to the Space.
+    #
+    # Defence in depth on the actor too: workflow_dispatch already requires write
+    # access, but this also blocks any collaborator added later.
+    if: github.actor == 'Redevil10' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:

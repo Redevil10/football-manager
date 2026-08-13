@@ -198,11 +198,23 @@ def browser():
         instance.close()
 
 
+# Counts finished HTMX swaps so tests can wait for the real thing instead of
+# guessing at a duration. Fixed sleeps are what make browser suites flaky on a
+# loaded CI runner: too short and they fail, too long and every test pays.
+SWAP_COUNTER = """
+window.__htmxSettles = 0;
+document.addEventListener('htmx:afterSettle', function() {
+    window.__htmxSettles++;
+});
+"""
+
+
 @pytest.fixture
 def page(browser, live_server):
     """A page logged in as a manager, sitting on the match's pitch view."""
     base_url, match_id = live_server
     context = browser.new_context(viewport={"width": 1280, "height": 900})
+    context.add_init_script(SWAP_COUNTER)
     page = context.new_page()
 
     page.console_errors = []

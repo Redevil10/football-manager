@@ -47,6 +47,21 @@ DRAG = """([from, to]) => {
 }"""
 
 
+def swaps_so_far(page):
+    return page.evaluate("window.__htmxSettles || 0")
+
+
+def wait_for_swap(page, before):
+    """Block until one more HTMX swap has settled.
+
+    Waiting on the actual event rather than a fixed duration keeps these tests
+    honest on a slow CI runner and quick on a fast laptop.
+    """
+    page.wait_for_function(
+        "before => (window.__htmxSettles || 0) > before", arg=before, timeout=15000
+    )
+
+
 def click_in_place(page, selector, viewport_y=350):
     """Really click an element, with the page scrolled down and nothing moving.
 
@@ -65,16 +80,21 @@ def click_in_place(page, selector, viewport_y=350):
     """
     element = page.locator(selector)
     element.scroll_into_view_if_needed()
-    page.wait_for_timeout(150)
-
     box = element.bounding_box()
     page.evaluate(f"window.scrollBy(0, {box['y'] - viewport_y})")
-    page.wait_for_timeout(200)
 
+    before = swaps_so_far(page)
     scroll_at_click = page.evaluate("window.scrollY")
     element.click()
-    page.wait_for_timeout(900)
+    wait_for_swap(page, before)
     return scroll_at_click
+
+
+def drag(page, from_index, to_index):
+    """Drag one pitch slot onto another and wait for the swap to land"""
+    before = swaps_so_far(page)
+    page.evaluate(DRAG, [from_index, to_index])
+    wait_for_swap(page, before)
 
 
 def allocate(page):
@@ -85,23 +105,39 @@ def by_position(slots):
     return {slot["position"]: slot["playerId"] for slot in slots}
 
 
+def pick_other_captain(page):
+    """Choose a captain option other than the current one, and return its value"""
+    return page.evaluate("""() => {
+        const select = document.querySelector('select[name="captain_id"]');
+        return [...select.options].find(
+            o => o.value && o.value !== select.value).value;
+    }""")
+
+
+def park_at(page, locator, viewport_y=350):
+    """Scroll so an element sits `viewport_y` px down the viewport"""
+    locator.scroll_into_view_if_needed()
+    box = locator.bounding_box()
+    page.evaluate(f"window.scrollBy(0, {box['y'] - viewport_y})")
+
+
 class TestDragAndDrop:
     def test_swapping_players_does_not_reload_the_page(self, page):
         allocate(page)
         page.evaluate("window.__stillHere = true")
 
+        before = swaps_so_far(page)
         page.evaluate(DRAG, [0, 3])
-        page.wait_for_timeout(800)
+        wait_for_swap(page, before)
 
         assert page.evaluate("window.__stillHere") is True, "page navigated away"
 
     def test_swapping_players_exchanges_their_positions(self, page):
         allocate(page)
-        before = page.evaluate(PITCH_SLOTS, 0)
-        source, target = before[0], before[3]
+        slots = page.evaluate(PITCH_SLOTS, 0)
+        source, target = slots[0], slots[3]
 
-        page.evaluate(DRAG, [0, 3])
-        page.wait_for_timeout(800)
+        drag(page, 0, 3)
 
         after = by_position(page.evaluate(PITCH_SLOTS, 0))
         assert after[source["position"]] == target["playerId"]
@@ -110,13 +146,11 @@ class TestDragAndDrop:
     def test_drag_still_works_after_the_pitch_is_replaced(self, page):
         """Regression: listeners were bound per element and lost on every swap"""
         allocate(page)
-        page.evaluate(DRAG, [0, 3])
-        page.wait_for_timeout(800)
+        drag(page, 0, 3)
 
-        before = page.evaluate(PITCH_SLOTS, 0)
-        source, target = before[1], before[4]
-        page.evaluate(DRAG, [1, 4])
-        page.wait_for_timeout(800)
+        slots = page.evaluate(PITCH_SLOTS, 0)
+        source, target = slots[1], slots[4]
+        drag(page, 1, 4)
 
         after = by_position(page.evaluate(PITCH_SLOTS, 0))
         assert after[source["position"]] == target["playerId"]
@@ -125,13 +159,11 @@ class TestDragAndDrop:
     def test_drag_does_not_move_the_page(self, page):
         allocate(page)
         page.evaluate("window.scrollTo(0, 700)")
-        page.wait_for_timeout(200)
-        before = page.evaluate("window.scrollY")
+        scroll_before = page.evaluate("window.scrollY")
 
-        page.evaluate(DRAG, [0, 3])
-        page.wait_for_timeout(800)
+        drag(page, 0, 3)
 
-        assert page.evaluate("window.scrollY") == before
+        assert page.evaluate("window.scrollY") == scroll_before
 
 
 class TestAllocateAndReset:
@@ -221,7 +253,13 @@ class TestCaptainSelection:
     def test_dropdowns_stack_on_a_narrow_screen(self, page):
         allocate(page)
         page.set_viewport_size({"width": 420, "height": 900})
-        page.wait_for_timeout(300)
+        # Wait for the reflow rather than guessing at how long it takes: the
+        # dropdown has to be narrower than the old desktop column before the
+        # positions below mean anything.
+        page.wait_for_function(
+            "() => document.querySelector('select[name=\"captain_id\"]')"
+            ".getBoundingClientRect().width < 420"
+        )
 
         boxes = page.locator('select[name="captain_id"]').all()
         first, second = boxes[0].bounding_box(), boxes[1].bounding_box()
@@ -232,23 +270,16 @@ class TestCaptainSelection:
         picks an option, and the swap that follows deletes it."""
         allocate(page)
         select = page.locator('select[name="captain_id"]').first
-        select.scroll_into_view_if_needed()
-        page.wait_for_timeout(150)
-        box = select.bounding_box()
-        page.evaluate(f"window.scrollBy(0, {box['y'] - 350})")
-        page.wait_for_timeout(200)
-        before = page.evaluate("window.scrollY")
+        park_at(page, select)
+        scroll_before = page.evaluate("window.scrollY")
 
-        chosen = page.evaluate("""() => {
-            const select = document.querySelector('select[name="captain_id"]');
-            return [...select.options].find(
-                o => o.value && o.value !== select.value).value;
-        }""")
+        chosen = pick_other_captain(page)
+        swap_before = swaps_so_far(page)
         # select_option focuses the element, the way a real user does
         select.select_option(chosen)
-        page.wait_for_timeout(900)
+        wait_for_swap(page, swap_before)
 
-        assert page.evaluate("window.scrollY") == before
+        assert page.evaluate("window.scrollY") == scroll_before
         assert (
             page.evaluate("document.querySelector('select[name=\"captain_id\"]').value")
             == chosen
@@ -293,16 +324,12 @@ class TestSwapKeepsTheViewStill:
 
         select = page.locator('select[name="captain_id"]').first
         select.scroll_into_view_if_needed()
-        page.wait_for_timeout(150)
-        chosen = page.evaluate("""() => {
-            const select = document.querySelector('select[name="captain_id"]');
-            return [...select.options].find(
-                o => o.value && o.value !== select.value).value;
-        }""")
+        chosen = pick_other_captain(page)
+        swap_before = swaps_so_far(page)
         # Opening a dropdown focuses it; select_option on its own does not
         select.focus()
         select.select_option(chosen)
-        page.wait_for_timeout(900)
+        wait_for_swap(page, swap_before)
 
         assert page.evaluate("window.__focusedInsideTarget") is False, (
             "the captain select still held focus when the swap deleted it"
