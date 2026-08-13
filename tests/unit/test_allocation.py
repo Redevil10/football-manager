@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from core.config import ALLOCATION_BALANCE_TOLERANCE, CAPTAIN_MIN_SCORE_RATIO
 from logic.allocation import (
+    allocate_teams,
     assign_random_captain,
     build_teammate_weights,
     pick_balanced_split,
@@ -56,19 +57,39 @@ def balance_budget(squad, size1):
 
 
 class TestAllocateTeams:
-    """Tests for allocate_teams function"""
+    """Tests for allocate_teams, the squad-wide split used by /players"""
 
     def test_allocate_teams_insufficient_players(self):
-        """Test allocation with less than 2 players"""
-        # This would require mocking get_all_players and update_player_team
-        # For now, we'll test the logic conceptually
-        pass
+        with patch(
+            "logic.allocation.get_all_players", return_value=[make_player(1, 100)]
+        ):
+            success, message = allocate_teams()
+
+        assert success is False
+        assert "at least 2" in message
 
     def test_allocate_teams_balanced_distribution(self):
-        """Test that teams are balanced"""
-        # This would require mocking database calls
-        # The function should distribute players to balance team scores
-        pass
+        squad = make_squad()
+        with (
+            patch("logic.allocation.get_all_players", return_value=squad),
+            patch("logic.allocation.update_player_team") as update,
+        ):
+            success, _ = allocate_teams()
+
+        assert success is True
+
+        # Every player lands on exactly one of the two teams
+        assigned = {call.args[0]: call.args[1] for call in update.call_args_list}
+        assert sorted(assigned) == sorted(p["id"] for p in squad)
+        assert set(assigned.values()) == {1, 2}
+
+        by_team = {1: [], 2: []}
+        for player in squad:
+            by_team[assigned[player["id"]]].append(player)
+        assert abs(len(by_team[1]) - len(by_team[2])) <= 1
+        assert abs(team_score(by_team[1]) - team_score(by_team[2])) <= balance_budget(
+            squad, len(squad) // 2
+        )
 
 
 class TestAssignPositions:
@@ -263,6 +284,28 @@ class TestPickBalancedSplit:
         assert len(team1) == 3
         assert len(team2) == 2
 
+    def test_candidate_pool_is_capped(self):
+        """A squad of identical players makes every split equally optimal.
+
+        All 24310 of them qualify, so the pool has to be sampled down before
+        the history scoring runs over it.
+        """
+        squad = make_squad([100] * 18)
+
+        team1, team2 = pick_balanced_split(squad, 9)
+
+        assert len(team1) == 9
+        assert len(team2) == 9
+        assert team_score(team1) == team_score(team2)
+
+    def test_empty_team_request_returns_everyone_on_one_side(self):
+        squad = make_squad([100, 90, 80])
+
+        team1, team2 = pick_balanced_split(squad, 0)
+
+        assert len(team1) == 3
+        assert team2 == []
+
     def test_large_squad_uses_random_restarts(self):
         """Above the enumeration limit the sampling path still returns valid splits"""
         # 15 pairs of equal scores, so a perfectly even split exists
@@ -447,6 +490,14 @@ class TestSelectStarters:
 
         # All four of the clustered players should sit at least once
         assert benched >= {3, 4, 5, 6}
+
+    def test_nobody_starts_when_there_are_no_places(self):
+        squad = make_squad([100, 90])
+
+        starters, subs = select_starters(squad, 0)
+
+        assert starters == []
+        assert len(subs) == 2
 
     def test_split_is_complete(self):
         squad = make_squad()

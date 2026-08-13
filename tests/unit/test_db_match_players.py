@@ -478,6 +478,33 @@ class TestCaptainSurvivesReallocation:
                 assert captain_id is not None
                 assert plays_for == team_id
 
+    def test_single_team_allocation_also_gets_a_captain(self, temp_db):
+        """Matches where only one side is allocated take a different code path"""
+        club_id = create_club("One Team Club")
+        league_id = create_league("L")
+        match_id = create_match(
+            league_id=league_id,
+            date="2026-08-20",
+            start_time="10:00:00",
+            end_time=None,
+            location="Field",
+            num_teams=2,
+        )
+        team_id = create_match_team(match_id, 1, "Team 1", "Red")
+        # should_allocate=0 keeps the second team out of the allocation
+        create_match_team(match_id, 2, "Team 2", "Blue", should_allocate=0)
+        for i, score in enumerate([120, 110, 100, 90, 80]):
+            add_match_player(match_id, add_player_with_score(f"S{i}", club_id, score))
+
+        success, _ = allocate_match_teams(match_id)
+        assert success
+
+        team = next(t for t in get_match_teams(match_id) if t["id"] == team_id)
+        assert team["captain_id"] is not None
+        assert team["captain_id"] in {
+            p["id"] for p in get_match_players(match_id, team_id)
+        }
+
     def test_captain_is_never_the_weakest_starter(self, temp_db, allocated_match):
         picked_scores = []
         for _ in range(15):
