@@ -98,6 +98,35 @@ OVERALL_SCORE_DIVISOR = 5
 
 # Team allocation constants
 ALLOCATION_MAX_ITERATIONS = 100  # Maximum iterations for team balancing optimization
+
+# Candidate generation: the allocator builds many balanced splits, keeps the ones
+# that are within tolerance of the best score difference, and picks among those.
+# This is what makes repeated allocations of the same squad produce different teams.
+ALLOCATION_ENUMERATION_LIMIT = (
+    50000  # Enumerate every split when the search space is at most this many
+)
+ALLOCATION_RANDOM_RESTARTS = 400  # Randomized restarts when the space is bigger
+# Candidates within best_diff + this share of the total score stay eligible.
+# Most of the variety comes from the many splits that are *equally* optimal, not
+# from loosening this -- measured on a 14-player squad, 0% tolerance already gives
+# 115 distinct splits and 0.5% gives 186, while 2% only reaches 241 and triples the
+# average score gap. Raise it only if a squad needs more shuffling than it gets.
+ALLOCATION_BALANCE_TOLERANCE = 0.005
+ALLOCATION_CANDIDATE_CAP = 2000  # Cap eligible candidates before scoring history
+ALLOCATION_SUB_BAND = (
+    3  # Players within 3 points of the starter cutoff compete for the last spots
+)
+
+# Captains are picked at random from the players at or above this share of their
+# team's average score, so the armband moves around but never lands on the
+# weakest player on the pitch.
+CAPTAIN_MIN_SCORE_RATIO = 1.00
+
+# Teammate history: players who were recently on the same team are pulled apart.
+ALLOCATION_HISTORY_LOOKBACK = 10  # Past matches to consider (perf guard; decay
+# already makes anything beyond ~4 matches negligible)
+ALLOCATION_HISTORY_DECAY = 0.5  # Weight of each older match: 1, 0.5, 0.25, ...
+
 POSITION_DISTRIBUTION = {
     "defender_ratio": 0.36,  # 36% of team should be defenders (4 players in 11-man team)
     "midfielder_ratio": 0.36,  # 36% of team should be midfielders (4 players in 11-man team)

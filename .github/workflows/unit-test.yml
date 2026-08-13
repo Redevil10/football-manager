@@ -1,14 +1,23 @@
-name: Test
+name: Unit Test
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main]
   workflow_dispatch:  # Allow manual triggering
 
+# Superseded runs on a branch are wasted work, but every commit on main keeps
+# its own result -- main is what gets deployed by hand, so its status has to
+# mean something.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
-  test:
+  # This name is the status-check context branch protection matches on -- keep
+  # it stable once a protection rule refers to it.
+  unit-tests:
     runs-on: ubuntu-latest
     permissions:
       contents: read

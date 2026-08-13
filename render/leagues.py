@@ -46,7 +46,7 @@ def render_leagues_list(leagues, user=None):
                                 action=f"/delete_league/{league['id']}",
                                 style="margin-left: 10px;",
                                 **{
-                                    "onsubmit": f"return confirm('你确定删除这个league以及下面{match_count}场match吗？');"
+                                    "onsubmit": f"return confirm('Delete this league and its {match_count} matches?');"
                                 },
                             )(
                                 Button(
@@ -100,7 +100,7 @@ def render_league_matches(league, matches, user=None):
                                 method="POST",
                                 action=f"/delete_league/{league['id']}",
                                 **{
-                                    "onsubmit": f"return confirm('你确定删除这个league以及下面{match_count}场match吗？');"
+                                    "onsubmit": f"return confirm('Delete this league and its {match_count} matches?');"
                                 },
                             )(
                                 Button(
@@ -170,7 +170,7 @@ def render_league_matches(league, matches, user=None):
                                     action=f"/delete_match/{match['id']}",
                                     style="margin-left: 10px;",
                                     **{
-                                        "onsubmit": "return confirm('你确定删除这场match吗？');"
+                                        "onsubmit": "return confirm('Delete this match?');"
                                     },
                                 )(
                                     Button(

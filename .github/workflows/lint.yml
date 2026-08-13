@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 permissions:
   contents: read
 
@@ -23,8 +27,13 @@ jobs:
       - name: Check lockfile is up to date
         run: uv lock --check
 
+      # ruff comes from the dev extra, so uv.lock is the only place its version
+      # is written down -- and `uv lock --check` above guarantees CI is using it.
+      - name: Install dependencies
+        run: uv sync --extra dev
+
       - name: Run ruff lint
-        run: uvx ruff check --extend-select=I
+        run: uv run ruff check --extend-select=I
 
       - name: Run ruff format
-        run: uvx ruff format --check --diff
+        run: uv run ruff format --check --diff

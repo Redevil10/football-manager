@@ -151,12 +151,12 @@ def update_match_team(
         return False
 
 
-def update_team_captain(team_id: int, captain_id: int) -> bool:
+def update_team_captain(team_id: int, captain_id: Optional[int]) -> bool:
     """Update team captain.
 
     Args:
         team_id: ID of the team
-        captain_id: ID of the captain player
+        captain_id: match_players.id of the captain, or None to clear it
 
     Returns:
         bool: True on success, False on error

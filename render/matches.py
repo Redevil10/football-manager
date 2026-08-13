@@ -337,7 +337,7 @@ def render_all_matches(matches, user=None):
                                     action=f"/delete_match/{match['id']}",
                                     style="margin-left: 10px;",
                                     **{
-                                        "onsubmit": "return confirm('你确定删除这场match吗？');"
+                                        "onsubmit": "return confirm('Delete this match?');"
                                     },
                                 )(
                                     Button(
@@ -593,11 +593,16 @@ def render_match_teams(
 
 
 def render_captain_selection(match_id, teams, match_players_dict, is_completed=False):
-    """Render captain selection UI for each team"""
+    """Render captain selection UI for each team.
+
+    The teams sit side by side in the same two-column grid the player tables
+    use, so each dropdown lines up under its own team instead of stretching
+    across the full page width.
+    """
     if is_completed or not teams:
         return []
 
-    content = []
+    columns = []
     for team in teams:
         team_players = match_players_dict.get(team["id"], [])
         if not team_players:
@@ -608,7 +613,7 @@ def render_captain_selection(match_id, teams, match_players_dict, is_completed=F
 
         # Create options for captain selection
         options = [
-            Option("-- 选择队长 --", value="", selected=(not current_captain_id))
+            Option("-- Select Captain --", value="", selected=(not current_captain_id))
         ]
         for player in team_players:
             match_player_id = player.get("id")  # This is match_players.id
@@ -618,9 +623,9 @@ def render_captain_selection(match_id, teams, match_players_dict, is_completed=F
                 Option(player_name, value=str(match_player_id), selected=is_selected)
             )
 
-        content.append(
-            Div(cls="container-white", style="margin-top: 15px;")(
-                H4(f"{team_name} - 选择队长", style="margin-bottom: 10px;"),
+        columns.append(
+            Div(
+                H4(f"{team_name} - Captain", style="margin-bottom: 10px;"),
                 Form(
                     method="POST",
                     action=f"/set_captain/{match_id}/{team['id']}",
@@ -629,21 +634,27 @@ def render_captain_selection(match_id, teams, match_players_dict, is_completed=F
                         "hx-target": "#match-content",
                         "hx-swap": "innerHTML",
                     },
-                    style="display: flex; align-items: center; gap: 10px;",
                 )(
                     Select(
                         *options,
                         name="captain_id",
-                        style="flex: 1; padding: 8px;",
+                        style="width: 100%; padding: 8px;",
                         **{
                             "onchange": "this.form.requestSubmit()",
                         },
                     ),
                 ),
-            ),
+            )
         )
 
-    return content
+    if not columns:
+        return []
+
+    return [
+        Div(cls="container-white", style="margin-top: 15px;")(
+            Div(cls="teams-grid-table", style="margin: 0;")(*columns)
+        )
+    ]
 
 
 def render_match_recordings(match_id, recordings=None, can_edit=False):
@@ -827,7 +838,7 @@ def render_match_detail(
                                     action=f"/delete_match/{match['id']}",
                                     style="display: inline;",
                                     **{
-                                        "onsubmit": "return confirm('你确定删除这场match吗？');"
+                                        "onsubmit": "return confirm('Delete this match?');"
                                     },
                                 )(
                                     Button(

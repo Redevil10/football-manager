@@ -239,6 +239,31 @@ class TestRenderCaptainSelection:
 
         assert result is not None
 
+    def test_teams_with_players_share_one_two_column_row(self):
+        """Both dropdowns go in a single grid so they line up side by side"""
+        teams = [
+            {"id": 1, "team_number": 1, "team_name": "Team A", "captain_id": 11},
+            {"id": 2, "team_number": 2, "team_name": "Team B", "captain_id": None},
+        ]
+        match_players_dict = {
+            1: [{"id": 11, "name": "Alice"}, {"id": 12, "name": "Bob"}],
+            2: [{"id": 21, "name": "Carol"}, {"id": 22, "name": "Dave"}],
+        }
+
+        result = render_captain_selection(
+            1, teams, match_players_dict, is_completed=False
+        )
+        html = to_xml(result[0])
+
+        # One grid holding both teams, not two stacked full-width blocks
+        assert len(result) == 1
+        assert html.count("teams-grid-table") == 1
+        assert html.count('name="captain_id"') == 2
+        assert "Team A - Captain" in html
+        assert "Team B - Captain" in html
+        # The current captain is preselected on team A only
+        assert '<option value="11" selected>Alice</option>' in html
+
 
 class TestRenderMatchDetail:
     """Tests for render_match_detail function"""

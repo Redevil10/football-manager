@@ -36,6 +36,7 @@ from db.match_players import (
     add_match_player,
     get_match_players,
     get_match_signup_players,
+    get_teammate_pairs,
     remove_all_match_signup_players,
     remove_match_player,
     swap_match_players,
@@ -148,6 +149,7 @@ __all__ = [
     "delete_match_team",
     # Match Players
     "get_match_players",
+    "get_teammate_pairs",
     "get_match_signup_players",
     "add_match_player",
     "update_match_player",

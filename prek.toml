@@ -15,15 +15,13 @@ hooks = [
 ]
 
 [[repos]]
-repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.15.4"
-hooks = [
-    { id = "ruff-check", args = ["--fix", "--extend-select=I"] },
-    { id = "ruff-format" },
-]
-
-[[repos]]
 repo = "local"
 hooks = [
+    # ruff runs out of the dev extra rather than ruff-pre-commit, so its version
+    # lives in uv.lock only. With a `rev` pinned here as well, the two drift the
+    # moment one is bumped and forgotten -- and CI disagreeing with the hook that
+    # just passed locally is a confusing way to find out.
+    { id = "ruff-check", name = "ruff check", entry = "uv run ruff check --fix --extend-select=I", language = "system", types = ["python"] },
+    { id = "ruff-format", name = "ruff format", entry = "uv run ruff format", language = "system", types = ["python"] },
     { id = "uv-lock", name = "uv-lock", entry = "bash -c 'uv lock && git add uv.lock'", language = "system", files = "pyproject\\.toml$", pass_filenames = false },
 ]

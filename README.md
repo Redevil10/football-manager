@@ -17,7 +17,8 @@ short_description: Manage football teams, allocate players, track matches
 <h1 align="center">Football Manager</h1>
 
 [![lint](https://github.com/Redevil10/football-manager/actions/workflows/lint.yml/badge.svg)](https://github.com/Redevil10/football-manager/actions/workflows/lint.yml)
-[![tests](https://github.com/Redevil10/football-manager/actions/workflows/test.yml/badge.svg)](https://github.com/Redevil10/football-manager/actions/workflows/test.yml)
+[![unit tests](https://github.com/Redevil10/football-manager/actions/workflows/unit-test.yml/badge.svg)](https://github.com/Redevil10/football-manager/actions/workflows/unit-test.yml)
+[![e2e tests](https://github.com/Redevil10/football-manager/actions/workflows/e2e-test.yml/badge.svg)](https://github.com/Redevil10/football-manager/actions/workflows/e2e-test.yml)
 [![codecov](https://codecov.io/github/Redevil10/football-manager/graph/badge.svg?token=WNC4Z8DSH0)](https://codecov.io/gh/Redevil10/football-manager)
 [![python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 

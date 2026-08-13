@@ -7,6 +7,24 @@ from fasthtml.common import *
 from core.auth import check_club_permission, get_csrf_token, get_current_club_info
 from db import get_match_teams
 
+# Clicking a button that HTMX then swaps away used to fling the page elsewhere.
+# The button still holds focus when the swap deletes it, so the browser goes
+# looking for somewhere else to put focus and scrolls there -- clicking
+# "Allocate Teams" mid-page could drop you at the bottom, 1800px away. Dropping
+# focus first leaves nothing for the browser to chase, and the view stays put.
+#
+# Only elements inside the content being replaced are blurred, so focus
+# elsewhere on the page is left alone.
+BLUR_BEFORE_SWAP_SCRIPT = """
+document.addEventListener('htmx:beforeSwap', function(event) {
+    var active = document.activeElement;
+    var target = event.detail && event.detail.target;
+    if (active && active !== document.body && target && target.contains(active)) {
+        active.blur();
+    }
+});
+"""
+
 
 def render_head(title, STYLE, *extra):
     """Return a shared Head(...) element with viewport and HTMX.
@@ -23,6 +41,7 @@ def render_head(title, STYLE, *extra):
         Title(title),
         Style(STYLE),
         Script(src="https://unpkg.com/htmx.org@1.9.10"),
+        Script(NotStr(BLUR_BEFORE_SWAP_SCRIPT)),
         *extra,
     )
 

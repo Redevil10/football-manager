@@ -1,0 +1,76 @@
+name: E2E Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Superseded runs on a branch are wasted work, but every commit on main keeps
+# its own result -- main is what gets deployed by hand, so its status has to
+# mean something.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # This name is the status-check context branch protection matches on -- keep
+  # it stable once a protection rule refers to it.
+  e2e-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # playwright is kept out of the dev extra: the wheel alone is ~130MB and
+      # the unit-test job deselects these tests anyway.
+      - name: Install dependencies
+        run: uv sync --extra dev --extra e2e
+
+      # The browser download is the slowest step by far. Keying on the lockfile
+      # re-downloads on any dependency change, which is a little conservative
+      # but needs no shell quoting games to read the playwright version out.
+      - name: Cache browser
+        id: browser-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install chromium
+        if: steps.browser-cache.outputs.cache-hit != 'true'
+        run: uv run playwright install --with-deps chromium
+
+      # A cached browser skips the step above, which is also what installs the
+      # system libraries chromium needs on a fresh runner.
+      - name: Install browser system dependencies
+        if: steps.browser-cache.outputs.cache-hit == 'true'
+        run: uv run playwright install-deps chromium
+
+      - name: Run browser tests
+        run: uv run pytest -m e2e
+
+      # Playwright writes traces and screenshots here when a test fails; without
+      # them a red CI run on a browser test is very hard to act on.
+      - name: Upload failure artifacts
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-failures
+          path: |
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
