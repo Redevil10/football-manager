@@ -9,6 +9,7 @@ from db.match_players import (
     add_match_player,
     get_match_players,
     get_match_signup_players,
+    get_teammate_pairs,
     remove_all_match_signup_players,
     remove_match_player,
     swap_match_players,
@@ -410,3 +411,137 @@ class TestRemoveMatchPlayerEdgeCases:
 
         # Should return False when match player not found
         assert result is False
+
+
+class TestGetTeammatePairs:
+    """Tests for get_teammate_pairs (teammate history lookup)"""
+
+    @staticmethod
+    def build_match(league_id, date, teams):
+        """Create a match whose teams hold the given player ids
+
+        Args:
+            teams: list of player id lists, one per team
+        """
+        match_id = create_match(
+            league_id=league_id,
+            date=date,
+            start_time="10:00:00",
+            end_time=None,
+            location="Field",
+            num_teams=len(teams),
+        )
+        for number, player_ids in enumerate(teams, start=1):
+            team_id = create_match_team(match_id, number, f"Team {number}", "Red")
+            for player_id in player_ids:
+                add_match_player(match_id, player_id, team_id, "Midfielder")
+        return match_id
+
+    @pytest.fixture
+    def squad(self, temp_db):
+        club_id = create_club("Test Club")
+        return [add_player(f"Player {i}", club_id) for i in range(1, 5)]
+
+    def test_returns_same_team_pairs_only(self, temp_db, squad):
+        a, b, c, d = squad
+        league_id = create_league("L")
+        self.build_match(league_id, "2026-08-01", [[a, b], [c, d]])
+        current = self.build_match(league_id, "2026-08-08", [[a, c], [b, d]])
+
+        pairs = get_teammate_pairs(current, league_id, "2026-08-08", 10)
+
+        found = {(row["player1_id"], row["player2_id"]) for row in pairs}
+        assert found == {(a, b), (c, d)}
+
+    def test_excludes_the_match_being_allocated(self, temp_db, squad):
+        """The current match's own allocation must not count as history"""
+        a, b, c, d = squad
+        league_id = create_league("L")
+        current = self.build_match(league_id, "2026-08-08", [[a, b], [c, d]])
+
+        pairs = get_teammate_pairs(current, league_id, "2026-08-08", 10)
+
+        assert pairs == []
+
+    def test_excludes_future_matches(self, temp_db, squad):
+        a, b, c, d = squad
+        league_id = create_league("L")
+        self.build_match(league_id, "2026-09-01", [[a, b], [c, d]])
+        current = self.build_match(league_id, "2026-08-08", [[a, c], [b, d]])
+
+        pairs = get_teammate_pairs(current, league_id, "2026-08-08", 10)
+
+        assert pairs == []
+
+    def test_excludes_other_leagues(self, temp_db, squad):
+        a, b, c, d = squad
+        league_id = create_league("L")
+        other_league_id = create_league("Other")
+        self.build_match(other_league_id, "2026-08-01", [[a, b], [c, d]])
+        current = self.build_match(league_id, "2026-08-08", [[a, c], [b, d]])
+
+        pairs = get_teammate_pairs(current, league_id, "2026-08-08", 10)
+
+        assert pairs == []
+
+    def test_ignores_unallocated_signups(self, temp_db, squad):
+        """Players who signed up but were never put on a team are not teammates"""
+        a, b, c, d = squad
+        league_id = create_league("L")
+        past = self.build_match(league_id, "2026-08-01", [[a, b]])
+        add_match_player(past, c)  # signup with team_id NULL
+        add_match_player(past, d)
+        current = self.build_match(league_id, "2026-08-08", [[a, c], [b, d]])
+
+        pairs = get_teammate_pairs(current, league_id, "2026-08-08", 10)
+
+        found = {(row["player1_id"], row["player2_id"]) for row in pairs}
+        assert found == {(a, b)}
+
+    def test_orders_most_recent_first(self, temp_db, squad):
+        a, b, c, d = squad
+        league_id = create_league("L")
+        self.build_match(league_id, "2026-07-01", [[a, b], [c, d]])
+        self.build_match(league_id, "2026-08-01", [[a, c], [b, d]])
+        current = self.build_match(league_id, "2026-08-08", [[a, d], [b, c]])
+
+        pairs = get_teammate_pairs(current, league_id, "2026-08-08", 10)
+
+        assert pairs[0]["date"] == "2026-08-01"
+        assert pairs[-1]["date"] == "2026-07-01"
+
+    def test_lookback_limits_matches_considered(self, temp_db, squad):
+        a, b, c, d = squad
+        league_id = create_league("L")
+        self.build_match(league_id, "2026-07-01", [[a, b], [c, d]])
+        self.build_match(league_id, "2026-08-01", [[a, c], [b, d]])
+        current = self.build_match(league_id, "2026-08-08", [[a, d], [b, c]])
+
+        pairs = get_teammate_pairs(current, league_id, "2026-08-08", 1)
+
+        assert {row["date"] for row in pairs} == {"2026-08-01"}
+
+    def test_no_date_returns_nothing(self, temp_db, squad):
+        a, b, c, d = squad
+        league_id = create_league("L")
+        self.build_match(league_id, "2026-08-01", [[a, b], [c, d]])
+        current = self.build_match(league_id, "2026-08-08", [[a, c], [b, d]])
+
+        assert get_teammate_pairs(current, league_id, None, 10) == []
+
+    def test_scoreless_matches_still_count(self, temp_db, squad):
+        """A played match with no score filled in is still history"""
+        a, b, c, d = squad
+        league_id = create_league("L")
+        past = self.build_match(league_id, "2026-08-01", [[a, b], [c, d]])
+        current = self.build_match(league_id, "2026-08-08", [[a, c], [b, d]])
+
+        conn = get_db()
+        scores = conn.execute(
+            "SELECT score FROM match_teams WHERE match_id = ?", (past,)
+        ).fetchall()
+        conn.close()
+        assert all(row["score"] == 0 for row in scores)
+
+        pairs = get_teammate_pairs(current, league_id, "2026-08-08", 10)
+        assert len(pairs) == 2

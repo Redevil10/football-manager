@@ -1,8 +1,20 @@
 # logic/allocation.py - Team allocation logic
 
+import itertools
+import math
 import random
 
-from core.config import ALLOCATION_MAX_ITERATIONS, POSITION_DISTRIBUTION
+from core.config import (
+    ALLOCATION_BALANCE_TOLERANCE,
+    ALLOCATION_CANDIDATE_CAP,
+    ALLOCATION_ENUMERATION_LIMIT,
+    ALLOCATION_HISTORY_DECAY,
+    ALLOCATION_HISTORY_LOOKBACK,
+    ALLOCATION_MAX_ITERATIONS,
+    ALLOCATION_RANDOM_RESTARTS,
+    ALLOCATION_SUB_BAND,
+    POSITION_DISTRIBUTION,
+)
 from db import (
     add_match_player,
     get_all_players,
@@ -10,10 +22,222 @@ from db import (
     get_match_players,
     get_match_signup_players,
     get_match_teams,
+    get_teammate_pairs,
     update_match_player,
     update_player_team,
 )
-from logic.scoring import calculate_overall_score, calculate_player_overall
+from logic.scoring import calculate_overall_score
+
+
+def build_teammate_weights(match_id, match):
+    """Weight every pair of players by how recently they shared a team.
+
+    The most recent past match counts 1.0, the one before it
+    ALLOCATION_HISTORY_DECAY, and so on -- so "we were together last week"
+    outweighs any amount of ancient history.
+
+    Returns:
+        dict: {(player1_id, player2_id): weight} with player1_id < player2_id.
+            Empty when the match has no date or there is no history to use.
+    """
+    pairs = get_teammate_pairs(
+        match_id,
+        match.get("league_id"),
+        match.get("date"),
+        ALLOCATION_HISTORY_LOOKBACK,
+    )
+
+    # Rank the past matches by recency: 0 is the most recent one
+    recency = {}
+    for row in pairs:
+        if row["match_id"] not in recency:
+            recency[row["match_id"]] = len(recency)
+
+    weights = {}
+    for row in pairs:
+        weight = ALLOCATION_HISTORY_DECAY ** recency[row["match_id"]]
+        key = (row["player1_id"], row["player2_id"])
+        weights[key] = weights.get(key, 0.0) + weight
+    return weights
+
+
+def repeat_penalty(player_ids, weights):
+    """Total teammate-history weight among a group of players"""
+    if not weights:
+        return 0.0
+
+    ids = sorted(player_ids)
+    total = 0.0
+    for i, first in enumerate(ids):
+        for second in ids[i + 1 :]:
+            total += weights.get((first, second), 0.0)
+    return total
+
+
+def random_balanced_split(scores, size1):
+    """Build one balanced split from a random starting point.
+
+    Shuffling first means the greedy pass lands somewhere different every call,
+    which is what the exhaustive path gets from enumeration.
+
+    Returns:
+        frozenset: Indices belonging to team 1
+    """
+    total = len(scores)
+    indices = list(range(total))
+    random.shuffle(indices)
+
+    team1, team2 = [], []
+    score1, score2 = 0, 0
+    for i in indices:
+        if len(team1) >= size1:
+            team2.append(i)
+            score2 += scores[i]
+        elif len(team2) >= total - size1:
+            team1.append(i)
+            score1 += scores[i]
+        elif score1 <= score2:
+            team1.append(i)
+            score1 += scores[i]
+        else:
+            team2.append(i)
+            score2 += scores[i]
+
+    # Walk downhill to a local optimum, visiting swaps in random order
+    diff = abs(score1 - score2)
+    for _ in range(ALLOCATION_MAX_ITERATIONS):
+        random.shuffle(team1)
+        random.shuffle(team2)
+        improved = False
+        for a, p1 in enumerate(team1):
+            for b, p2 in enumerate(team2):
+                new1 = score1 - scores[p1] + scores[p2]
+                new2 = score2 - scores[p2] + scores[p1]
+                new_diff = abs(new1 - new2)
+                if new_diff < diff:
+                    team1[a], team2[b] = p2, p1
+                    score1, score2, diff = new1, new2, new_diff
+                    improved = True
+                    break
+            if improved:
+                break
+        if not improved:
+            break
+
+    return frozenset(team1)
+
+
+def generate_split_candidates(scores, size1):
+    """Yield candidate team-1 index sets.
+
+    Enumerates every split when the search space is small enough, and falls back
+    to randomized restarts for large squads. Index 0 is pinned to team 1 because
+    a split and its mirror image are the same allocation.
+    """
+    total = len(scores)
+    if total == 0 or size1 <= 0:
+        return
+
+    space = math.comb(total - 1, size1 - 1)
+    if space <= ALLOCATION_ENUMERATION_LIMIT:
+        for rest in itertools.combinations(range(1, total), size1 - 1):
+            yield frozenset((0,) + rest)
+    else:
+        for _ in range(ALLOCATION_RANDOM_RESTARTS):
+            yield random_balanced_split(scores, size1)
+
+
+def pick_balanced_split(players, size1, weights=None):
+    """Split players into two teams: balanced first, then varied.
+
+    Balance is a hard constraint -- only splits within ALLOCATION_BALANCE_TOLERANCE
+    of the best achievable score difference are eligible. The choice among those
+    equally-balanced splits is what breaks up repeat teammates and, when there is
+    no history to go on, is simply random. That ordering means variety can never
+    cost balance.
+
+    Args:
+        players: Player dicts to split
+        size1: How many players team 1 gets
+        weights: Optional teammate-history weights from build_teammate_weights
+
+    Returns:
+        tuple: (team1 players, team2 players)
+    """
+    scores = [calculate_overall_score(p) for p in players]
+    total_score = sum(scores)
+    tolerance = max(1, round(total_score * ALLOCATION_BALANCE_TOLERANCE))
+
+    candidates = []
+    seen = set()
+    for combo in generate_split_candidates(scores, size1):
+        if combo in seen:
+            continue
+        seen.add(combo)
+        team1_score = sum(scores[i] for i in combo)
+        candidates.append((abs(2 * team1_score - total_score), combo))
+
+    if not candidates:
+        return list(players), []
+
+    cutoff = min(diff for diff, _ in candidates) + tolerance
+    eligible = [combo for diff, combo in candidates if diff <= cutoff]
+    if len(eligible) > ALLOCATION_CANDIDATE_CAP:
+        eligible = random.sample(eligible, ALLOCATION_CANDIDATE_CAP)
+
+    if weights:
+        player_ids = [p["id"] for p in players]
+        penalties = []
+        for combo in eligible:
+            team1_ids = [player_ids[i] for i in combo]
+            team2_ids = [player_ids[i] for i in range(len(players)) if i not in combo]
+            penalties.append(
+                (
+                    repeat_penalty(team1_ids, weights)
+                    + repeat_penalty(team2_ids, weights),
+                    combo,
+                )
+            )
+        lowest = min(penalty for penalty, _ in penalties)
+        eligible = [combo for penalty, combo in penalties if penalty == lowest]
+
+    chosen = random.choice(eligible)
+    team1 = [players[i] for i in sorted(chosen)]
+    team2 = [players[i] for i in range(len(players)) if i not in chosen]
+    return team1, team2
+
+
+def select_starters(players, num_starters):
+    """Split players into starters and substitutes by score.
+
+    Players whose score sits within ALLOCATION_SUB_BAND of the cutoff compete for
+    the last starting spots at random, so the same borderline players do not end
+    up on the bench every single week. Anyone clearly above or below the band
+    keeps their place.
+
+    Returns:
+        tuple: (starters, substitutes)
+    """
+    ordered = sorted(players, key=calculate_overall_score, reverse=True)
+    if num_starters >= len(ordered):
+        return ordered, []
+    if num_starters <= 0:
+        return [], ordered
+
+    cutoff = calculate_overall_score(ordered[num_starters - 1])
+    locked_in, contenders, locked_out = [], [], []
+    for player in ordered:
+        score = calculate_overall_score(player)
+        if score > cutoff + ALLOCATION_SUB_BAND:
+            locked_in.append(player)
+        elif score < cutoff - ALLOCATION_SUB_BAND:
+            locked_out.append(player)
+        else:
+            contenders.append(player)
+
+    random.shuffle(contenders)
+    spots = num_starters - len(locked_in)
+    return locked_in + contenders[:spots], contenders[spots:] + locked_out
 
 
 def allocate_teams():
@@ -23,27 +247,7 @@ def allocate_teams():
     if len(players) < 2:
         return False, "Need at least 2 players"
 
-    # Sort by overall rating
-    sorted_players = sorted(
-        players, key=lambda x: calculate_player_overall(x), reverse=True
-    )
-
-    # Balance teams
-    team1, team2 = [], []
-    team1_score, team2_score = 0, 0
-    max_per_team = (len(players) + 1) // 2
-
-    for player in sorted_players:
-        score = calculate_player_overall(player)
-
-        if len(team1) < max_per_team and (
-            len(team2) >= max_per_team or team1_score <= team2_score
-        ):
-            team1.append(player)
-            team1_score += score
-        else:
-            team2.append(player)
-            team2_score += score
+    team1, team2 = pick_balanced_split(players, (len(players) + 1) // 2)
 
     assign_positions(team1, 1)
     assign_positions(team2, 2)
@@ -187,101 +391,23 @@ def allocate_two_teams(match_id, players, match, allocated_teams):
 
     # Get max players per team from match
     max_players_per_team = match.get("max_players_per_team")
-
-    # Sort by overall rating (descending)
-    sorted_players = sorted(
-        players, key=lambda x: calculate_overall_score(x), reverse=True
+    max_per_team = max(
+        1, max_players_per_team if max_players_per_team else (len(players) + 1) // 2
     )
 
-    # Initialize teams
-    team1_starters, team2_starters = [], []
-    team1_substitutes, team2_substitutes = [], []
-    team1_score, team2_score = 0, 0
-    max_per_team = (
-        max_players_per_team if max_players_per_team else (len(players) + 1) // 2
+    # Decide who starts and who sits, then split the starters into two teams
+    num_starters = min(len(players), max_per_team * 2)
+    starters, substitutes = select_starters(players, num_starters)
+
+    weights = build_teammate_weights(match_id, match)
+    team1_starters, team2_starters = pick_balanced_split(
+        starters, (len(starters) + 1) // 2, weights
     )
-
-    # First, allocate starters (up to max_per_team per team)
-    for player in sorted_players:
-        score = calculate_overall_score(player)
-
-        # Check if we can add to team1 (size constraint)
-        can_add_to_team1 = len(team1_starters) < max_per_team
-        # Check if we can add to team2 (size constraint)
-        can_add_to_team2 = len(team2_starters) < max_per_team
-
-        if not can_add_to_team1:
-            # Must add to team2
-            if len(team2_starters) < max_per_team:
-                team2_starters.append(player)
-                team2_score += score
-            else:
-                # Both teams full for starters, will be allocated as substitutes later
-                pass
-        elif not can_add_to_team2:
-            # Must add to team1
-            if len(team1_starters) < max_per_team:
-                team1_starters.append(player)
-                team1_score += score
-            else:
-                # Both teams full for starters, will be allocated as substitutes later
-                pass
-        else:
-            # Both teams can accept more starters
-            # Add to the team with lower total score
-            if team1_score <= team2_score:
-                team1_starters.append(player)
-                team1_score += score
-            else:
-                team2_starters.append(player)
-                team2_score += score
-
-    # Get remaining players (those not allocated as starters) as substitutes
-    allocated_starter_ids = {p["id"] for p in team1_starters + team2_starters}
-    remaining_players = [
-        p for p in sorted_players if p["id"] not in allocated_starter_ids
-    ]
 
     # Distribute substitutes evenly between teams
-    for idx, player in enumerate(remaining_players):
-        if idx % 2 == 0:
-            team1_substitutes.append(player)
-        else:
-            team2_substitutes.append(player)
-
-    # Try to optimize by swapping starters to minimize score difference
-    current_diff = abs(team1_score - team2_score)
-
-    improved = True
-    iteration = 0
-
-    while improved and iteration < ALLOCATION_MAX_ITERATIONS:
-        improved = False
-        iteration += 1
-
-        for p1 in list(team1_starters):
-            for p2 in list(team2_starters):
-                p1_score = calculate_overall_score(p1)
-                p2_score = calculate_overall_score(p2)
-
-                new_team1_score = team1_score - p1_score + p2_score
-                new_team2_score = team2_score - p2_score + p1_score
-                new_diff = abs(new_team1_score - new_team2_score)
-
-                if new_diff < current_diff:
-                    team1_starters.remove(p1)
-                    team2_starters.remove(p2)
-                    team1_starters.append(p2)
-                    team2_starters.append(p1)
-
-                    team1_score = new_team1_score
-                    team2_score = new_team2_score
-                    current_diff = new_diff
-                    improved = True
-                    break
-
-            if improved:
-                break
+    random.shuffle(substitutes)
+    team1_substitutes = substitutes[0::2]
+    team2_substitutes = substitutes[1::2]
 
     # Assign positions for starters and substitutes
     assign_match_positions_with_subs(

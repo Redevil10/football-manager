@@ -74,6 +74,60 @@ def get_match_signup_players(match_id: int) -> list[dict]:
     return result
 
 
+def get_teammate_pairs(
+    match_id: int,
+    league_id: Optional[int],
+    before_date: Optional[str],
+    lookback: int,
+) -> list[dict]:
+    """Get pairs of players who were on the same team in recent past matches.
+
+    Every match with an allocation counts as played -- scores are often left
+    unfilled, so they say nothing about whether a match happened. Only the date
+    decides what counts as history.
+
+    Args:
+        match_id: ID of the match being allocated (excluded from the history)
+        league_id: League to look within (NULL matches only pair with NULL)
+        before_date: Only matches strictly before this ISO date count
+        lookback: Maximum number of past matches to consider
+
+    Returns:
+        list[dict]: Rows of {player1_id, player2_id, match_id, date}, where
+            player1_id < player2_id, ordered most recent match first
+    """
+    if not before_date:
+        return []
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """WITH recent_matches AS (
+                   SELECT id, date FROM matches
+                   WHERE id != ? AND date < ? AND league_id IS ?
+                   ORDER BY date DESC, id DESC
+                   LIMIT ?
+               )
+               SELECT a.player_id AS player1_id,
+                      b.player_id AS player2_id,
+                      rm.id       AS match_id,
+                      rm.date     AS date
+               FROM recent_matches rm
+               JOIN match_players a
+                 ON a.match_id = rm.id AND a.team_id IS NOT NULL
+               JOIN match_players b
+                 ON b.match_id = rm.id
+                AND b.team_id = a.team_id
+                AND b.player_id > a.player_id
+               ORDER BY rm.date DESC, rm.id DESC""",
+            (match_id, before_date, league_id, lookback),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return [dict(row) for row in rows]
+
+
 def add_match_player(
     match_id: int,
     player_id: int,
