@@ -172,12 +172,12 @@ def get_next_match_by_league(league_id: int) -> Optional[Dict[str, Any]]:
     conn = get_db()
     try:
         # SQLite stores dates/times as ISO TEXT, so string comparison is correct.
+        # Times go through time() on both sides: the pickers submit HH:MM while the
+        # clock below is HH:MM:SS, and "10:00" < "10:00:00" as plain text.
         today = date.today().isoformat()
         now = datetime.now().strftime("%H:%M:%S")
         # Upcoming = not yet started (complement of get_last_completed_match).
-        where_clause = (
-            "m.league_id = ? AND ((m.date > ?) OR (m.date = ? AND m.start_time >= ?))"
-        )
+        where_clause = "m.league_id = ? AND ((m.date > ?) OR (m.date = ? AND time(m.start_time) >= time(?)))"
         query = """SELECT m.*, l.name as league_name
                    FROM matches m
                    LEFT JOIN leagues l ON m.league_id = l.id"""
@@ -229,7 +229,7 @@ def get_last_completed_match() -> Optional[Dict[str, Any]]:
         now = datetime.now().strftime("%H:%M:%S")
 
         # Get matches that are in the past (date < today, or date = today but start_time < now)
-        where_clause = "(m.date < ?) OR (m.date = ? AND m.start_time < ?)"
+        where_clause = "(m.date < ?) OR (m.date = ? AND time(m.start_time) < time(?))"
         query, params = _build_match_query_with_league(
             where_clause, (today, today, now), limit=1
         )
@@ -278,12 +278,17 @@ def get_recent_matches_by_league(
         List[Dict[str, Any]]: Match dicts with league_name, newest first.
     """
     # SQLite stores dates/times as ISO TEXT, so string comparison is correct.
+    # Times go through time() on both sides: the pickers submit HH:MM while the
+    # clock below is HH:MM:SS, and "10:00" < "10:00:00" as plain text.
     today = date.today().isoformat()
     now = datetime.now().strftime("%H:%M:%S")
     cutoff = (date.today() - timedelta(days=months * 30)).isoformat()
 
     # Past = already started (mirror of the upcoming filter elsewhere).
-    where = ["((m.date < ?) OR (m.date = ? AND m.start_time < ?))", "m.date >= ?"]
+    where = [
+        "((m.date < ?) OR (m.date = ? AND time(m.start_time) < time(?)))",
+        "m.date >= ?",
+    ]
     params: List[Any] = [today, today, now, cutoff]
 
     conn = get_db()
@@ -334,10 +339,12 @@ def get_recent_matches(
         List[Dict[str, Any]]: List of match dictionaries with league_name
     """
     # SQLite stores dates/times as ISO TEXT, so string comparison is correct.
+    # Times go through time() on both sides: the pickers submit HH:MM while the
+    # clock below is HH:MM:SS, and "10:00" < "10:00:00" as plain text.
     today = date.today().isoformat()
     now = datetime.now().strftime("%H:%M:%S")
     # Past = already started (mirror of the upcoming filter in get_next_match_by_league).
-    past_clause = "((m.date < ?) OR (m.date = ? AND m.start_time < ?))"
+    past_clause = "((m.date < ?) OR (m.date = ? AND time(m.start_time) < time(?)))"
     past_params = (today, today, now)
 
     conn = get_db()
