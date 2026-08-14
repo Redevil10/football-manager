@@ -38,6 +38,12 @@ def render_head(title, STYLE, *extra):
         Meta(charset="UTF-8"),
         Meta(name="viewport", content="width=device-width, initial-scale=1"),
         Link(rel="icon", href="/static/favicon.svg", type="image/svg+xml"),
+        Link(rel="preconnect", href="https://fonts.googleapis.com"),
+        Link(rel="preconnect", href="https://fonts.gstatic.com", crossorigin=""),
+        Link(
+            rel="stylesheet",
+            href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap",
+        ),
         Title(title),
         Style(STYLE),
         Script(src="https://unpkg.com/htmx.org@1.9.10"),
@@ -194,33 +200,16 @@ def render_navbar(user=None, sess=None, current_url="/"):
             if club_selector is not None:
                 right_items.append(club_selector)
 
-        user_display = Span(
-            f"👤 {user['username']}", style="margin-right: 15px; color: #333;"
-        )
+        user_display = Span(f"👤 {user['username']}", cls="nav-user")
         right_items.append(user_display)
 
         if user.get("is_superuser"):
-            right_items.append(
-                Span(
-                    "⭐ Superuser",
-                    style="margin-right: 15px; color: gold; font-weight: bold;",
-                )
-            )
+            right_items.append(Span("⭐ Superuser", cls="nav-badge"))
 
-        right_items.append(
-            A(
-                "Logout",
-                href="/logout",
-                style="padding: 5px 15px; background: #dc3545; color: white; text-decoration: none; border-radius: 4px;",
-            )
-        )
+        right_items.append(A("Logout", href="/logout", cls="nav-action"))
     else:
         right_items.append(
-            A(
-                "Login",
-                href="/login",
-                style="margin-left: auto; padding: 5px 15px; background: #007bff; color: white; text-decoration: none; border-radius: 4px;",
-            )
+            A("Login", href="/login", cls="nav-action", style="margin-left: auto;")
         )
 
     return Div(

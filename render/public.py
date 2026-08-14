@@ -27,13 +27,13 @@ def _public_header():
         ),
         Span(
             "Public read-only view",
-            style="color: #888; font-size: 13px;",
+            style="color: var(--muted); font-size: 13px;",
         ),
     ]
     return Div(
         style=(
             "display: flex; align-items: center; justify-content: space-between; "
-            "padding: 12px 20px; border-bottom: 1px solid #eee; margin-bottom: 20px;"
+            "padding: 12px 20px; border-bottom: 1px solid var(--line); margin-bottom: 20px;"
         )
     )(*children)
 
@@ -58,7 +58,7 @@ def render_public_leagues_index(leagues, STYLE):
         H2("Public Leagues"),
         P(
             "Browse leagues that have been shared publicly. No account needed.",
-            style="color: #666;",
+            style="color: var(--muted);",
         ),
     ]
 
@@ -67,7 +67,7 @@ def render_public_leagues_index(leagues, STYLE):
             Div(cls="container-white")(
                 P(
                     "No public leagues available yet.",
-                    style="text-align: center; color: #666;",
+                    style="text-align: center; color: var(--muted);",
                 )
             )
         )
@@ -77,12 +77,15 @@ def render_public_leagues_index(leagues, STYLE):
         content.append(
             Div(cls="container-white", style="margin-bottom: 10px;")(
                 A(
-                    H4(league["name"], style="margin: 0; color: #007bff;"),
+                    H4(league["name"], style="margin: 0; color: var(--navy);"),
                     href=f"/public/league/{league['id']}",
                     style="text-decoration: none;",
                 ),
                 (
-                    P(league["description"], style="margin: 5px 0; color: #666;")
+                    P(
+                        league["description"],
+                        style="margin: 5px 0; color: var(--muted);",
+                    )
                     if league.get("description")
                     else ""
                 ),
@@ -105,7 +108,7 @@ def render_public_not_found(STYLE):
             H2("This page isn't available"),
             P(
                 "This link is either invalid or not shared publicly.",
-                style="color: #666;",
+                style="color: var(--muted);",
             ),
         ),
     )
@@ -116,12 +119,12 @@ def render_public_league(league, matches, STYLE):
     content = [H2(league["name"])]
 
     if league.get("description"):
-        content.append(P(league["description"], style="color: #666;"))
+        content.append(P(league["description"], style="color: var(--muted);"))
 
     if not matches:
         content.append(
             Div(cls="container-white")(
-                P("No matches yet.", style="text-align: center; color: #666;")
+                P("No matches yet.", style="text-align: center; color: var(--muted);")
             )
         )
         return render_public_page(
@@ -147,19 +150,22 @@ def render_public_league(league, matches, STYLE):
         content.append(
             Div(cls="container-white", style="margin-bottom: 10px;")(
                 A(
-                    H4(format_match_name(match), style="margin: 0; color: #007bff;"),
+                    H4(
+                        format_match_name(match),
+                        style="margin: 0; color: var(--navy);",
+                    ),
                     href=f"/public/match/{match['id']}",
                     style="text-decoration: none;",
                 ),
                 (
-                    P(" | ".join(info), style="margin: 5px 0; color: #666;")
+                    P(" | ".join(info), style="margin: 5px 0; color: var(--muted);")
                     if info
                     else ""
                 ),
                 (
                     P(
                         score_display,
-                        style="margin: 5px 0; font-weight: bold; color: #0066cc;",
+                        style="margin: 5px 0; font-weight: bold; color: var(--navy-dark);",
                     )
                     if score_display
                     else ""

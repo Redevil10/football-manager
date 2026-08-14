@@ -79,61 +79,55 @@ def register_auth_routes(rt, STYLE):
         return Html(
             render_head("Login - Football Manager", STYLE),
             Body(
-                Div(cls="container", style="max-width: 400px; margin: 100px auto;")(
-                    H2("Login"),
-                    error_msg
-                    and P(
-                        error_msg.replace("+", " "),
-                        style="color: red; margin-bottom: 15px; padding: 10px; background: #fee; border: 1px solid #fcc; border-radius: 4px;",
-                    )
-                    or "",
-                    Form(
-                        Div(cls="input-group", style="margin-bottom: 15px;")(
-                            Label("Username:"),
-                            Input(
-                                type="text",
-                                name="username",
-                                required=True,
-                                autocomplete="username",
-                                style="width: 100%; padding: 8px;",
-                                **{
-                                    "onkeydown": "if(event.key === 'Enter') { event.preventDefault(); this.form.submit(); }"
-                                },
+                Div(cls="auth-page")(
+                    Div(cls="login-card")(
+                        Div(cls="login-crest")(Img(src="/static/logo.svg", alt="")),
+                        H2("Login"),
+                        error_msg
+                        and P(error_msg.replace("+", " "), cls="auth-error")
+                        or "",
+                        Form(
+                            Div(cls="input-group", style="margin-bottom: 15px;")(
+                                Label("Username:"),
+                                Input(
+                                    type="text",
+                                    name="username",
+                                    required=True,
+                                    autocomplete="username",
+                                    style="width: 100%;",
+                                    **{
+                                        "onkeydown": "if(event.key === 'Enter') { event.preventDefault(); this.form.submit(); }"
+                                    },
+                                ),
                             ),
-                        ),
-                        Div(cls="input-group", style="margin-bottom: 15px;")(
-                            Label("Password:"),
-                            Input(
-                                type="password",
-                                name="password",
-                                required=True,
-                                autocomplete="current-password",
-                                style="width: 100%; padding: 8px;",
-                                **{
-                                    "onkeydown": "if(event.key === 'Enter') { event.preventDefault(); this.form.submit(); }"
-                                },
+                            Div(cls="input-group", style="margin-bottom: 15px;")(
+                                Label("Password:"),
+                                Input(
+                                    type="password",
+                                    name="password",
+                                    required=True,
+                                    autocomplete="current-password",
+                                    style="width: 100%;",
+                                    **{
+                                        "onkeydown": "if(event.key === 'Enter') { event.preventDefault(); this.form.submit(); }"
+                                    },
+                                ),
                             ),
+                            Button(
+                                "Login",
+                                type="submit",
+                                style="width: 100%;",
+                            ),
+                            method="post",
+                            action="/login",
                         ),
-                        Button(
-                            "Login",
-                            type="submit",
-                            cls="btn-success",
-                            style="width: 100%;",
+                        Div(cls="auth-divider")("or"),
+                        A(
+                            "Browse Public Leagues",
+                            href="/public",
+                            cls="btn-outline",
+                            style="display: block; padding: 10px; text-decoration: none; border-radius: 5px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;",
                         ),
-                        method="post",
-                        action="/login",
-                    ),
-                    Div(
-                        style="display: flex; align-items: center; margin: 20px 0; gap: 10px;"
-                    )(
-                        Hr(style="flex: 1; border: none; border-top: 1px solid #ccc;"),
-                        Span("or", style="color: #888; font-size: 14px;"),
-                        Hr(style="flex: 1; border: none; border-top: 1px solid #ccc;"),
-                    ),
-                    A(
-                        "Browse Public Leagues",
-                        href="/public",
-                        style="display: block; text-align: center; padding: 10px; margin-top: 10px; border: 1px solid #007bff; border-radius: 4px; color: #007bff; text-decoration: none; font-size: 14px;",
                     ),
                 ),
             ),
