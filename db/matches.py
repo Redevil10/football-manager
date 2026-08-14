@@ -382,12 +382,20 @@ def get_match(
         club_ids: Optional list of club IDs to check access against
 
     Returns:
-        Optional[Dict[str, Any]]: Match dictionary if found and accessible, None otherwise
+        Optional[Dict[str, Any]]: Match dictionary with league_name if found and
+            accessible, None otherwise
     """
     conn = get_db()
     try:
+        # Joined for league_name, which the detail page shows. Without it the
+        # page fell back to "Friendly" for every match, whatever league it was
+        # actually in.
         match = conn.execute(
-            "SELECT * FROM matches WHERE id = ?", (match_id,)
+            """SELECT m.*, l.name AS league_name
+               FROM matches m
+               LEFT JOIN leagues l ON m.league_id = l.id
+               WHERE m.id = ?""",
+            (match_id,),
         ).fetchone()
 
         if not match:

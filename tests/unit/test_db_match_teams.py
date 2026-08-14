@@ -233,18 +233,32 @@ class TestUpdateMatchTeamEdgeCases:
         assert teams[0]["captain_id"] == player_id
         assert teams[0]["should_allocate"] == 0
 
-    def test_update_match_team_score_to_none(self, temp_db, sample_match):
-        """Test updating score to None (clearing score)"""
+    def test_omitting_the_score_keeps_the_stored_one(self, temp_db, sample_match):
+        """A caller that never mentions the score must not disturb it."""
         team_id = create_match_team(sample_match, 1, "Team A", "Red")
         update_match_team(team_id, "Team A", "Red", score=3)
 
-        # Update without score (should keep existing score)
         result = update_match_team(team_id, "Team A", "Red")
 
         assert result is True
         teams = get_match_teams(sample_match)
-        # Score should still be 3 (not cleared)
         assert teams[0]["score"] == 3
+
+    def test_passing_none_clears_the_score(self, temp_db, sample_match):
+        """Emptying the score box on the edit form has to erase the old score.
+
+        This is the other half of the test above: None is a value, not an
+        absence, so it must reach the column instead of being read as "nothing
+        supplied, leave it alone".
+        """
+        team_id = create_match_team(sample_match, 1, "Team A", "Red")
+        update_match_team(team_id, "Team A", "Red", score=3)
+
+        result = update_match_team(team_id, "Team A", "Red", score=None)
+
+        assert result is True
+        teams = get_match_teams(sample_match)
+        assert teams[0]["score"] is None
 
     def test_update_match_team_captain_to_none(self, temp_db, sample_match):
         """Test updating captain to None (clearing captain)"""

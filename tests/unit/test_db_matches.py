@@ -732,3 +732,26 @@ class TestGetRecentMatchesByLeague:
         self._played(league, 3)
 
         assert get_recent_matches_by_league(club_ids=[]) == []
+
+
+class TestGetMatchReturnsLeagueName:
+    """get_match must carry the league name the detail page shows.
+
+    Without the join the page read `league_name` off a dict that never had it
+    and fell back to "Friendly" for every match in the app.
+    """
+
+    def test_get_match_includes_league_name(self, temp_db):
+        league_id = create_league("Premier League")
+        match_id = create_match(
+            league_id=league_id,
+            date="2024-01-15",
+            start_time="10:00",
+            end_time=None,
+            location="Field",
+            num_teams=2,
+        )
+
+        match = get_match(match_id)
+
+        assert match["league_name"] == "Premier League"
