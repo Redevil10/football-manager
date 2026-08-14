@@ -98,7 +98,7 @@ def drag(page, from_index, to_index):
 
 
 def allocate(page):
-    click_in_place(page, "text=Allocate Teams")
+    click_in_place(page, 'button:text-is("Allocate")')
 
 
 def by_position(slots):
@@ -185,19 +185,19 @@ class TestAllocateAndReset:
         """Regression: the clicked button kept focus while the swap deleted it,
         so the browser went hunting for a focus target and scrolled 1800px."""
         allocate(page)
-        before = click_in_place(page, "text=Allocate Teams")
+        before = click_in_place(page, 'button:text-is("Allocate")')
 
         assert page.evaluate("window.scrollY") == before
 
     def test_reset_does_not_move_the_page(self, page):
         allocate(page)
-        before = click_in_place(page, "text=Reset Teams")
+        before = click_in_place(page, 'button:text-is("Reset")')
 
         assert page.evaluate("window.scrollY") == before
 
     def test_reset_empties_the_teams(self, page):
         allocate(page)
-        click_in_place(page, "text=Reset Teams")
+        click_in_place(page, 'button:text-is("Reset")')
 
         occupied = page.evaluate(
             "() => document.querySelectorAll('.position-slot[data-player-id]').length"
@@ -312,7 +312,7 @@ class TestSwapKeepsTheViewStill:
         allocate(page)
         page.evaluate(self.WATCH_FOCUS)
 
-        click_in_place(page, "text=Allocate Teams")
+        click_in_place(page, 'button:text-is("Allocate")')
 
         assert page.evaluate("window.__focusedInsideTarget") is False, (
             "the clicked button still held focus when the swap deleted it"

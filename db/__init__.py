@@ -69,6 +69,7 @@ from db.matches import (
     get_next_match_by_league,
     get_next_matches_by_all_leagues,
     get_recent_matches,
+    get_recent_matches_by_league,
     save_match_info,
     update_match,
 )
@@ -136,6 +137,7 @@ __all__ = [
     "get_last_completed_match",
     "get_last_created_match",
     "get_recent_matches",
+    "get_recent_matches_by_league",
     "get_match",
     "create_match",
     "update_match",

@@ -103,9 +103,7 @@ def register_player_routes(rt, STYLE):
                 Div(cls="container")(
                     H2(f"All Players ({len(players)})"),
                     render_add_player_form(error) if can_add_player else "",
-                    Div(cls="container-white")(
-                        render_player_table(sorted_players, user)
-                    ),
+                    Div(cls="container-white")(render_player_table(sorted_players)),
                 ),
             ),
         )

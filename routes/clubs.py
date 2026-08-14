@@ -452,34 +452,26 @@ def render_clubs_list(clubs, user=None):
                     A(
                         club["name"],
                         href=f"/club/{club['id']}",
-                        style="color: #007bff; text-decoration: none; font-weight: bold;",
                     )
                 ),
                 Td(
                     club.get("description", "")[:100]
                     + ("..." if len(club.get("description", "")) > 100 else "")
                 ),
-                Td(
-                    A(
-                        "View",
-                        href=f"/club/{club['id']}",
-                        style="background: #0066cc; margin-right: 5px;",
-                    ),
-                ),
             )
         )
 
+    # No actions column: the club name links to the same detail page, and edit
+    # and delete live there rather than on this list.
     return Div(cls="container-white")(
-        Table(
+        Table(cls="player-table")(
             Thead(
                 Tr(
-                    Th("Name", style="text-align: left;"),
-                    Th("Description", style="text-align: left;"),
-                    Th("Actions", style="text-align: left;"),
+                    Th("Name"),
+                    Th("Description"),
                 )
             ),
             Tbody(*rows),
-            style="width: 100%;",
         )
     )
 
@@ -601,7 +593,6 @@ def render_club_members(club_id, club_members, user=None):
                                         "Remove",
                                         type="submit",
                                         cls="btn-danger",
-                                        style="padding: 4px 8px; font-size: 12px;",
                                     ),
                                 )
                                 if not member["is_superuser"]
@@ -614,17 +605,16 @@ def render_club_members(club_id, club_members, user=None):
         content.append(
             Div(cls="container-white")(
                 H4("Current Members"),
-                Table(
+                Table(cls="player-table")(
                     Thead(
                         Tr(
-                            Th("Username", style="text-align: left;"),
-                            Th("Email", style="text-align: left;"),
-                            Th("Role", style="text-align: left;"),
-                            Th("Actions", style="text-align: left;"),
+                            Th("Username"),
+                            Th("Email"),
+                            Th("Role"),
+                            Th("Actions"),
                         )
                     ),
                     Tbody(*member_rows),
-                    style="width: 100%;",
                 ),
             )
         )
@@ -699,7 +689,6 @@ def render_club_leagues(club_id, leagues_for_club, all_leagues, user=None):
                         A(
                             league["name"],
                             href=f"/league/{league['id']}",
-                            style="color: #007bff; text-decoration: none; font-weight: bold;",
                         )
                     ),
                     Td(
@@ -719,7 +708,6 @@ def render_club_leagues(club_id, leagues_for_club, all_leagues, user=None):
                                 "Remove",
                                 type="submit",
                                 cls="btn-danger",
-                                style="padding: 4px 8px; font-size: 12px;",
                             ),
                         )
                     ),
@@ -729,16 +717,15 @@ def render_club_leagues(club_id, leagues_for_club, all_leagues, user=None):
         content.append(
             Div(cls="container-white")(
                 H4("Leagues This Club Participates In"),
-                Table(
+                Table(cls="player-table")(
                     Thead(
                         Tr(
-                            Th("League Name", style="text-align: left;"),
-                            Th("Description", style="text-align: left;"),
-                            Th("Actions", style="text-align: left;"),
+                            Th("League Name"),
+                            Th("Description"),
+                            Th("Actions"),
                         )
                     ),
                     Tbody(*league_rows),
-                    style="width: 100%;",
                 ),
             )
         )

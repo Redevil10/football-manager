@@ -33,7 +33,8 @@ body {
 }
 
 h1, h2, .navbar h1, .team-header, .attr-section-title, .player-overall,
-.mode-btn, button, .login-card h2, .team-table-header {
+.mode-btn, button, .login-card h2, .team-table-header,
+a.btn-danger, a.btn-secondary, a.btn-success, a.btn-outline {
     font-family: var(--font-display);
 }
 
@@ -145,6 +146,48 @@ input, select, textarea {
     font-family: var(--font-body);
     background: white;
     color: var(--ink);
+    /* The forms pair `width: 100%` with padding all over the app. Without this
+       the padding is added on top of the 100% and the field overflows whatever
+       box it sits in -- and it makes the max-widths below mean what they say. */
+    box-sizing: border-box;
+}
+
+/* Field width should hint at how much you are expected to type. The forms set
+   `width: 100%` inline all over the app, which on a wide card handed a "18:30"
+   field several hundred pixels; a max-width caps that without having to touch
+   every call site, since the two properties are independent and the smaller
+   one wins. Anything with its own narrower width (score boxes, the navbar club
+   picker) is already below these and is unaffected. */
+input[type="date"],
+input[type="time"] {
+    max-width: 190px;
+}
+
+input[type="number"] {
+    max-width: 140px;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="url"],
+select {
+    max-width: 420px;
+}
+
+textarea {
+    max-width: 640px;
+}
+
+/* Controls inside a column grid are already sized by their column and are
+   meant to fill it -- the captain pickers line up under their own team's
+   table. Capping them there would leave each one adrift in a wider column and
+   break the symmetry the layout exists for. */
+.teams-grid-table input,
+.teams-grid-table select,
+.teams-grid input,
+.teams-grid select {
+    max-width: none;
 }
 
 input:focus, select:focus, textarea:focus {
@@ -153,46 +196,161 @@ input:focus, select:focus, textarea:focus {
     box-shadow: 0 0 0 3px rgba(18,35,63,0.14);
 }
 
-button {
+/* Shape only, shared by real buttons and the links dressed as buttons. Colour
+   lives in the variant rules below: putting it here too would out-specify
+   them, since `a.btn-outline` beats a bare `.btn-outline`. */
+button,
+a.btn-danger,
+a.btn-secondary,
+a.btn-success,
+a.btn-outline {
+    display: inline-block;
     padding: 9px 18px;
-    background: var(--navy);
-    color: white;
-    border: none;
     border-radius: 5px;
     cursor: pointer;
     font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.4px;
     text-transform: uppercase;
+    text-decoration: none;
+    text-align: center;
     transition: background 0.15s ease;
 }
 
+/* Default colour is for real buttons; an anchor always carries a variant.
+   `border` belongs here rather than in the shape rule above: there it would
+   out-specify .btn-outline's own border and flatten it. */
+button { background: var(--navy); color: white; border: none; }
 button:hover { background: var(--navy-dark); }
 
-.btn-danger { background: var(--danger); }
-.btn-danger:hover { background: var(--danger-dark); }
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover { background: var(--danger-dark); color: white; }
 
-.btn-secondary { background: var(--muted); }
-.btn-secondary:hover { background: #545967; }
+.btn-secondary { background: var(--muted); color: white; }
+.btn-secondary:hover { background: #545967; color: white; }
 
-.btn-success { background: var(--success); }
-.btn-success:hover { background: var(--success-dark); }
+.btn-success { background: var(--success); color: white; }
+.btn-success:hover { background: var(--success-dark); color: white; }
 
 .btn-outline {
-    display: inline-block;
     background: transparent;
     color: var(--navy);
     border: 1px solid var(--navy);
-    text-decoration: none;
-    text-align: center;
 }
 
-.btn-outline:hover { background: var(--navy-tint); }
+.btn-outline:hover { background: var(--navy-tint); color: var(--navy); }
 
 .btn-group {
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
+}
+
+/* Groups short related fields onto one row instead of a long single column.
+   auto-fit means the count follows the width, so it collapses to one per row
+   on a phone without a breakpoint of its own. */
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 0 20px;
+    align-items: start;
+}
+
+/* Match detail header: the meta line and the actions share a row rather than
+   stacking, which is most of the height of that card. */
+.match-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+}
+
+.match-header .btn-group {
+    margin: 0;
+}
+
+/* Title inside the header row: the page heading margins would push the
+   actions beside it out of line. */
+.match-title {
+    margin: 0 0 4px;
+    font-size: 22px;
+}
+
+/* A section heading with its controls on the same row, so short actions do not
+   each cost a line of their own above the content. */
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    margin-bottom: 15px;
+}
+
+/* Recent matches: a row per match inside one card, not a card per match. */
+.match-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 20px;
+    flex-wrap: wrap;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+    text-decoration: none;
+    color: inherit;
+}
+
+.match-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.match-row:first-child {
+    padding-top: 0;
+}
+
+.match-row:hover {
+    color: inherit;
+}
+
+.match-row:hover .match-row-name {
+    text-decoration: underline;
+}
+
+.match-row-name {
+    margin: 0 0 2px;
+    font-weight: 600;
+    color: var(--navy);
+}
+
+/* League name above the fixture: context, so it sits back from the title. */
+.match-league {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+/* When and where, sitting with the formation rather than up in the card header,
+   so a screenshot of the pitch carries the fixture details with it. */
+.match-fixture {
+    margin: 0 0 12px;
+    font-weight: 600;
+    color: var(--ink);
+    /* Centred over the pitch it captions, so the screenshot reads as one
+       composed image rather than a line of text with a picture under it. */
+    text-align: center;
+}
+
+/* The line-up sits in the same card as the fixture it belongs to, separated by
+   a rule rather than by being a card of its own. */
+.match-lineup {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
 }
 
 .player-table {
@@ -218,30 +376,58 @@ button:hover { background: var(--navy-dark); }
     background: var(--surface);
 }
 
+/* A name in a table is the row's identifier and its way in; underlining every
+   one of them turns the column into a wall of rules. */
+.player-table td a {
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.player-table td a:hover {
+    text-decoration: underline;
+}
+
 .player-row-actions {
     display: flex;
+    align-items: center;
     gap: 8px;
 }
 
-.player-row-actions a {
-    padding: 4px 8px;
+/* Row actions are compact controls. Links and the real submit button share one
+   shape here, otherwise a row mixes a small flat link with a full-size
+   uppercase button and reads as two different control styles. */
+.player-row-actions a,
+.player-row-actions button {
+    /* The display face is for full-size buttons; at this size it would set the
+       row's one real <button> apart from the links beside it. */
+    font-family: var(--font-body);
+    padding: 4px 10px;
     border-radius: 3px;
+    border: none;
     text-decoration: none;
     font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
     color: white;
     background: var(--navy);
     transition: background 0.2s;
 }
 
-.player-row-actions a:hover {
+.player-row-actions a:hover,
+.player-row-actions button:hover {
     background: var(--navy-dark);
 }
 
-.player-row-actions a.delete {
+/* Scoped past `.player-row-actions button` above, which would otherwise
+   out-specify the plain .btn-danger colour and turn delete navy. */
+.player-row-actions a.delete,
+.player-row-actions .btn-danger {
     background: var(--danger);
 }
 
-.player-row-actions a.delete:hover {
+.player-row-actions a.delete:hover,
+.player-row-actions .btn-danger:hover {
     background: var(--danger-dark);
 }
 
@@ -311,6 +497,63 @@ button:hover { background: var(--navy-dark); }
     color: var(--navy);
     text-align: center;
     margin: 20px 0;
+}
+
+/* Date, kick-off and place on one line, so the line-up starts higher up. */
+.match-meta {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.match-score {
+    margin: 6px 0 0;
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--navy);
+}
+
+/* Sections that are filled in after a match, if at all. They stay collapsed
+   while empty so they cost one line instead of a whole card. */
+.section-collapsible > .section-summary {
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--ink);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Safari still paints the default triangle without this. */
+.section-collapsible > .section-summary::-webkit-details-marker {
+    display: none;
+}
+
+/* Own marker, so it can rotate with the open state. */
+.section-collapsible > .section-summary::before {
+    content: "";
+    border: solid var(--muted);
+    border-width: 0 2px 2px 0;
+    padding: 3px;
+    transform: rotate(-45deg);
+    transition: transform 0.15s ease;
+}
+
+.section-collapsible[open] > .section-summary::before {
+    transform: rotate(45deg);
+}
+
+.section-collapsible[open] > .section-summary {
+    margin-bottom: 12px;
+}
+
+.section-collapsible > .section-summary:focus-visible {
+    outline: 2px solid var(--navy);
+    outline-offset: 2px;
 }
 
 .empty-state {

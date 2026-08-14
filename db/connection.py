@@ -123,7 +123,10 @@ def init_db():
                   team_number INTEGER NOT NULL,
                   team_name TEXT,
                   jersey_color TEXT,
-                  score INTEGER DEFAULT 0,
+                  -- No default: a team has no score until someone enters one,
+                  -- and 0 is a real result that must not be indistinguishable
+                  -- from "nobody filled this in".
+                  score INTEGER,
                   captain_id INTEGER,
                   should_allocate INTEGER DEFAULT 1,
                   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,

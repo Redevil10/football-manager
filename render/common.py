@@ -142,6 +142,37 @@ def is_match_completed(match):
         return False
 
 
+def format_match_meta(match, include_date=False):
+    """One line of match particulars: when and where.
+
+    A date, a time range and a place are recognisable without a "Date:" /
+    "Start Time:" label in front of each, and one line each was most of the
+    height of every match card.
+
+    Args:
+        match: Match dict.
+        include_date: Prepend the date. Off where the heading above already
+            opens with it, on where this line has to stand on its own.
+
+    Returns:
+        str: e.g. "15:30-17:30 · Eric Primrose Reserve", or "" if nothing set.
+    """
+    if not match:
+        return ""
+
+    times = [t for t in (match.get("start_time"), match.get("end_time")) if t]
+    parts = [
+        part
+        for part in (
+            match.get("date") if include_date else None,
+            "–".join(times) if times else None,
+            match.get("location"),
+        )
+        if part
+    ]
+    return " · ".join(parts)
+
+
 def get_match_score_display(match_id):
     """Get match score display string for a match"""
     teams = get_match_teams(match_id)

@@ -175,7 +175,7 @@ def test_public_match_team_total_but_no_player_scores(client, seeded):
         'class="player-score"',  # the per-player rating column
         "Edit Match",
         "Delete Match",
-        "Allocate Teams",
+        ">Allocate<",
         'draggable="true"',
         "/edit_match/",
         "/delete_match/",

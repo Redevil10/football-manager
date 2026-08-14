@@ -647,7 +647,8 @@ class TestGetTeammatePairs:
             "SELECT score FROM match_teams WHERE match_id = ?", (past,)
         ).fetchall()
         conn.close()
-        assert all(row["score"] == 0 for row in scores)
+        # No score entered means NULL, not 0 -- 0 is a real result
+        assert all(row["score"] is None for row in scores)
 
         pairs = get_teammate_pairs(current, league_id, "2026-08-08", 10)
         assert len(pairs) == 2

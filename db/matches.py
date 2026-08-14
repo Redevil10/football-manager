@@ -1,7 +1,7 @@
 # db/matches.py - Match database operations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from core.exceptions import DatabaseError, IntegrityError
@@ -254,6 +254,63 @@ def get_last_created_match() -> Optional[Dict[str, Any]]:
                    ORDER BY m.created_at DESC LIMIT 1"""
         match = conn.execute(query).fetchone()
         return dict(match) if match else None
+    finally:
+        conn.close()
+
+
+def get_recent_matches_by_league(
+    per_league: int = 3,
+    months: int = 6,
+    club_ids: Optional[List[int]] = None,
+) -> List[Dict[str, Any]]:
+    """Get the most recent matches in each league, newest first.
+
+    Ranking happens per league in SQL rather than by taking the newest N
+    overall: one busy league would otherwise fill the whole list and the
+    quieter ones would never appear.
+
+    Args:
+        per_league: How many matches to keep from each league.
+        months: How far back to look. Older matches are left out entirely.
+        club_ids: Optional list of club IDs to filter matches by.
+
+    Returns:
+        List[Dict[str, Any]]: Match dicts with league_name, newest first.
+    """
+    # SQLite stores dates/times as ISO TEXT, so string comparison is correct.
+    today = date.today().isoformat()
+    now = datetime.now().strftime("%H:%M:%S")
+    cutoff = (date.today() - timedelta(days=months * 30)).isoformat()
+
+    # Past = already started (mirror of the upcoming filter elsewhere).
+    where = ["((m.date < ?) OR (m.date = ? AND m.start_time < ?))", "m.date >= ?"]
+    params: List[Any] = [today, today, now, cutoff]
+
+    conn = get_db()
+    try:
+        if club_ids is not None and len(club_ids) > 0:
+            league_ids = get_league_ids_for_clubs(club_ids)
+            if not league_ids:
+                return []
+            where.append(f"m.league_id IN ({','.join('?' * len(league_ids))})")
+            params.extend(league_ids)
+        elif club_ids is not None:
+            return []
+
+        query = f"""SELECT * FROM (
+                        SELECT m.*, l.name AS league_name,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY m.league_id
+                                   ORDER BY m.date DESC, m.start_time DESC
+                               ) AS league_rank
+                        FROM matches m
+                        LEFT JOIN leagues l ON m.league_id = l.id
+                        WHERE {" AND ".join(where)}
+                    )
+                    WHERE league_rank <= ?
+                    ORDER BY date DESC, start_time DESC"""
+        rows = conn.execute(query, (*params, per_league)).fetchall()
+        return [dict(row) for row in rows]
     finally:
         conn.close()
 

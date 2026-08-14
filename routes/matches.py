@@ -249,85 +249,91 @@ def register_match_routes(rt, STYLE):
                                     **{"onchange": "prefillMatchInfo()"},
                                 ),
                             ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
-                                    "Date:", style="display: block; margin-bottom: 5px;"
+                            # When and where: short fields that read as one
+                            # group, so they share a row instead of each taking
+                            # a full line of its own.
+                            Div(cls="form-grid")(
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Date:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Div(
+                                        style="display: flex; gap: 10px; align-items: center;"
+                                    )(
+                                        Input(
+                                            type="date",
+                                            name="date",
+                                            id="date",
+                                            value=default_date,
+                                            required=True,
+                                            style="flex: 1; padding: 8px;",
+                                        ),
+                                        Button(
+                                            "+7 Days",
+                                            type="button",
+                                            id="add_7_days_btn",
+                                            cls="btn-secondary",
+                                            style="padding: 8px 15px; white-space: nowrap;",
+                                            **{"onclick": "add7Days()"},
+                                        ),
+                                    ),
                                 ),
-                                Div(
-                                    style="display: flex; gap: 10px; align-items: center;"
-                                )(
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Start Time:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
                                     Input(
-                                        type="date",
-                                        name="date",
-                                        id="date",
-                                        value=default_date,
+                                        type="time",
+                                        name="start_time",
+                                        id="start_time",
+                                        value=default_start_time,
                                         required=True,
-                                        style="flex: 1; padding: 8px;",
-                                    ),
-                                    Button(
-                                        "+7 Days",
-                                        type="button",
-                                        id="add_7_days_btn",
-                                        cls="btn-secondary",
-                                        style="padding: 8px 15px; white-space: nowrap;",
-                                        **{"onclick": "add7Days()"},
+                                        style="width: 100%; padding: 8px;",
+                                        step="60",
                                     ),
                                 ),
-                            ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
-                                    "Start Time:",
-                                    style="display: block; margin-bottom: 5px;",
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "End Time:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="time",
+                                        name="end_time",
+                                        id="end_time",
+                                        value=default_end_time,
+                                        style="width: 100%; padding: 8px;",
+                                        step="60",
+                                    ),
                                 ),
-                                Input(
-                                    type="time",
-                                    name="start_time",
-                                    id="start_time",
-                                    value=default_start_time,
-                                    required=True,
-                                    style="width: 100%; padding: 8px;",
-                                    step="60",
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Location:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="location",
+                                        id="location",
+                                        value=default_location,
+                                        required=True,
+                                        style="width: 100%; padding: 8px;",
+                                    ),
                                 ),
-                            ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
-                                    "End Time:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="time",
-                                    name="end_time",
-                                    id="end_time",
-                                    value=default_end_time,
-                                    style="width: 100%; padding: 8px;",
-                                    step="60",
-                                ),
-                            ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
-                                    "Location:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="text",
-                                    name="location",
-                                    id="location",
-                                    value=default_location,
-                                    required=True,
-                                    style="width: 100%; padding: 8px;",
-                                ),
-                            ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
-                                    "Max Players Per Team:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="number",
-                                    name="max_players_per_team",
-                                    id="max_players_per_team",
-                                    min="1",
-                                    style="width: 100%; padding: 8px;",
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Max Players Per Team:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="number",
+                                        name="max_players_per_team",
+                                        id="max_players_per_team",
+                                        min="1",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
                                 ),
                             ),
                             Hr(),
@@ -353,30 +359,33 @@ def register_match_routes(rt, STYLE):
                                         ),
                                     ),
                                 ),
-                                Div(style="margin-bottom: 15px;")(
-                                    Label(
-                                        "Team Name:",
-                                        style="display: block; margin-bottom: 5px;",
+                                # Two short fields that belong together -- same row.
+                                Div(cls="form-grid")(
+                                    Div(style="margin-bottom: 15px;")(
+                                        Label(
+                                            "Team Name:",
+                                            style="display: block; margin-bottom: 5px;",
+                                        ),
+                                        Input(
+                                            type="text",
+                                            name="team1_name",
+                                            id="team1_name",
+                                            placeholder="Home Team",
+                                            style="width: 100%; padding: 8px;",
+                                        ),
                                     ),
-                                    Input(
-                                        type="text",
-                                        name="team1_name",
-                                        id="team1_name",
-                                        placeholder="Home Team",
-                                        style="width: 100%; padding: 8px;",
-                                    ),
-                                ),
-                                Div(style="margin-bottom: 15px;")(
-                                    Label(
-                                        "Jersey Color:",
-                                        style="display: block; margin-bottom: 5px;",
-                                    ),
-                                    Input(
-                                        type="text",
-                                        name="team1_color",
-                                        id="team1_color",
-                                        placeholder="e.g., Blue, Red, White",
-                                        style="width: 100%; padding: 8px;",
+                                    Div(style="margin-bottom: 15px;")(
+                                        Label(
+                                            "Jersey Color:",
+                                            style="display: block; margin-bottom: 5px;",
+                                        ),
+                                        Input(
+                                            type="text",
+                                            name="team1_color",
+                                            id="team1_color",
+                                            placeholder="e.g., Blue, Red, White",
+                                            style="width: 100%; padding: 8px;",
+                                        ),
                                     ),
                                 ),
                             ),
@@ -403,30 +412,33 @@ def register_match_routes(rt, STYLE):
                                         ),
                                     ),
                                 ),
-                                Div(style="margin-bottom: 15px;")(
-                                    Label(
-                                        "Team Name:",
-                                        style="display: block; margin-bottom: 5px;",
+                                # Two short fields that belong together -- same row.
+                                Div(cls="form-grid")(
+                                    Div(style="margin-bottom: 15px;")(
+                                        Label(
+                                            "Team Name:",
+                                            style="display: block; margin-bottom: 5px;",
+                                        ),
+                                        Input(
+                                            type="text",
+                                            name="team2_name",
+                                            id="team2_name",
+                                            placeholder="Away Team",
+                                            style="width: 100%; padding: 8px;",
+                                        ),
                                     ),
-                                    Input(
-                                        type="text",
-                                        name="team2_name",
-                                        id="team2_name",
-                                        placeholder="Away Team",
-                                        style="width: 100%; padding: 8px;",
-                                    ),
-                                ),
-                                Div(style="margin-bottom: 15px;")(
-                                    Label(
-                                        "Jersey Color:",
-                                        style="display: block; margin-bottom: 5px;",
-                                    ),
-                                    Input(
-                                        type="text",
-                                        name="team2_color",
-                                        id="team2_color",
-                                        placeholder="e.g., Blue, Red, White",
-                                        style="width: 100%; padding: 8px;",
+                                    Div(style="margin-bottom: 15px;")(
+                                        Label(
+                                            "Jersey Color:",
+                                            style="display: block; margin-bottom: 5px;",
+                                        ),
+                                        Input(
+                                            type="text",
+                                            name="team2_color",
+                                            id="team2_color",
+                                            placeholder="e.g., Blue, Red, White",
+                                            style="width: 100%; padding: 8px;",
+                                        ),
                                     ),
                                 ),
                             ),
@@ -1139,68 +1151,74 @@ def register_match_routes(rt, STYLE):
                                     style="width: 100%; padding: 8px;",
                                 ),
                             ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
-                                    "Date:", style="display: block; margin-bottom: 5px;"
+                            # Same grouping as the create form: the short
+                            # when/where fields share a row.
+                            Div(cls="form-grid")(
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Date:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="date",
+                                        name="date",
+                                        value=match.get("date", ""),
+                                        required=True,
+                                        style="width: 100%; padding: 8px;",
+                                    ),
                                 ),
-                                Input(
-                                    type="date",
-                                    name="date",
-                                    value=match.get("date", ""),
-                                    required=True,
-                                    style="width: 100%; padding: 8px;",
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Start Time:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="time",
+                                        name="start_time",
+                                        value=match.get("start_time", ""),
+                                        required=True,
+                                        style="width: 100%; padding: 8px;",
+                                        step="60",
+                                    ),
                                 ),
-                            ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
-                                    "Start Time:",
-                                    style="display: block; margin-bottom: 5px;",
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "End Time:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="time",
+                                        name="end_time",
+                                        value=match.get("end_time", ""),
+                                        style="width: 100%; padding: 8px;",
+                                        step="60",
+                                    ),
                                 ),
-                                Input(
-                                    type="time",
-                                    name="start_time",
-                                    value=match.get("start_time", ""),
-                                    required=True,
-                                    style="width: 100%; padding: 8px;",
-                                    step="60",
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Location:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="location",
+                                        value=match.get("location", ""),
+                                        required=True,
+                                        style="width: 100%; padding: 8px;",
+                                    ),
                                 ),
-                            ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
-                                    "End Time:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="time",
-                                    name="end_time",
-                                    value=match.get("end_time", ""),
-                                    style="width: 100%; padding: 8px;",
-                                    step="60",
-                                ),
-                            ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
-                                    "Location:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="text",
-                                    name="location",
-                                    value=match.get("location", ""),
-                                    required=True,
-                                    style="width: 100%; padding: 8px;",
-                                ),
-                            ),
-                            Div(style="margin-bottom: 15px;")(
-                                Label(
-                                    "Max Players Per Team:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="number",
-                                    name="max_players_per_team",
-                                    value=match.get("max_players_per_team", "") or "",
-                                    style="width: 100%; padding: 8px;",
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Max Players Per Team:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="number",
+                                        name="max_players_per_team",
+                                        value=match.get("max_players_per_team", "")
+                                        or "",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
                                 ),
                             ),
                             Hr(),
@@ -1236,61 +1254,70 @@ def register_match_routes(rt, STYLE):
                                     for team in teams
                                     if team["team_number"] == 1
                                 ],
-                                Label(
-                                    "Team Name:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="text",
-                                    name="team1_name",
-                                    value=next(
-                                        (
-                                            t.get("team_name", "")
-                                            for t in teams
-                                            if t["team_number"] == 1
+                                # Two short fields that belong together -- same row.
+                                Div(cls="form-grid")(
+                                    Div(style="margin-bottom: 15px;")(
+                                        Label(
+                                            "Team Name:",
+                                            style="display: block; margin-bottom: 5px;",
                                         ),
-                                        "Home Team",
-                                    ),
-                                    placeholder="Home Team",
-                                    style="width: 100%; padding: 8px;",
-                                ),
-                                Label(
-                                    "Jersey Color:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="text",
-                                    name="team1_color",
-                                    value=next(
-                                        (
-                                            t.get("jersey_color", "")
-                                            for t in teams
-                                            if t["team_number"] == 1
-                                        ),
-                                        "",
-                                    ),
-                                    placeholder="e.g., Blue, Red, White",
-                                    style="width: 100%; padding: 8px;",
-                                ),
-                                Label(
-                                    "Score:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="number",
-                                    name="team1_score",
-                                    value=str(
-                                        next(
-                                            (
-                                                t.get("score", 0)
-                                                for t in teams
-                                                if t["team_number"] == 1
+                                        Input(
+                                            type="text",
+                                            name="team1_name",
+                                            value=next(
+                                                (
+                                                    t.get("team_name", "")
+                                                    for t in teams
+                                                    if t["team_number"] == 1
+                                                ),
+                                                "Home Team",
                                             ),
-                                            0,
-                                        )
+                                            placeholder="Home Team",
+                                            style="width: 100%; padding: 8px;",
+                                        ),
                                     ),
-                                    min="0",
-                                    style="width: 100%; padding: 8px;",
+                                    Div(style="margin-bottom: 15px;")(
+                                        Label(
+                                            "Jersey Color:",
+                                            style="display: block; margin-bottom: 5px;",
+                                        ),
+                                        Input(
+                                            type="text",
+                                            name="team1_color",
+                                            value=next(
+                                                (
+                                                    t.get("jersey_color", "")
+                                                    for t in teams
+                                                    if t["team_number"] == 1
+                                                ),
+                                                "",
+                                            ),
+                                            placeholder="e.g., Blue, Red, White",
+                                            style="width: 100%; padding: 8px;",
+                                        ),
+                                    ),
+                                    Div(style="margin-bottom: 15px;")(
+                                        Label(
+                                            "Score:",
+                                            style="display: block; margin-bottom: 5px;",
+                                        ),
+                                        Input(
+                                            type="number",
+                                            name="team1_score",
+                                            value=str(
+                                                next(
+                                                    (
+                                                        t.get("score", 0)
+                                                        for t in teams
+                                                        if t["team_number"] == 1
+                                                    ),
+                                                    0,
+                                                )
+                                            ),
+                                            min="0",
+                                            style="width: 100%; padding: 8px;",
+                                        ),
+                                    ),
                                 ),
                             ),
                             Hr(),
@@ -1326,61 +1353,70 @@ def register_match_routes(rt, STYLE):
                                     for team in teams
                                     if team["team_number"] == 2
                                 ],
-                                Label(
-                                    "Team Name:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="text",
-                                    name="team2_name",
-                                    value=next(
-                                        (
-                                            t.get("team_name", "")
-                                            for t in teams
-                                            if t["team_number"] == 2
+                                # Two short fields that belong together -- same row.
+                                Div(cls="form-grid")(
+                                    Div(style="margin-bottom: 15px;")(
+                                        Label(
+                                            "Team Name:",
+                                            style="display: block; margin-bottom: 5px;",
                                         ),
-                                        "Away Team",
-                                    ),
-                                    placeholder="Away Team",
-                                    style="width: 100%; padding: 8px;",
-                                ),
-                                Label(
-                                    "Jersey Color:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="text",
-                                    name="team2_color",
-                                    value=next(
-                                        (
-                                            t.get("jersey_color", "")
-                                            for t in teams
-                                            if t["team_number"] == 2
-                                        ),
-                                        "",
-                                    ),
-                                    placeholder="e.g., Blue, Red, White",
-                                    style="width: 100%; padding: 8px;",
-                                ),
-                                Label(
-                                    "Score:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="number",
-                                    name="team2_score",
-                                    value=str(
-                                        next(
-                                            (
-                                                t.get("score", 0)
-                                                for t in teams
-                                                if t["team_number"] == 2
+                                        Input(
+                                            type="text",
+                                            name="team2_name",
+                                            value=next(
+                                                (
+                                                    t.get("team_name", "")
+                                                    for t in teams
+                                                    if t["team_number"] == 2
+                                                ),
+                                                "Away Team",
                                             ),
-                                            0,
-                                        )
+                                            placeholder="Away Team",
+                                            style="width: 100%; padding: 8px;",
+                                        ),
                                     ),
-                                    min="0",
-                                    style="width: 100%; padding: 8px;",
+                                    Div(style="margin-bottom: 15px;")(
+                                        Label(
+                                            "Jersey Color:",
+                                            style="display: block; margin-bottom: 5px;",
+                                        ),
+                                        Input(
+                                            type="text",
+                                            name="team2_color",
+                                            value=next(
+                                                (
+                                                    t.get("jersey_color", "")
+                                                    for t in teams
+                                                    if t["team_number"] == 2
+                                                ),
+                                                "",
+                                            ),
+                                            placeholder="e.g., Blue, Red, White",
+                                            style="width: 100%; padding: 8px;",
+                                        ),
+                                    ),
+                                    Div(style="margin-bottom: 15px;")(
+                                        Label(
+                                            "Score:",
+                                            style="display: block; margin-bottom: 5px;",
+                                        ),
+                                        Input(
+                                            type="number",
+                                            name="team2_score",
+                                            value=str(
+                                                next(
+                                                    (
+                                                        t.get("score", 0)
+                                                        for t in teams
+                                                        if t["team_number"] == 2
+                                                    ),
+                                                    0,
+                                                )
+                                            ),
+                                            min="0",
+                                            style="width: 100%; padding: 8px;",
+                                        ),
+                                    ),
                                 ),
                             ),
                             Div(cls="btn-group")(
@@ -1464,9 +1500,11 @@ def register_match_routes(rt, STYLE):
         team1_color = form.get("team1_color", "").strip() or "Blue"
         team1_score_str = form.get("team1_score", "").strip()
         try:
-            team1_score = int(team1_score_str) if team1_score_str else 0
+            # Blank stays blank: writing 0 for an untouched field is what made
+            # every unplayed match read "0 - 0".
+            team1_score = int(team1_score_str) if team1_score_str else None
         except ValueError:
-            team1_score = 0
+            team1_score = None
 
         if team1_id:
             # Update existing team with should_allocate flag
@@ -1493,9 +1531,11 @@ def register_match_routes(rt, STYLE):
         team2_color = form.get("team2_color", "").strip() or "Red"
         team2_score_str = form.get("team2_score", "").strip()
         try:
-            team2_score = int(team2_score_str) if team2_score_str else 0
+            # Blank stays blank: writing 0 for an untouched field is what made
+            # every unplayed match read "0 - 0".
+            team2_score = int(team2_score_str) if team2_score_str else None
         except ValueError:
-            team2_score = 0
+            team2_score = None
 
         if team2_id:
             # Update existing team with should_allocate flag
