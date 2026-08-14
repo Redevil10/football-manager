@@ -7,6 +7,9 @@ STYLE = """
     --navy-tint: #E8ECF3;
     --amber: #C8873C;
     --amber-tint: #F9F0E3;
+    /* Captain's mark only. The amber accent turns brown against the green
+       pitch; an armband reads as gold, so this stays a plain yellow. */
+    --captain: #F5C518;
     --success: #2E7D57;
     --success-dark: #246344;
     --danger: #9B2C2C;
@@ -391,7 +394,7 @@ button:hover { background: var(--navy-dark); }
     height: 18px;
     border-radius: 50%;
     border: 2px solid var(--ink);
-    background: var(--amber);
+    background: var(--captain);
     color: var(--ink);
     font-weight: bold;
     font-size: 12px;
@@ -541,6 +544,78 @@ button:hover { background: var(--navy-dark); }
     top: calc((100 - var(--along)) * 1%);
 }
 
+
+.position-slots-container {
+    position: absolute;
+    inset: 0;
+}
+
+/* Position slots for drag-and-drop */
+.position-slot {
+    position: absolute;
+    /* Marker diameter as a share of pitch width. Capped by the tightest pair in
+       the formation grid -- the keeper sits 12% of the width off each centre
+       back -- so that no two hit boxes overlap and a drop always resolves to
+       the slot under the cursor. */
+    width: 12%;
+    aspect-ratio: 1;
+    /* left/top are the slot's centre, set inline from the formation
+       coordinates; this pulls the box back onto that point. */
+    transform: translate(-50%, -50%);
+    transition: box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.position-slot-marker {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 2px solid white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Tracks the marker, which is 12% of the pitch width here -- the desktop
+       rule re-states this because the marker grows to 15% there and a shared
+       value would leave the name looking shrunken inside a bigger circle. */
+    font-size: clamp(6px, 1.9cqw, 11px);
+    font-weight: bold;
+    text-align: center;
+    line-height: 1.1;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    pointer-events: none;
+}
+
+/* Captain's mark, pinned to the edge of the marker. It is a sibling of the
+   marker rather than a child, because the marker clips its own overflow. Sized
+   in percentages so it tracks the marker at every pitch size. */
+.captain-mark {
+    position: absolute;
+    bottom: -2%;
+    left: -2%;
+    width: 30%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: var(--captain);
+    border: 2px solid white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(6px, 1.2cqw, 11px);
+    font-weight: bold;
+    color: var(--ink);
+    line-height: 1;
+    pointer-events: none;
+}
+
+.position-slot.drag-over {
+    background: rgba(200, 135, 60, 0.35) !important;
+    /* Keeps the centring translate above -- a bare scale() would drop it and
+       jump the marker down-right by half its own size. */
+    transform: translate(-50%, -50%) scale(1.1);
+    box-shadow: 0 0 10px rgba(200, 135, 60, 0.8);
+}
+
 @media (min-width: 760px) {
     .pitch-formations-container {
         flex-direction: row;
@@ -575,53 +650,11 @@ button:hover { background: var(--navy-dark); }
     /* Each half is now the narrow axis of the pair, so the same marker needs a
        bigger share of it to come out the same size on screen. */
     .position-slot { width: 15%; }
-}
 
-.position-slots-container {
-    position: absolute;
-    inset: 0;
-}
-
-/* Position slots for drag-and-drop */
-.position-slot {
-    position: absolute;
-    /* Marker diameter as a share of pitch width. Capped by the tightest pair in
-       the formation grid -- the keeper sits 12% of the width off each centre
-       back -- so that no two hit boxes overlap and a drop always resolves to
-       the slot under the cursor. */
-    width: 12%;
-    aspect-ratio: 1;
-    /* left/top are the slot's centre, set inline from the formation
-       coordinates; this pulls the box back onto that point. */
-    transform: translate(-50%, -50%);
-    transition: box-shadow 0.2s ease, background 0.2s ease;
-}
-
-.position-slot-marker {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    border: 2px solid white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    /* 10px against the 600px design width, floored so it stays legible. */
-    font-size: clamp(6px, 1.7cqw, 10px);
-    font-weight: bold;
-    text-align: center;
-    line-height: 1.1;
-    overflow: hidden;
-    position: relative;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    pointer-events: none;
-}
-
-.position-slot.drag-over {
-    background: rgba(200, 135, 60, 0.35) !important;
-    /* Keeps the centring translate above -- a bare scale() would drop it and
-       jump the marker down-right by half its own size. */
-    transform: translate(-50%, -50%) scale(1.1);
-    box-shadow: 0 0 10px rgba(200, 135, 60, 0.8);
+    /* Marker is 15% of the pitch width here rather than 12%, so the text has to
+       grow by the same factor to keep the same proportion inside the circle. */
+    .position-slot-marker { font-size: clamp(8px, 2.4cqw, 13px); }
+    .captain-mark { font-size: clamp(7px, 1.7cqw, 12px); }
 }
 
 .draggable-player {

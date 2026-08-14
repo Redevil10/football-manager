@@ -504,15 +504,10 @@ def render_position_slot(
 
         text_color = get_text_color(team_color)
 
-        captain_badge = ""
-        if is_captain:
-            captain_badge = """
-                <div style="position: absolute; top: -3px; right: -3px;
-                     width: 14px; height: 14px; border-radius: 50%;
-                     background: #ffd700; border: 2px solid white;
-                     display: flex; align-items: center; justify-content: center;
-                     font-size: 9px; font-weight: bold; color: black;">C</div>
-            """
+        # Sits outside the marker, not inside it: the marker clips its overflow
+        # to keep long names in the circle, which would swallow a badge pinned
+        # to the marker's edge.
+        captain_badge = '<div class="captain-mark">C</div>' if is_captain else ""
 
         return f'''
             <div class="position-slot {draggable_class}"
@@ -524,8 +519,8 @@ def render_position_slot(
                 <div class="position-slot-marker"
                      style="background: {team_color}; color: {text_color};">
                     {display_name}
-                    {captain_badge}
                 </div>
+                {captain_badge}
             </div>
         '''
     else:
