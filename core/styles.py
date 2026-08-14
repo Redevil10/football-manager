@@ -463,21 +463,164 @@ button:hover { background: var(--navy-dark); }
     margin: 20px 0;
 }
 
-/* Interactive pitch container */
+/* The two halves butt together into one pitch, so there is never a gap between
+   them. Narrow screens stack them (team A defending the top edge); from 760px
+   they sit side by side instead, turning the pair into a landscape pitch that
+   uses the width a desktop actually has. */
+.pitch-formations-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    max-width: 460px;
+    margin: 20px auto;
+}
+
+.single-pitch-container {
+    width: 100%;
+}
+
+/* Interactive pitch: a fluid box the SVG sizes from its own viewBox, with the
+   player markers laid over it in percentages. Nothing here is in pixels, so the
+   formation stays intact from a 320px phone up to the full desktop width. */
 .interactive-pitch-container {
     position: relative;
-    display: inline-block;
-    margin: 0 auto;
+    width: 100%;
+    /* Lets the marker text size itself against the pitch rather than the
+       viewport -- two pitches share a row on desktop. */
+    container-type: inline-size;
+}
+
+.interactive-pitch-container .pitch-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* Stacked: only the outer edges are rounded, so the join in the middle reads as
+   a halfway line rather than as two stacked cards. */
+.pitch-a .pitch-svg { border-radius: 8px 8px 0 0; }
+.pitch-b .pitch-svg { border-radius: 0 0 8px 8px; }
+
+/* Only the orientation matching the current layout is shown. Both are inert
+   decoration, so hiding one costs nothing and duplicates no interactive node.
+   Scoped to the container to outrank the `.pitch-svg { display: block }` rule
+   above -- a bare class would lose to it and both would stack up. */
+.interactive-pitch-container .pitch-svg-h { display: none; }
+
+/* Team name sits over its own half, in the corner by that side's goal, so a
+   caption never splits the two halves apart. */
+.pitch-team-label {
+    position: absolute;
+    left: 10px;
+    margin: 0;
+    z-index: 2;
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+    background: rgba(0,0,0,0.45);
+    padding: 3px 10px;
+    border-radius: 4px;
+    pointer-events: none;
+}
+
+.pitch-a .pitch-team-label { top: 8px; }
+.pitch-b .pitch-team-label { bottom: 8px; }
+
+/* Slots carry their pitch coordinates as --along (own goal to halfway) and
+   --across (touchline to touchline). Mapping those onto screen axes is a
+   layout decision, so it lives here rather than in the markup.
+   Stacked: A defends the top, B the bottom, each turned to face the other. */
+.pitch-a .position-slot {
+    left: calc((100 - var(--across)) * 1%);
+    top: calc(var(--along) * 1%);
+}
+
+.pitch-b .position-slot {
+    left: calc(var(--across) * 1%);
+    top: calc((100 - var(--along)) * 1%);
+}
+
+@media (min-width: 760px) {
+    .pitch-formations-container {
+        flex-direction: row;
+        max-width: 900px;
+    }
+
+    .single-pitch-container { width: 50%; }
+
+    .interactive-pitch-container .pitch-svg-v { display: none; }
+    .interactive-pitch-container .pitch-svg-h { display: block; }
+
+    /* Side by side: the rounded corners move to the outer ends. */
+    .pitch-a .pitch-svg { border-radius: 8px 0 0 8px; }
+    .pitch-b .pitch-svg { border-radius: 0 8px 8px 0; }
+
+    .pitch-a .pitch-team-label,
+    .pitch-b .pitch-team-label { top: 8px; bottom: auto; }
+    .pitch-b .pitch-team-label { left: auto; right: 10px; }
+
+    /* Quarter turn: along-the-pitch now runs left-right, A defending the left
+       edge and B the right, still a half turn apart. */
+    .pitch-a .position-slot {
+        left: calc(var(--along) * 1%);
+        top: calc(var(--across) * 1%);
+    }
+
+    .pitch-b .position-slot {
+        left: calc((100 - var(--along)) * 1%);
+        top: calc((100 - var(--across)) * 1%);
+    }
+
+    /* Each half is now the narrow axis of the pair, so the same marker needs a
+       bigger share of it to come out the same size on screen. */
+    .position-slot { width: 15%; }
+}
+
+.position-slots-container {
+    position: absolute;
+    inset: 0;
 }
 
 /* Position slots for drag-and-drop */
 .position-slot {
-    transition: all 0.2s ease;
+    position: absolute;
+    /* Marker diameter as a share of pitch width. Capped by the tightest pair in
+       the formation grid -- the keeper sits 12% of the width off each centre
+       back -- so that no two hit boxes overlap and a drop always resolves to
+       the slot under the cursor. */
+    width: 12%;
+    aspect-ratio: 1;
+    /* left/top are the slot's centre, set inline from the formation
+       coordinates; this pulls the box back onto that point. */
+    transform: translate(-50%, -50%);
+    transition: box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.position-slot-marker {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 2px solid white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* 10px against the 600px design width, floored so it stays legible. */
+    font-size: clamp(6px, 1.7cqw, 10px);
+    font-weight: bold;
+    text-align: center;
+    line-height: 1.1;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    pointer-events: none;
 }
 
 .position-slot.drag-over {
     background: rgba(200, 135, 60, 0.35) !important;
-    transform: scale(1.1);
+    /* Keeps the centring translate above -- a bare scale() would drop it and
+       jump the marker down-right by half its own size. */
+    transform: translate(-50%, -50%) scale(1.1);
     box-shadow: 0 0 10px rgba(200, 135, 60, 0.8);
 }
 
@@ -819,24 +962,6 @@ button:hover { background: var(--navy-dark); }
         max-width: 100%;
     }
 
-    /* Scale interactive pitch to fit mobile screen */
-    .pitch-formations-container {
-        flex-direction: column;
-        align-items: center;
-    }
-    .single-pitch-container {
-        width: 100%;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-    .interactive-pitch-container {
-        transform: scale(0.55);
-        transform-origin: top left;
-    }
-    .single-pitch-container {
-        /* Shrunk height: 390 * 0.55 ≈ 215, plus room for team name */
-        height: 245px;
-    }
 
     .display-mode-toggle {
         flex-wrap: wrap;
