@@ -1,13 +1,17 @@
 # db/match_teams.py - Match team database operations
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from core.exceptions import DatabaseError
 from db.connection import get_db
 from db.error_handling import db_transaction
 
 logger = logging.getLogger(__name__)
+
+# Distinguishes "caller did not mention this field" from "caller wants it set
+# to NULL". None cannot do both jobs: a cleared score is stored as NULL.
+UNCHANGED = object()
 
 
 def get_match_teams(match_id: int) -> list[dict]:
@@ -50,8 +54,13 @@ def create_match_team(
     """
     try:
         with db_transaction("create_match_team") as conn:
+            # `score` is listed and set to NULL rather than left out. Databases
+            # created before the column became nullable still carry
+            # `DEFAULT 0`, and CREATE TABLE IF NOT EXISTS never alters them --
+            # omitting the column there would hand every new team a 0 and bring
+            # back the "0 - 0" on matches nobody has scored yet.
             cursor = conn.execute(
-                """INSERT INTO match_teams (match_id, team_number, team_name, jersey_color, should_allocate) VALUES (?, ?, ?, ?, ?)
+                """INSERT INTO match_teams (match_id, team_number, team_name, jersey_color, score, should_allocate) VALUES (?, ?, ?, ?, NULL, ?)
                 ON CONFLICT (match_id, team_number) DO UPDATE SET team_name = ?, jersey_color = ?, should_allocate = ?""",
                 (
                     match_id,
@@ -95,7 +104,7 @@ def update_match_team(
     team_id: int,
     team_name: str,
     jersey_color: str,
-    score: Optional[int] = None,
+    score: Any = UNCHANGED,
     captain_id: Optional[int] = None,
     should_allocate: Optional[int] = None,
 ) -> bool:
@@ -105,7 +114,10 @@ def update_match_team(
         team_id: ID of the team to update
         team_name: New team name
         jersey_color: New jersey color
-        score: New score (optional)
+        score: New score. Leave it out to keep whatever is stored; pass None to
+            clear it. These are different things -- emptying the score box on
+            the edit form has to erase the old score, not be read as "no score
+            supplied, keep the one you have".
         captain_id: New captain ID (optional)
         should_allocate: Whether to allocate players (optional)
 
@@ -123,7 +135,7 @@ def update_match_team(
             updates.append("jersey_color = ?")
             params.append(jersey_color)
 
-            if score is not None:
+            if score is not UNCHANGED:
                 updates.append("score = ?")
                 params.append(score)
 

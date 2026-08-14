@@ -319,14 +319,25 @@ class TestRenderMatchRecordings:
         assert "Add Links" in xml
         assert "/add_match_recordings/1" in xml
 
-    def test_empty_viewer_has_no_form(self):
-        """Viewers see a read-only empty state with no add form"""
-        result = render_match_recordings(1, recordings=[], can_edit=False)
+    def test_empty_with_edit_starts_collapsed(self):
+        """Nothing to see yet, so the section does not take up a card"""
+        result = render_match_recordings(1, recordings=[], can_edit=True)
         xml = to_xml(result)
 
-        assert "No recordings available" in xml
-        assert 'name="links"' not in xml
-        assert "Add Links" not in xml
+        assert "<details" in xml
+        assert "open" not in xml.split(">")[0]
+
+    def test_populated_starts_open(self):
+        """Once there are links the section is worth showing expanded"""
+        recordings = [{"id": 1, "url": "https://youtu.be/abc", "label": None}]
+        result = render_match_recordings(1, recordings=recordings, can_edit=True)
+        xml = to_xml(result)
+
+        assert "open" in xml.split(">")[0]
+
+    def test_empty_viewer_renders_nothing(self):
+        """A viewer cannot add recordings, so an empty section is just noise"""
+        assert render_match_recordings(1, recordings=[], can_edit=False) is None
 
     def test_viewer_sees_links_without_controls(self):
         """Viewers see clickable links but no delete or add controls"""

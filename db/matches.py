@@ -1,7 +1,7 @@
 # db/matches.py - Match database operations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from core.exceptions import DatabaseError, IntegrityError
@@ -172,12 +172,12 @@ def get_next_match_by_league(league_id: int) -> Optional[Dict[str, Any]]:
     conn = get_db()
     try:
         # SQLite stores dates/times as ISO TEXT, so string comparison is correct.
+        # Times go through time() on both sides: the pickers submit HH:MM while the
+        # clock below is HH:MM:SS, and "10:00" < "10:00:00" as plain text.
         today = date.today().isoformat()
         now = datetime.now().strftime("%H:%M:%S")
         # Upcoming = not yet started (complement of get_last_completed_match).
-        where_clause = (
-            "m.league_id = ? AND ((m.date > ?) OR (m.date = ? AND m.start_time >= ?))"
-        )
+        where_clause = "m.league_id = ? AND ((m.date > ?) OR (m.date = ? AND time(m.start_time) >= time(?)))"
         query = """SELECT m.*, l.name as league_name
                    FROM matches m
                    LEFT JOIN leagues l ON m.league_id = l.id"""
@@ -229,7 +229,7 @@ def get_last_completed_match() -> Optional[Dict[str, Any]]:
         now = datetime.now().strftime("%H:%M:%S")
 
         # Get matches that are in the past (date < today, or date = today but start_time < now)
-        where_clause = "(m.date < ?) OR (m.date = ? AND m.start_time < ?)"
+        where_clause = "(m.date < ?) OR (m.date = ? AND time(m.start_time) < time(?))"
         query, params = _build_match_query_with_league(
             where_clause, (today, today, now), limit=1
         )
@@ -258,6 +258,68 @@ def get_last_created_match() -> Optional[Dict[str, Any]]:
         conn.close()
 
 
+def get_recent_matches_by_league(
+    per_league: int = 3,
+    months: int = 6,
+    club_ids: Optional[List[int]] = None,
+) -> List[Dict[str, Any]]:
+    """Get the most recent matches in each league, newest first.
+
+    Ranking happens per league in SQL rather than by taking the newest N
+    overall: one busy league would otherwise fill the whole list and the
+    quieter ones would never appear.
+
+    Args:
+        per_league: How many matches to keep from each league.
+        months: How far back to look. Older matches are left out entirely.
+        club_ids: Optional list of club IDs to filter matches by.
+
+    Returns:
+        List[Dict[str, Any]]: Match dicts with league_name, newest first.
+    """
+    # SQLite stores dates/times as ISO TEXT, so string comparison is correct.
+    # Times go through time() on both sides: the pickers submit HH:MM while the
+    # clock below is HH:MM:SS, and "10:00" < "10:00:00" as plain text.
+    today = date.today().isoformat()
+    now = datetime.now().strftime("%H:%M:%S")
+    cutoff = (date.today() - timedelta(days=months * 30)).isoformat()
+
+    # Past = already started (mirror of the upcoming filter elsewhere).
+    where = [
+        "((m.date < ?) OR (m.date = ? AND time(m.start_time) < time(?)))",
+        "m.date >= ?",
+    ]
+    params: List[Any] = [today, today, now, cutoff]
+
+    conn = get_db()
+    try:
+        if club_ids is not None and len(club_ids) > 0:
+            league_ids = get_league_ids_for_clubs(club_ids)
+            if not league_ids:
+                return []
+            where.append(f"m.league_id IN ({','.join('?' * len(league_ids))})")
+            params.extend(league_ids)
+        elif club_ids is not None:
+            return []
+
+        query = f"""SELECT * FROM (
+                        SELECT m.*, l.name AS league_name,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY m.league_id
+                                   ORDER BY m.date DESC, m.start_time DESC
+                               ) AS league_rank
+                        FROM matches m
+                        LEFT JOIN leagues l ON m.league_id = l.id
+                        WHERE {" AND ".join(where)}
+                    )
+                    WHERE league_rank <= ?
+                    ORDER BY date DESC, start_time DESC"""
+        rows = conn.execute(query, (*params, per_league)).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
 def get_recent_matches(
     limit: int = 5, club_ids: Optional[List[int]] = None
 ) -> List[Dict[str, Any]]:
@@ -277,10 +339,12 @@ def get_recent_matches(
         List[Dict[str, Any]]: List of match dictionaries with league_name
     """
     # SQLite stores dates/times as ISO TEXT, so string comparison is correct.
+    # Times go through time() on both sides: the pickers submit HH:MM while the
+    # clock below is HH:MM:SS, and "10:00" < "10:00:00" as plain text.
     today = date.today().isoformat()
     now = datetime.now().strftime("%H:%M:%S")
     # Past = already started (mirror of the upcoming filter in get_next_match_by_league).
-    past_clause = "((m.date < ?) OR (m.date = ? AND m.start_time < ?))"
+    past_clause = "((m.date < ?) OR (m.date = ? AND time(m.start_time) < time(?)))"
     past_params = (today, today, now)
 
     conn = get_db()
@@ -318,12 +382,20 @@ def get_match(
         club_ids: Optional list of club IDs to check access against
 
     Returns:
-        Optional[Dict[str, Any]]: Match dictionary if found and accessible, None otherwise
+        Optional[Dict[str, Any]]: Match dictionary with league_name if found and
+            accessible, None otherwise
     """
     conn = get_db()
     try:
+        # Joined for league_name, which the detail page shows. Without it the
+        # page fell back to "Friendly" for every match, whatever league it was
+        # actually in.
         match = conn.execute(
-            "SELECT * FROM matches WHERE id = ?", (match_id,)
+            """SELECT m.*, l.name AS league_name
+               FROM matches m
+               LEFT JOIN leagues l ON m.league_id = l.id
+               WHERE m.id = ?""",
+            (match_id,),
         ).fetchone()
 
         if not match:

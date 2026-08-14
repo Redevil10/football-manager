@@ -5,7 +5,12 @@ from fasthtml.common import *
 from core.auth import can_user_edit_match
 from db.match_recordings import get_match_recordings
 from logic import calculate_overall_score
-from render.common import format_match_name, get_match_score_display, is_match_completed
+from render.common import (
+    format_match_meta,
+    format_match_name,
+    get_match_score_display,
+    is_match_completed,
+)
 from render.interactive_pitch import render_interactive_pitch
 from render.pitch import render_player_table as render_player_table_pitch
 from render.players import render_match_available_players, render_player_table
@@ -19,71 +24,52 @@ def render_next_match(match, teams, match_players_dict):
             H2("Next Match"), P("No upcoming match scheduled.", style="color: #666;")
         )
 
-    content = [
-        H2("Next Match"),
-        Div(cls="container-white")(
-            H3(format_match_name(match)),
-            Div(style="margin-bottom: 15px;")(
-                P(f"Date: {match.get('date', 'N/A')}"),
-                P(f"Start Time: {match.get('start_time', 'N/A')}"),
-                P(f"End Time: {match.get('end_time', 'N/A')}"),
-                P(f"Location: {match.get('location', 'N/A')}"),
-                P(f"League: {match.get('league_name', 'Friendly')}"),
-            ),
+    # Fixture and line-up in one card: they describe the same match, and split
+    # across two they read as unrelated sections.
+    card = [
+        Div(cls="match-header")(
+            P(match.get("league_name", "Friendly"), cls="match-league"),
             A(
                 Button("View Match Details", cls="btn-primary"),
                 href=f"/match/{match['id']}",
-                style="margin-bottom: 15px; display: inline-block;",
             ),
         ),
     ]
 
-    # Render team allocation if teams exist
-    if teams and len(teams) >= 1:
-        team1 = teams[0]
-        team2 = teams[1] if len(teams) > 1 else None
-        team1_players = match_players_dict.get(team1["id"], [])
-        team2_players = match_players_dict.get(team2["id"], []) if team2 else []
+    team1_players = []
+    team2_players = []
+    if teams:
+        team1_players = match_players_dict.get(teams[0]["id"], [])
+        if len(teams) > 1:
+            team2_players = match_players_dict.get(teams[1]["id"], [])
 
-        if team1_players or team2_players:
-            content.append(
-                Div(cls="container-white", style="margin-top: 20px;")(
-                    H3("Team Allocation"),
-                    render_match_teams(
-                        match["id"],
-                        teams,
-                        match_players_dict,
-                        is_completed=True,
-                        show_scores=False,
-                    ),
-                )
+    if team1_players or team2_players:
+        card.append(
+            Div(cls="match-lineup")(
+                P(format_match_meta(match, include_date=True), cls="match-fixture"),
+                render_match_teams(
+                    match["id"],
+                    teams,
+                    match_players_dict,
+                    is_completed=True,
+                    show_scores=False,
+                    show_tables=False,
+                ),
             )
-        else:
-            content.append(
-                Div(cls="container-white", style="margin-top: 20px;")(
-                    H3("Team Allocation"),
-                    P("Teams not yet allocated. ", style="color: #666;"),
-                    A(
-                        "Go to match detail page to allocate teams",
-                        href=f"/match/{match['id']}",
-                        style="color: #007bff;",
-                    ),
-                )
-            )
+        )
     else:
-        content.append(
-            Div(cls="container-white", style="margin-top: 20px;")(
-                H3("Team Allocation"),
-                P("Teams not yet allocated. ", style="color: #666;"),
+        card.append(
+            Div(cls="match-lineup")(
+                P(format_match_meta(match, include_date=True), cls="match-fixture"),
+                P("Teams not yet allocated.", style="color: var(--muted);"),
                 A(
                     "Go to match detail page to allocate teams",
                     href=f"/match/{match['id']}",
-                    style="color: #007bff;",
                 ),
             )
         )
 
-    return Div(*content)
+    return Div(H2("Next Match"), Div(cls="container-white")(*card))
 
 
 def render_next_matches_by_league(next_matches_data):
@@ -116,133 +102,106 @@ def render_next_matches_by_league(next_matches_data):
         league = data["league"]
         league_name = league.get("name", "Friendly")
 
-        league_content = [
-            Div(cls="container-white", style="margin-bottom: 20px;")(
-                H3(
-                    f"{league_name} - Next Match",
-                    style="color: #007bff; margin-bottom: 15px;",
-                ),
-                H4(format_match_name(match)),
-                Div(style="margin-bottom: 15px;")(
-                    P(f"Date: {match.get('date', 'N/A')}"),
-                    P(f"Start Time: {match.get('start_time', 'N/A')}"),
-                    P(f"End Time: {match.get('end_time', 'N/A')}"),
-                    P(f"Location: {match.get('location', 'N/A')}"),
-                ),
+        # The line-up belongs to the fixture above it, so both live in one card
+        # rather than two stacked ones that read as unrelated sections.
+        card = [
+            Div(cls="match-header")(
+                P(league_name, cls="match-league"),
                 A(
                     Button("View Match Details", cls="btn-primary"),
                     href=f"/match/{match['id']}",
-                    style="margin-bottom: 15px; display: inline-block;",
                 ),
             ),
         ]
 
-        # Render team allocation if teams exist
-        if teams and len(teams) >= 1:
-            team1 = teams[0]
-            team2 = teams[1] if len(teams) > 1 else None
-            team1_players = match_players_dict.get(team1["id"], [])
-            team2_players = match_players_dict.get(team2["id"], []) if team2 else []
+        team1_players = []
+        team2_players = []
+        if teams:
+            team1_players = match_players_dict.get(teams[0]["id"], [])
+            if len(teams) > 1:
+                team2_players = match_players_dict.get(teams[1]["id"], [])
 
-            if team1_players or team2_players:
-                league_content.append(
-                    Div(cls="container-white", style="margin-top: 10px;")(
-                        H4("Team Allocation", style="font-size: 1.1em;"),
-                        render_match_teams(
-                            match["id"],
-                            teams,
-                            match_players_dict,
-                            is_completed=True,
-                            show_scores=False,
-                        ),
-                    )
+        if team1_players or team2_players:
+            card.append(
+                Div(cls="match-lineup")(
+                    P(
+                        format_match_meta(match, include_date=True),
+                        cls="match-fixture",
+                    ),
+                    render_match_teams(
+                        match["id"],
+                        teams,
+                        match_players_dict,
+                        is_completed=True,
+                        show_scores=False,
+                        show_tables=False,
+                    ),
                 )
-            else:
-                league_content.append(
-                    Div(cls="container-white", style="margin-top: 10px;")(
-                        H4("Team Allocation", style="font-size: 1.1em;"),
-                        P("Teams not yet allocated. ", style="color: #666;"),
-                        A(
-                            "Go to match detail page to allocate teams",
-                            href=f"/match/{match['id']}",
-                            style="color: #007bff;",
-                        ),
-                    )
-                )
+            )
         else:
-            league_content.append(
-                Div(cls="container-white", style="margin-top: 10px;")(
-                    H4("Team Allocation", style="font-size: 1.1em;"),
-                    P("Teams not yet allocated. ", style="color: #666;"),
+            card.append(
+                Div(cls="match-lineup")(
+                    P(
+                        format_match_meta(match, include_date=True),
+                        cls="match-fixture",
+                    ),
+                    P("Teams not yet allocated.", style="color: var(--muted);"),
                     A(
                         "Go to match detail page to allocate teams",
                         href=f"/match/{match['id']}",
-                        style="color: #007bff;",
                     ),
                 )
             )
 
-        content.extend(league_content)
+        content.append(Div(cls="container-white", style="margin-bottom: 20px;")(*card))
 
     return Div(*content)
 
 
-def render_recent_matches(matches):
-    """Render recent matches list"""
-    if not matches:
-        return Div(cls="container-white", style="margin-top: 20px;")(
-            H2("Recent Matches"), P("No recent matches.", style="color: #666;")
-        )
+def render_recent_matches(matches, per_league=3):
+    """Render recent matches, grouped under the league they belong to.
 
-    content = [
-        H2("Recent Matches", style="margin-top: 30px;"),
-    ]
+    A league appears whenever it has anything to show -- one recent match is
+    still worth listing, and a newly started league would otherwise be missing
+    from the page entirely until its third fixture.
 
+    The match name already carries the date and both teams, so nothing else is
+    repeated on the row.
+
+    Args:
+        matches: Match dicts with league_name, newest first.
+        per_league: Most rows to show under one league.
+    """
+    by_league = {}
     for match in matches:
-        match_date = match.get("date", "")
-        start_time = match.get("start_time", "")
-        match_location = match.get("location", "")
-        league_name = match.get("league_name", "Friendly")
+        league = match.get("league_name") or "Friendly"
+        by_league.setdefault(league, []).append(match)
 
-        match_info = []
-        if match_date:
-            match_info.append(f"Date: {match_date}")
-        if start_time:
-            match_info.append(f"Start: {start_time}")
-        if match_location:
-            match_info.append(f"Location: {match_location}")
-        if league_name:
-            match_info.append(f"League: {league_name}")
-
-        # Get score if match is completed
-        score_display = ""
-        if is_match_completed(match):
-            score_display = get_match_score_display(match["id"])
-
-        content.append(
-            Div(cls="container-white", style="margin-bottom: 10px;")(
-                A(
-                    H4(format_match_name(match), style="margin: 0; color: #007bff;"),
-                    href=f"/match/{match['id']}",
-                    style="text-decoration: none;",
-                ),
-                (
-                    P(" | ".join(match_info), style="margin: 5px 0; color: #666;")
-                    if match_info
-                    else ""
-                ),
-                (
-                    P(
-                        score_display,
-                        style="margin: 5px 0; font-weight: bold; color: #0066cc;",
+    sections = []
+    for league, league_matches in by_league.items():
+        sections.append(
+            Div(cls="container-white")(
+                P(league, cls="match-league"),
+                *[
+                    A(href=f"/match/{m['id']}", cls="match-row")(
+                        P(format_match_name(m), cls="match-row-name"),
+                        (
+                            P(get_match_score_display(m["id"]), cls="match-score")
+                            if is_match_completed(m)
+                            else ""
+                        ),
                     )
-                    if score_display
-                    else ""
-                ),
+                    for m in league_matches[:per_league]
+                ],
             )
         )
 
-    return Div(*content)
+    if not sections:
+        return Div(cls="container-white", style="margin-top: 20px;")(
+            H2("Recent Matches"), P("No recent matches.", cls="empty-state")
+        )
+
+    return Div(H2("Recent Matches", style="margin-top: 30px;"), *sections)
 
 
 def render_all_matches(matches, user=None):
@@ -379,16 +338,20 @@ def render_match_teams(
     show_scores=True,
     display_mode="combined",
     read_only=False,
+    show_tables=True,
 ):
     """Render match teams with multiple display modes.
 
+    Every caller already puts this inside a card of its own, so there is no
+    wrapper here -- one used to be added and produced a card inside a card.
+
     read_only: when True (public view), drag-and-drop is disabled and player
     names in the tables are not linked to the authenticated /player page.
+    show_tables: when False, only the pitch is drawn. The home page uses this:
+    there the formation is the summary, and the tables repeat it in words.
     """
     if not teams or len(teams) < 1:
-        return Div(cls="container-white")(
-            P("No teams allocated. Click 'Allocate Teams' to start.", cls="empty-state")
-        )
+        return P("No teams allocated. Click Allocate to start.", cls="empty-state")
 
     team1 = teams[0] if len(teams) > 0 else None
     team2 = teams[1] if len(teams) > 1 else None
@@ -555,18 +518,23 @@ def render_match_teams(
     team1_dict = teams[0] if teams and len(teams) > 0 else {}
     team2_dict = teams[1] if teams and len(teams) > 1 else {}
 
-    return Div(cls="container-white")(
-        Div(cls="pitch-view-container")(
-            render_interactive_pitch(
-                match_id,
-                team1_dict,
-                team2_dict,
-                team1_players,
-                team2_players,
-                # read_only reuses the completed-match path, which disables drag
-                is_completed or read_only,
-            )
-        ),
+    pitch = Div(cls="pitch-view-container")(
+        render_interactive_pitch(
+            match_id,
+            team1_dict,
+            team2_dict,
+            team1_players,
+            team2_players,
+            # read_only reuses the completed-match path, which disables drag
+            is_completed or read_only,
+        )
+    )
+
+    if not show_tables:
+        return pitch
+
+    return Div(
+        pitch,
         Div(cls="teams-grid-table", style="margin-top: 30px;")(
             render_player_table_pitch(
                 team1_players,
@@ -667,10 +635,15 @@ def render_match_recordings(match_id, recordings=None, can_edit=False):
             (managers/admins). Viewers see read-only links.
 
     Returns:
-        A container Div with id="match-recordings" suitable for HTMX swapping.
+        A collapsible section with id="match-recordings" suitable for HTMX
+        swapping, or None when there is nothing to show and nothing the viewer
+        could add -- an empty card is noise on a read-only page.
     """
     if recordings is None:
         recordings = get_match_recordings(match_id)
+
+    if not recordings and not can_edit:
+        return None
 
     # Existing links list
     if recordings:
@@ -725,7 +698,7 @@ def render_match_recordings(match_id, recordings=None, can_edit=False):
         )
         links_block = P(empty_text, style="color: #666;")
 
-    children = [H3("Match Recordings"), links_block]
+    children = [links_block]
 
     # Add form (managers/admins only)
     if can_edit:
@@ -755,8 +728,16 @@ def render_match_recordings(match_id, recordings=None, can_edit=False):
             )
         )
 
-    return Div(cls="container-white", id="match-recordings", style="margin-top: 20px;")(
-        *children
+    # Open once there is something to see, collapsed while it is just the add
+    # form -- this section is filled in after the match, if at all, so it should
+    # not push the line-up down the page in the meantime.
+    return Details(
+        Summary("Match Recordings", cls="section-summary"),
+        *children,
+        cls="container-white section-collapsible",
+        id="match-recordings",
+        style="margin-top: 20px;",
+        **({"open": True} if recordings else {}),
     )
 
 
@@ -804,61 +785,58 @@ def render_match_detail(
         score_display = f"Score: {team1_score}"
 
     content = [
-        H2(format_match_name(match)),
+        # Title, particulars and actions in one card on one row. The title used
+        # to sit above it, leaving a card that held two short lines and was
+        # mostly padding.
         Div(cls="container-white")(
-            P(f"Date: {match.get('date', 'N/A')}"),
-            P(f"Start Time: {match.get('start_time', 'N/A')}"),
-            P(f"End Time: {match.get('end_time', 'N/A')}"),
-            P(f"Location: {match.get('location', 'N/A')}"),
-            (
-                P(
-                    score_display,
-                    style="font-weight: bold; font-size: 18px; color: #0066cc;",
-                )
-                if score_display
-                else ""
-            ),
-            *(
-                [
-                    Div(cls="btn-group", style="margin-top: 10px;")(
-                        *(
-                            [
-                                A(
-                                    Button("Edit Match", cls="btn-primary"),
-                                    href=f"/edit_match/{match['id']}",
-                                )
-                            ]
-                            if can_edit
-                            else []
-                        ),
-                        *(
-                            [
-                                Form(
-                                    method="POST",
-                                    action=f"/delete_match/{match['id']}",
-                                    style="display: inline;",
-                                    **{
-                                        "onsubmit": "return confirm('Delete this match?');"
-                                    },
-                                )(
-                                    Button(
-                                        "Delete Match", cls="btn-danger", type="submit"
-                                    ),
-                                )
-                            ]
-                            if can_delete
-                            else []
-                        ),
-                    )
-                ]
-                if (can_edit or can_delete)
-                else []
+            Div(cls="match-header")(
+                Div(
+                    P(match.get("league_name") or "Friendly", cls="match-league"),
+                    H2(format_match_name(match), cls="match-title"),
+                    P(format_match_meta(match), cls="match-meta"),
+                    (P(score_display, cls="match-score") if score_display else ""),
+                ),
+                *(
+                    [
+                        Div(cls="btn-group")(
+                            *(
+                                [
+                                    A(
+                                        Button("Edit Match", cls="btn-primary"),
+                                        href=f"/edit_match/{match['id']}",
+                                    )
+                                ]
+                                if can_edit
+                                else []
+                            ),
+                            *(
+                                [
+                                    Form(
+                                        method="POST",
+                                        action=f"/delete_match/{match['id']}",
+                                        style="display: inline;",
+                                        **{
+                                            "onsubmit": "return confirm('Delete this match?');"
+                                        },
+                                    )(
+                                        Button(
+                                            "Delete Match",
+                                            cls="btn-danger",
+                                            type="submit",
+                                        ),
+                                    )
+                                ]
+                                if can_delete
+                                else []
+                            ),
+                        )
+                    ]
+                    if (can_edit or can_delete)
+                    else []
+                ),
             ),
         ),
     ]
-
-    # Match recordings (video links) — shown right under the score for visibility
-    content.append(render_match_recordings(match["id"], can_edit=can_edit))
 
     # Team Allocation section
     if is_completed:
@@ -889,7 +867,7 @@ def render_match_detail(
             allocation_buttons = [
                 Div(cls="btn-group")(
                     Button(
-                        "Allocate Teams",
+                        "Allocate",
                         cls="btn-success",
                         **{
                             "hx-post": f"/allocate_match/{match['id']}",
@@ -898,7 +876,7 @@ def render_match_detail(
                         },
                     ),
                     Button(
-                        "Reset Teams",
+                        "Reset",
                         cls="btn-secondary",
                         **{
                             "hx-post": f"/reset_match_teams/{match['id']}",
@@ -911,8 +889,10 @@ def render_match_detail(
 
         content.append(
             Div(cls="container-white", style="margin-top: 20px;")(
-                H3("Team Allocation"),
-                *allocation_buttons,
+                Div(cls="section-header")(
+                    H3("Team Allocation", style="margin: 0;"),
+                    *allocation_buttons,
+                ),
                 Div(id="match-teams-result")(
                     render_match_teams(
                         match["id"],
@@ -994,52 +974,66 @@ def render_match_detail(
                 )
             )
 
+    # Recordings and events are both filled in after the match, if at all, so
+    # they sit below the line-up rather than above it, and stay collapsed until
+    # they have something in them.
+    recordings_section = render_match_recordings(match["id"], can_edit=can_edit)
+    if recordings_section is not None:
+        content.append(recordings_section)
+
     # Render events (goals, assists, etc.)
-    # Only show Add Event button for managers
-    event_header_content = [H3("Match Events")]
-    if can_edit:
-        event_header_content.append(
-            A(
-                Button("Add Event", cls="btn-success"),
-                href=f"/add_match_event/{match['id']}",
-                style="margin-bottom: 10px; display: inline-block;",
-            )
-        )
-    content.append(
-        Div(cls="container-white", style="margin-bottom: 15px;")(*event_header_content)
-    )
+    if events or can_edit:
+        event_body = []
 
-    if events:
-        events_list = []
-        for event in events:
-            event_desc = f"Min {event.get('minute', 'N/A')}: {event.get('event_type', '').upper()}"
-            if event.get("player_name"):
-                event_desc += f" - {event['player_name']}"
-            if event.get("description"):
-                event_desc += f" ({event['description']})"
-
-            # Only show delete link for managers
-            event_content = [event_desc]
-            if can_edit:
-                event_content.append(
-                    A(
-                        " [Delete]",
-                        href=f"/delete_match_event/{event['id']}",
-                        style="color: #dc3545; text-decoration: none; margin-left: 10px;",
-                        **{"onclick": "return confirm('Delete this event?');"},
-                    )
+        # Only show Add Event button for managers
+        if can_edit:
+            event_body.append(
+                A(
+                    Button("Add Event", cls="btn-success"),
+                    href=f"/add_match_event/{match['id']}",
+                    style="margin-bottom: 10px; display: inline-block;",
                 )
+            )
 
-            events_list.append(Li(*event_content, style="margin-bottom: 5px;"))
-        content.append(Div(cls="container-white")(Ul(*events_list)))
-    else:
-        no_events_text = (
-            "No events yet. Add events like goals, assists, etc."
-            if can_edit
-            else "No events recorded."
-        )
+        if events:
+            events_list = []
+            for event in events:
+                event_desc = f"Min {event.get('minute', 'N/A')}: {event.get('event_type', '').upper()}"
+                if event.get("player_name"):
+                    event_desc += f" - {event['player_name']}"
+                if event.get("description"):
+                    event_desc += f" ({event['description']})"
+
+                # Only show delete link for managers
+                event_content = [event_desc]
+                if can_edit:
+                    event_content.append(
+                        A(
+                            " [Delete]",
+                            href=f"/delete_match_event/{event['id']}",
+                            style="color: var(--danger); text-decoration: none; margin-left: 10px;",
+                            **{"onclick": "return confirm('Delete this event?');"},
+                        )
+                    )
+
+                events_list.append(Li(*event_content, style="margin-bottom: 5px;"))
+            event_body.append(Ul(*events_list, style="margin: 0;"))
+        else:
+            event_body.append(
+                P(
+                    "No events yet. Add events like goals, assists, etc.",
+                    style="color: var(--muted);",
+                )
+            )
+
         content.append(
-            Div(cls="container-white")(P(no_events_text, style="color: #666;"))
+            Details(
+                Summary("Match Events", cls="section-summary"),
+                *event_body,
+                cls="container-white section-collapsible",
+                style="margin-top: 20px;",
+                **({"open": True} if events else {}),
+            )
         )
 
     return Div(*content)
@@ -1184,7 +1178,7 @@ def render_teams(players):
 
     if not team1 or not team2:
         return Div(cls="container-white")(
-            P("No teams allocated. Click 'Allocate Teams' to start.", cls="empty-state")
+            P("No teams allocated. Click Allocate to start.", cls="empty-state")
         )
 
     def render_team(team, team_num):

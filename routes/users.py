@@ -234,13 +234,11 @@ def render_users_list(users, current_user=None):
                         A(
                             "View",
                             href=f"/users/{user_id}",
-                            style="padding: 4px 8px; border-radius: 3px; text-decoration: none; font-size: 12px; color: white; background: #0066cc;",
                         ),
                         can_edit
                         and A(
                             "Edit",
                             href=f"/users/{user_id}/edit",
-                            style="padding: 4px 8px; border-radius: 3px; text-decoration: none; font-size: 12px; color: white; background: #28a745;",
                         )
                         or "",
                         can_delete
@@ -256,7 +254,6 @@ def render_users_list(users, current_user=None):
                                 "Delete",
                                 type="submit",
                                 cls="btn-danger",
-                                style="padding: 4px 8px; font-size: 12px;",
                             )
                         )
                         or "",
@@ -464,21 +461,18 @@ def register_user_routes(rt, STYLE):
                                 "Change Password",
                                 href=f"/change-password{'?target_user_id=' + str(user_id) if not is_own_profile and user.get('is_superuser') else ''}",
                                 cls="btn-success",
-                                style="padding: 10px 20px; text-decoration: none; display: inline-block;",
                             ),
                             can_edit
                             and A(
                                 "Edit",
                                 href=f"/users/{user_id}/edit",
                                 cls="btn-success",
-                                style="padding: 10px 20px; text-decoration: none; display: inline-block;",
                             )
                             or "",
                             A(
                                 "Back to Users",
                                 href="/users",
                                 cls="btn-secondary",
-                                style="padding: 10px 20px; text-decoration: none; display: inline-block;",
                             ),
                         ),
                     ),

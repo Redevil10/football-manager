@@ -19,7 +19,7 @@ def register_home_routes(rt, STYLE):
         from db import (
             get_match_players,
             get_match_teams,
-            get_recent_matches,
+            get_recent_matches_by_league,
         )
 
         # Check authentication - FastHTML injects session as 'sess' parameter
@@ -50,8 +50,9 @@ def register_home_routes(rt, STYLE):
                 "match_players_dict": match_players_dict,
             }
 
-        # Get recent (past) matches across all leagues, newest first
-        recent_matches = get_recent_matches(limit=10, club_ids=club_ids)
+        # Recent matches, ranked within each league rather than globally, so a
+        # busy league cannot crowd the quieter ones out of the list.
+        recent_matches = get_recent_matches_by_league(club_ids=club_ids)
 
         return Html(
             render_head("Football Manager", STYLE),

@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 import pytest
+from fasthtml.common import to_xml
 
 from render.players import (
     render_add_player_form,
@@ -52,19 +53,25 @@ class TestRenderPlayerTable:
         assert result is not None
 
     @patch("render.players.calculate_player_overall")
-    @patch("render.common.can_user_delete")
-    def test_render_player_table_with_delete_permission(
-        self, mock_can_delete, mock_calculate, temp_db
-    ):
-        """Test rendering player table with delete permission"""
+    def test_player_name_links_to_the_player(self, mock_calculate):
+        """The name is the way in: there is no separate View action."""
         mock_calculate.return_value = 85.5
-        mock_can_delete.return_value = True
-        user = {"id": 1, "is_superuser": False}
-        players = [{"id": 1, "name": "Player 1", "club_id": 1}]
+        players = [{"id": 7, "name": "Player 1", "club_id": 1}]
 
-        result = render_player_table(players, user)
+        html = to_xml(render_player_table(players))
 
-        assert result is not None
+        assert 'href="/player/7"' in html
+        assert ">View<" not in html
+
+    @patch("render.players.calculate_player_overall")
+    def test_player_name_link_keeps_match_context(self, mock_calculate):
+        """Opening a player from a match keeps the way back to it."""
+        mock_calculate.return_value = 85.5
+        players = [{"id": 7, "name": "Player 1", "club_id": 1}]
+
+        html = to_xml(render_player_table(players, match_id=3))
+
+        assert 'href="/player/7?back=/match/3"' in html
 
 
 class TestRenderMatchAvailablePlayers:

@@ -21,6 +21,7 @@ from db.matches import (
     get_next_match,
     get_next_match_by_league,
     get_recent_matches,
+    get_recent_matches_by_league,
     save_match_info,
     update_match,
 )
@@ -652,3 +653,105 @@ class TestDeleteMatchEdgeCases:
 
         # Should return False when match not found
         assert result is False
+
+
+class TestGetRecentMatchesByLeague:
+    """Tests for get_recent_matches_by_league function"""
+
+    def _played(self, league_id, days_ago, location="Field"):
+        """A match that has already been played, `days_ago` days back."""
+        return create_match(
+            league_id=league_id,
+            date=(date.today() - timedelta(days=days_ago)).isoformat(),
+            start_time="10:00:00",
+            end_time=None,
+            location=location,
+            num_teams=2,
+        )
+
+    def test_ranks_within_each_league_not_globally(self, temp_db):
+        """A busy league must not crowd a quiet one out of the results."""
+        busy = create_league("Busy League")
+        quiet = create_league("Quiet League")
+        for day in range(1, 11):
+            self._played(busy, day)
+        self._played(quiet, 20)
+
+        matches = get_recent_matches_by_league(per_league=3)
+
+        by_league = {}
+        for match in matches:
+            by_league.setdefault(match["league_name"], []).append(match)
+        assert len(by_league["Busy League"]) == 3
+        assert len(by_league["Quiet League"]) == 1
+
+    def test_keeps_the_newest_of_each_league(self, temp_db):
+        """The three kept are the three most recent, not any three."""
+        league = create_league("A League")
+        for day in (5, 40, 90, 150):
+            self._played(league, day, location=f"{day} days ago")
+
+        matches = get_recent_matches_by_league(per_league=3)
+
+        assert [m["location"] for m in matches] == [
+            "5 days ago",
+            "40 days ago",
+            "90 days ago",
+        ]
+
+    def test_leaves_out_matches_past_the_window(self, temp_db):
+        """Anything older than the window is not recent by any reading."""
+        league = create_league("A League")
+        self._played(league, 10, location="inside")
+        self._played(league, 400, location="outside")
+
+        matches = get_recent_matches_by_league(months=6)
+
+        assert [m["location"] for m in matches] == ["inside"]
+
+    def test_leaves_out_upcoming_matches(self, temp_db):
+        """Upcoming fixtures belong to the other section, not this one."""
+        league = create_league("A League")
+        create_match(
+            league_id=league,
+            date=(date.today() + timedelta(days=7)).isoformat(),
+            start_time="10:00:00",
+            end_time=None,
+            location="future",
+            num_teams=2,
+        )
+        self._played(league, 3, location="past")
+
+        matches = get_recent_matches_by_league()
+
+        assert [m["location"] for m in matches] == ["past"]
+
+    def test_empty_club_list_matches_nothing(self, temp_db):
+        """An empty club list means no accessible leagues, so no matches."""
+        league = create_league("A League")
+        self._played(league, 3)
+
+        assert get_recent_matches_by_league(club_ids=[]) == []
+
+
+class TestGetMatchReturnsLeagueName:
+    """get_match must carry the league name the detail page shows.
+
+    Without the join the page read `league_name` off a dict that never had it
+    and fell back to "Friendly" for every match in the app.
+    """
+
+    def test_get_match_includes_league_name(self, temp_db):
+        league_id = create_league("Premier League")
+        match_id = create_match(
+            league_id=league_id,
+            date="2024-01-15",
+            start_time="10:00",
+            end_time=None,
+            location="Field",
+            num_teams=2,
+        )
+
+        match = get_match(match_id)
+
+        assert match["league_name"] == "Premier League"

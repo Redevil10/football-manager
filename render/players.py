@@ -21,7 +21,7 @@ from logic import (
 from render.common import can_user_delete, can_user_edit, render_attr_input
 
 
-def render_player_table(players, user=None, match_id=None):
+def render_player_table(players, match_id=None):
     """Render player list as table"""
     if not players:
         return P("No players yet", cls="empty-state")
@@ -29,40 +29,24 @@ def render_player_table(players, user=None, match_id=None):
     rows = []
     for p in players:
         overall = round(calculate_player_overall(p), 1)
-        club_id = p.get("club_id")
-        can_delete = can_user_delete(user, club_id) if user else False
 
         view_href = f"/player/{p['id']}"
         if match_id:
             view_href += f"?back=/match/{match_id}"
-        actions = [
-            A("View", href=view_href, style="background: #0066cc;"),
-        ]
-        if can_delete:
-            actions.append(
-                A(
-                    "Delete",
-                    href=f"/delete_player/{p['id']}",
-                    cls="delete",
-                    onclick="return confirm('Confirm delete?');",
-                )
-            )
 
         row = Tr(
-            Td(p["name"]),
-            Td(str(overall), style="font-weight: bold; color: #0066cc;"),
-            Td(
-                Div(cls="player-row-actions")(*actions),
-            ),
+            Td(A(p["name"], href=view_href)),
+            Td(str(overall), style="font-weight: bold; color: var(--navy);"),
         )
         rows.append(row)
 
+    # No actions column: the name opens the player, and deleting one lives on
+    # that page rather than being a second control on every row here.
     return Table(cls="player-table")(
         Thead(
             Tr(
                 Th("Name"),
                 Th("Overall"),
-                Th("Actions"),
             )
         ),
         Tbody(*rows),
@@ -90,17 +74,9 @@ def render_match_available_players(
         match_player_id = mp.get("id")  # This is match_players.id
         player_id = mp.get("player_id")  # This is players.id
 
-        # Build action items - View links to the player page (skipped in the
-        # public read-only view); Remove only for managers.
+        # Removing a signup only exists here, so this column stays -- unlike the
+        # players list, where every action had a home on the player's own page.
         action_items = []
-        if not read_only:
-            action_items.append(
-                A(
-                    "View",
-                    href=f"/player/{player_id}?back=/match/{match_id}",
-                    style="background: #0066cc;",
-                )
-            )
         if can_edit:
             action_items.append(
                 Form(
@@ -111,18 +87,24 @@ def render_match_available_players(
                         "onsubmit": "return confirm('Remove this player from match signup?');"
                     },
                 )(
-                    Button(
-                        "Remove",
-                        type="submit",
-                        cls="btn-danger",
-                        style="padding: 5px 10px; font-size: 12px;",
-                    ),
+                    Button("Remove", type="submit", cls="btn-danger"),
                 ),
             )
 
+        # The public view has no access to /player, so there the name is plain
+        # text rather than a dead link.
+        name_cell = (
+            mp["name"]
+            if read_only
+            else A(
+                mp["name"],
+                href=f"/player/{player_id}?back=/match/{match_id}",
+            )
+        )
+
         row = Tr(
-            Td(mp["name"]),
-            Td(str(overall), style="font-weight: bold; color: #0066cc;"),
+            Td(name_cell),
+            Td(str(overall), style="font-weight: bold; color: var(--navy);"),
             Td(Div(cls="player-row-actions")(*action_items)),
         )
         rows.append(row)
