@@ -3,6 +3,7 @@
 import pytest
 
 from db.clubs import create_club
+from db.connection import get_db
 from db.leagues import create_league
 from db.match_teams import (
     create_match_team,
@@ -340,3 +341,51 @@ class TestCreateMatchTeamEdgeCases:
         assert teams[0]["should_allocate"] == 0
         assert teams[0]["team_name"] == "Team A"
         assert teams[0]["jersey_color"] == "Red"
+
+
+class TestScoreStaysUnsetOnLegacySchema:
+    """A new team must have no score even on a pre-existing database.
+
+    Databases created before `score` became nullable still carry `DEFAULT 0`,
+    and CREATE TABLE IF NOT EXISTS never rewrites them. If the insert leaves the
+    column out, those rows silently come back as 0 and every fresh match reads
+    "0 - 0" again.
+    """
+
+    def test_new_team_has_no_score_when_column_defaults_to_zero(
+        self, temp_db, sample_match
+    ):
+        conn = get_db()
+        try:
+            # Recreate the table exactly as the older schema had it.
+            conn.executescript(
+                """
+                DROP TABLE IF EXISTS match_teams;
+                CREATE TABLE match_teams
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     match_id INTEGER NOT NULL,
+                     team_number INTEGER NOT NULL,
+                     team_name TEXT,
+                     jersey_color TEXT,
+                     score INTEGER DEFAULT 0,
+                     captain_id INTEGER,
+                     should_allocate INTEGER DEFAULT 1,
+                     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
+                     UNIQUE(match_id, team_number));
+                """
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        team_id = create_match_team(sample_match, 1, "Team A", "Red")
+
+        conn = get_db()
+        try:
+            score = conn.execute(
+                "SELECT score FROM match_teams WHERE id = ?", (team_id,)
+            ).fetchone()[0]
+        finally:
+            conn.close()
+
+        assert score is None

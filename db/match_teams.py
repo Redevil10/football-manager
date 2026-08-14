@@ -50,8 +50,13 @@ def create_match_team(
     """
     try:
         with db_transaction("create_match_team") as conn:
+            # `score` is listed and set to NULL rather than left out. Databases
+            # created before the column became nullable still carry
+            # `DEFAULT 0`, and CREATE TABLE IF NOT EXISTS never alters them --
+            # omitting the column there would hand every new team a 0 and bring
+            # back the "0 - 0" on matches nobody has scored yet.
             cursor = conn.execute(
-                """INSERT INTO match_teams (match_id, team_number, team_name, jersey_color, should_allocate) VALUES (?, ?, ?, ?, ?)
+                """INSERT INTO match_teams (match_id, team_number, team_name, jersey_color, score, should_allocate) VALUES (?, ?, ?, ?, NULL, ?)
                 ON CONFLICT (match_id, team_number) DO UPDATE SET team_name = ?, jersey_color = ?, should_allocate = ?""",
                 (
                     match_id,
