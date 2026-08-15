@@ -69,6 +69,7 @@ from render import (
     render_navbar,
 )
 from render.common import is_match_completed, render_head
+from render.matches import can_user_create_match
 
 logger = logging.getLogger(__name__)
 
@@ -152,10 +153,15 @@ def register_match_routes(rt, STYLE):
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
-                    H2("All Matches"),
-                    P(
-                        "View all matches across all leagues. Click on a match to see details.",
-                        style="color: #666; margin-bottom: 20px;",
+                    # The action sits beside the heading, as on every other
+                    # list page; it used to have a card of its own.
+                    Div(cls="section-header")(
+                        H2(f"All Matches ({len(matches)})", style="margin: 0;"),
+                        (
+                            A("Create Match", href="/create_match", cls="btn-success")
+                            if can_user_create_match(user)
+                            else ""
+                        ),
                     ),
                     render_all_matches(matches, user),
                 ),

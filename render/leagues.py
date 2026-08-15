@@ -1,78 +1,70 @@
 # render/leagues.py - League rendering functions
 
+from urllib.parse import unquote
+
 from fasthtml.common import *
 
 from core.auth import can_user_edit_league, can_user_edit_match
 from db import get_matches_by_league
+from db.club_leagues import count_clubs_by_league
 from render.common import format_match_name, get_match_score_display, is_match_completed
 
 
 def render_leagues_list(leagues, user=None):
-    """Render list of leagues"""
+    """Render the leagues as a table.
 
+    Same shape as the clubs, players and users lists: the name opens the
+    league, and deleting one lives on that page rather than being a control on
+    every row here.
+    """
+    # Counted in one grouped query, not once per row.
+    club_counts = count_clubs_by_league()
     if not leagues:
         return Div(cls="container-white")(
-            P(
-                "No leagues yet. Create your first league!",
-                style="text-align: center; color: #666;",
-            )
+            P("No leagues yet.", cls="empty-state"),
         )
 
-    items = []
+    rows = []
     for league in leagues:
-        # Get match count for confirmation message
-        matches = get_matches_by_league(league["id"])
-        match_count = len(matches)
-
-        can_delete = user.get("is_superuser", False) if user else False
-
-        items.append(
-            Div(
-                cls="league-item",
-                style="padding: 15px; margin-bottom: 10px; background: #f8f9fa; border-radius: 5px;",
-            )(
-                Div(
-                    style="display: flex; justify-content: space-between; align-items: center;"
-                )(
-                    A(
-                        H3(league["name"], style="margin: 0; color: #007bff;"),
-                        href=f"/league/{league['id']}",
-                        style="text-decoration: none; flex: 1;",
-                    ),
-                    *(
-                        [
-                            Form(
-                                method="POST",
-                                action=f"/delete_league/{league['id']}",
-                                style="margin-left: 10px;",
-                                **{
-                                    "onsubmit": f"return confirm('Delete this league and its {match_count} matches?');"
-                                },
-                            )(
-                                Button(
-                                    "Delete",
-                                    cls="btn-danger",
-                                    type="submit",
-                                    style="padding: 5px 10px; font-size: 14px;",
-                                ),
-                            )
-                        ]
-                        if can_delete
-                        else []
-                    ),
+        description = league.get("description") or ""
+        rows.append(
+            Tr(
+                Td(A(league["name"], href=f"/league/{league['id']}")),
+                Td(
+                    description[:100] + ("..." if len(description) > 100 else "")
+                    if description
+                    else "—",
+                    style="color: var(--muted);" if not description else "",
                 ),
-                (
-                    P(
-                        league.get("description", ""),
-                        style="margin: 5px 0 0 0; color: #666;",
-                    )
-                    if league.get("description")
-                    else ""
+                Td(
+                    str(club_counts.get(league["id"], 0)),
+                    style="color: var(--muted);",
+                ),
+                Td(
+                    str(len(get_matches_by_league(league["id"]))),
+                    style="color: var(--muted);",
+                ),
+                Td(
+                    "Public" if league.get("is_public") else "Private",
+                    style="color: var(--muted);",
                 ),
             )
         )
 
-    return Div(*items)
+    return Div(cls="container-white")(
+        Table(cls="player-table")(
+            Thead(
+                Tr(
+                    Th("Name"),
+                    Th("Description"),
+                    Th("Clubs"),
+                    Th("Matches"),
+                    Th("Visibility"),
+                )
+            ),
+            Tbody(*rows),
+        )
+    )
 
 
 def render_league_matches(league, matches, user=None):
@@ -326,3 +318,50 @@ def render_league_clubs(league_id, clubs_in_league, all_clubs, user=None):
         )
 
     return Div(*content)
+
+
+def render_create_league_form(error=None, values=None):
+    """Render the create league form.
+
+    A page of its own, like adding a player: the list page had this form
+    permanently unrolled above it, which cost half a screen whether or not
+    anyone was creating anything.
+
+    Args:
+        error: Message to show above the form.
+        values: What was submitted last time, so a rejected form comes back
+            filled in rather than blank.
+    """
+    error_msg = unquote(str(error)) if error else None
+    values = values or {}
+
+    return Div(cls="container-white")(
+        H3("Create League"),
+        Div(error_msg, cls="auth-error") if error_msg else "",
+        Form(method="post", action="/create_league")(
+            Div(style="margin-bottom: 15px;")(
+                Label("Name:", style="display: block; margin-bottom: 5px;"),
+                Input(
+                    type="text",
+                    name="name",
+                    value=values.get("name", ""),
+                    required=True,
+                    autofocus=True,
+                    style="width: 100%;",
+                ),
+            ),
+            Div(style="margin-bottom: 15px;")(
+                Label("Description:", style="display: block; margin-bottom: 5px;"),
+                Textarea(
+                    values.get("description", ""),
+                    name="description",
+                    rows="3",
+                    style="width: 100%;",
+                ),
+            ),
+            Div(cls="btn-group")(
+                Button("Create League", type="submit", cls="btn-success"),
+                A("Cancel", href="/leagues", cls="btn-secondary"),
+            ),
+        ),
+    )

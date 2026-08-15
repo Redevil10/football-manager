@@ -407,3 +407,36 @@ def update_user_superuser_status(user_id: int, is_superuser: bool) -> bool:
             exc_info=True,
         )
         return False
+
+
+def get_club_staff() -> dict[int, dict[str, list[str]]]:
+    """The admins and managers of every club, keyed by club id.
+
+    One query rather than walking every user for every club: the clubs list
+    renders a row per club and would otherwise be quadratic in the number of
+    accounts.
+
+    Viewers are left out. They are the default and the common case, so listing
+    them would say nothing about who actually runs a club.
+
+    Returns:
+        dict[int, dict[str, list[str]]]: club id -> {"admin": [...],
+            "manager": [...]}, each list of usernames in alphabetical order.
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT uc.club_id, uc.role, u.username
+                 FROM user_clubs uc
+                 JOIN users u ON uc.user_id = u.id
+                WHERE uc.role IN ('admin', 'manager')
+                ORDER BY u.username"""
+        ).fetchall()
+    finally:
+        conn.close()
+
+    staff: dict[int, dict[str, list[str]]] = {}
+    for row in rows:
+        club = staff.setdefault(row["club_id"], {"admin": [], "manager": []})
+        club[row["role"]].append(row["username"])
+    return staff

@@ -76,15 +76,19 @@ def get_all_players(club_ids: Optional[list[int]] = None) -> list[dict]:
     Returns:
         list[dict]: List of player dictionaries with parsed attributes
     """
+    # Joined for the creator's name, which the list shows next to the player.
+    select = """SELECT p.*, u.username AS created_by_username
+                  FROM players p
+                  LEFT JOIN users u ON p.created_by = u.id"""
     conn = get_db()
     if club_ids is not None and len(club_ids) > 0:
         placeholders = ",".join("?" * len(club_ids))
-        query = f"SELECT * FROM players WHERE club_id IN ({placeholders}) ORDER BY created_at DESC"
-        players = conn.execute(query, tuple(club_ids)).fetchall()
-    else:
         players = conn.execute(
-            "SELECT * FROM players ORDER BY created_at DESC"
+            f"{select} WHERE p.club_id IN ({placeholders}) ORDER BY p.created_at DESC",
+            tuple(club_ids),
         ).fetchall()
+    else:
+        players = conn.execute(f"{select} ORDER BY p.created_at DESC").fetchall()
     conn.close()
 
     result = []
@@ -94,10 +98,32 @@ def get_all_players(club_ids: Optional[list[int]] = None) -> list[dict]:
     return result
 
 
+def split_aliases(alias: Optional[str]) -> list[str]:
+    """Split the alias field into the individual names it holds.
+
+    One player often answers to several names -- a nickname, a spelling in
+    another script, what the group chat calls them -- so the column holds them
+    semicolon-separated. Blanks and stray spacing are dropped.
+
+    Args:
+        alias: Raw alias column, e.g. "Ken; 小谢".
+
+    Returns:
+        list[str]: The names, in the order written.
+    """
+    if not alias:
+        return []
+    return [part.strip() for part in alias.split(";") if part.strip()]
+
+
 def find_player_by_name_or_alias(
     name: str, club_ids: Optional[list[int]] = None
 ) -> Optional[dict]:
-    """Find player by name or alias, optionally filtered by club_ids.
+    """Find player by name or by any one of their aliases.
+
+    The alias column holds a semicolon-separated list, so it is matched a name
+    at a time in Python rather than with SQL equality: `alias = ?` only ever
+    matched players who had exactly one alias and nothing else.
 
     Args:
         name: Player name or alias to search for
@@ -106,23 +132,41 @@ def find_player_by_name_or_alias(
     Returns:
         dict: Player dictionary with parsed attributes if found, None otherwise
     """
+    wanted = (name or "").strip().casefold()
+    if not wanted:
+        return None
+
     conn = get_db()
-    if club_ids is not None and len(club_ids) > 0:
-        placeholders = ",".join("?" * len(club_ids))
-        query = f"SELECT * FROM players WHERE (name = ? OR alias = ?) AND club_id IN ({placeholders})"
-        player = conn.execute(query, (name, name) + tuple(club_ids)).fetchone()
-    else:
-        player = conn.execute(
-            "SELECT * FROM players WHERE name = ? OR alias = ?", (name, name)
-        ).fetchone()
-    conn.close()
-    if player:
-        return parse_player_attributes(player)
+    try:
+        if club_ids is not None and len(club_ids) > 0:
+            placeholders = ",".join("?" * len(club_ids))
+            rows = conn.execute(
+                f"SELECT * FROM players WHERE club_id IN ({placeholders})",
+                tuple(club_ids),
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM players").fetchall()
+    finally:
+        conn.close()
+
+    # Name first: a player's own name outranks someone else's nickname for it.
+    for row in rows:
+        if (row["name"] or "").strip().casefold() == wanted:
+            return parse_player_attributes(row)
+
+    for row in rows:
+        if any(a.casefold() == wanted for a in split_aliases(row["alias"])):
+            return parse_player_attributes(row)
+
     return None
 
 
 def add_player(
-    name: str, club_id: int, position_pref: str = "", alias: Optional[str] = None
+    name: str,
+    club_id: int,
+    position_pref: str = "",
+    alias: Optional[str] = None,
+    created_by: Optional[int] = None,
 ) -> Optional[int]:
     """Add player with random attributes.
 
@@ -130,7 +174,9 @@ def add_player(
         name: Player name
         club_id: ID of the club the player belongs to
         position_pref: Preferred position (optional)
-        alias: Player alias (optional)
+        alias: Player alias, semicolon-separated for more than one (optional)
+        created_by: ID of the user adding this player. None where nobody is
+            credited, such as a seed or an import run outside a session.
 
     Returns:
         int: Player ID on success
@@ -144,8 +190,18 @@ def add_player(
             gk = json.dumps(generate_random_gk())
 
             cursor = conn.execute(
-                "INSERT INTO players (name, club_id, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (name, club_id, position_pref, alias, technical, mental, physical, gk),
+                "INSERT INTO players (name, club_id, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    name,
+                    club_id,
+                    position_pref,
+                    alias,
+                    technical,
+                    mental,
+                    physical,
+                    gk,
+                    created_by,
+                ),
             )
             player_id = cursor.lastrowid
             conn.commit()
@@ -169,6 +225,7 @@ def add_player_with_score(
     overall_score: int = 100,
     position_pref: str = "",
     alias: Optional[str] = None,
+    created_by: Optional[int] = None,
 ) -> Optional[int]:
     """Add player with attributes derived from an overall score.
 
@@ -177,7 +234,8 @@ def add_player_with_score(
         club_id: ID of the club the player belongs to
         overall_score: Target overall score (10-200), default 100
         position_pref: Preferred position (optional)
-        alias: Player alias (optional)
+        alias: Player alias, semicolon-separated for more than one (optional)
+        created_by: ID of the user adding this player (optional)
 
     Returns:
         int: Player ID on success
@@ -194,8 +252,18 @@ def add_player_with_score(
             gk = json.dumps(attrs["gk"])
 
             cursor = conn.execute(
-                "INSERT INTO players (name, club_id, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (name, club_id, position_pref, alias, technical, mental, physical, gk),
+                "INSERT INTO players (name, club_id, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    name,
+                    club_id,
+                    position_pref,
+                    alias,
+                    technical,
+                    mental,
+                    physical,
+                    gk,
+                    created_by,
+                ),
             )
             player_id = cursor.lastrowid
             conn.commit()
@@ -239,6 +307,9 @@ def delete_player(player_id: int) -> bool:
 
 
 def update_player_team(player_id: int, team: str, position: str) -> bool:
+    # Deliberately does not touch updated_at. Allocating teams writes this on
+    # every player before every match, which would leave "last updated" saying
+    # the same thing for everyone and answering nothing.
     """Update player team and position.
 
     Args:
@@ -292,7 +363,10 @@ def update_player_attrs(
     try:
         with db_transaction("update_player_attrs") as conn:
             cursor = conn.execute(
-                "UPDATE players SET technical_attrs = ?, mental_attrs = ?, physical_attrs = ?, gk_attrs = ? WHERE id = ?",
+                """UPDATE players SET technical_attrs = ?, mental_attrs = ?,
+                          physical_attrs = ?, gk_attrs = ?,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?""",
                 (
                     json.dumps(tech_attrs),
                     json.dumps(mental_attrs),
@@ -328,7 +402,8 @@ def update_player_name(player_id: int, name: str, alias: Optional[str] = None) -
     try:
         with db_transaction("update_player_name") as conn:
             cursor = conn.execute(
-                "UPDATE players SET name = ?, alias = ? WHERE id = ?",
+                """UPDATE players SET name = ?, alias = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?""",
                 (name, alias, player_id),
             )
             conn.commit()
@@ -368,7 +443,8 @@ def update_player_height_weight(
             height = int(height) if height and str(height).strip() else None
             weight = int(weight) if weight and str(weight).strip() else None
             cursor = conn.execute(
-                "UPDATE players SET height = ?, weight = ? WHERE id = ?",
+                """UPDATE players SET height = ?, weight = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?""",
                 (height, weight, player_id),
             )
             conn.commit()

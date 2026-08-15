@@ -62,34 +62,75 @@ def add_created_by_to_users(conn):
     return True
 
 
-def attribute_unknown_creators(conn):
-    """Credit accounts with no recorded creator to the founding superuser.
+def add_player_audit_columns(conn):
+    """Add players.updated_at and players.created_by to older databases.
 
-    Nobody recorded who registered the accounts that predate ``created_by``, so
-    the column would otherwise be a run of dashes forever. The earliest
+    ``CREATE TABLE IF NOT EXISTS`` leaves an existing table alone, so these have
+    to be added here. ADD COLUMN is the schema change SQLite makes in place,
+    which is what keeps this safe against live data.
+
+    ``updated_at`` cannot take CURRENT_TIMESTAMP as a default in ADD COLUMN
+    (SQLite only allows constant defaults there), so it is added bare and then
+    seeded from created_at: a player nobody has edited was last changed when it
+    was made.
+
+    Safe to re-run: each column is only added when missing.
+
+    Returns:
+        list[str]: names of the columns that were added
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(players)")}
+    added = []
+
+    if "updated_at" not in columns:
+        conn.execute("ALTER TABLE players ADD COLUMN updated_at TIMESTAMP")
+        conn.execute("UPDATE players SET updated_at = created_at")
+        added.append("updated_at")
+
+    if "created_by" not in columns:
+        conn.execute(
+            "ALTER TABLE players ADD COLUMN created_by INTEGER REFERENCES users(id)"
+        )
+        added.append("created_by")
+
+    return added
+
+
+def attribute_unknown_creators(conn):
+    """Credit rows with no recorded creator to the founding superuser.
+
+    Nobody recorded who added the users and players that predate ``created_by``,
+    so those columns would otherwise be a run of dashes forever. The earliest
     superuser is the account that set the app up and is the reasonable
     presumption -- though it is a presumption, not a record.
 
-    That superuser's own row stays NULL: nothing created the founding account,
-    and a row pointing at itself reads as a data error to whoever finds it next.
+    That superuser's own user row stays NULL: nothing created the founding
+    account, and a row pointing at itself reads as a data error to whoever finds
+    it next. Players have no such problem, so all of them are credited.
 
     Safe to re-run: only rows still NULL are touched, and once filled they are
     no longer matched.
 
     Returns:
-        int: number of accounts credited
+        dict[str, int]: rows credited, by table
     """
     founder = conn.execute(
         "SELECT id FROM users WHERE is_superuser = 1 ORDER BY id LIMIT 1"
     ).fetchone()
     if not founder:
-        return 0
+        return {"users": 0, "players": 0}
 
-    cursor = conn.execute(
-        "UPDATE users SET created_by = ? WHERE created_by IS NULL AND id != ?",
-        (founder[0], founder[0]),
-    )
-    return cursor.rowcount
+    founder_id = founder[0]
+    return {
+        "users": conn.execute(
+            "UPDATE users SET created_by = ? WHERE created_by IS NULL AND id != ?",
+            (founder_id, founder_id),
+        ).rowcount,
+        "players": conn.execute(
+            "UPDATE players SET created_by = ? WHERE created_by IS NULL",
+            (founder_id,),
+        ).rowcount,
+    }
 
 
 def migrate_all():
@@ -109,12 +150,19 @@ def migrate_all():
             else "users.created_by already present."
         )
 
-        credited = attribute_unknown_creators(conn)
+        player_columns = add_player_audit_columns(conn)
         all_messages.append(
-            f"Credited {credited} account(s) with no recorded creator to the "
-            "founding superuser."
-            if credited
-            else "No accounts needed a creator."
+            f"Added players.{', players.'.join(player_columns)}."
+            if player_columns
+            else "Player audit columns already present."
+        )
+
+        credited = attribute_unknown_creators(conn)
+        listed = ", ".join(f"{n} {table}" for table, n in credited.items() if n)
+        all_messages.append(
+            f"Credited {listed} with no recorded creator to the founding superuser."
+            if listed
+            else "Nothing needed a creator."
         )
 
         cleared = clear_placeholder_scores(conn)

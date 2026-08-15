@@ -288,6 +288,25 @@ button:hover { background: var(--navy-dark); }
     margin-bottom: 15px;
 }
 
+/* Sits above a table it filters. */
+.table-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.table-toolbar input {
+    flex: 1 1 220px;
+}
+
+.table-toolbar-count {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
 /* Recent matches: a row per match inside one card, not a card per match. */
 .match-row {
     display: flex;
@@ -1164,6 +1183,16 @@ button:hover { background: var(--navy-dark); }
     padding: 10px 12px;
     background: #F9E9E9;
     border: 1px solid #EBC5C5;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.auth-success {
+    color: var(--success-dark);
+    margin-bottom: 15px;
+    padding: 10px 12px;
+    background: #E9F3EE;
+    border: 1px solid #C4DFD1;
     border-radius: 4px;
     font-size: 13px;
 }

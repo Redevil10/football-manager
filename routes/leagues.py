@@ -26,7 +26,7 @@ from db.club_leagues import (
 )
 from render import render_league_matches, render_leagues_list, render_navbar
 from render.common import render_head
-from render.leagues import render_league_clubs
+from render.leagues import render_create_league_form, render_league_clubs
 
 
 def _render_public_sharing(league, req=None):
@@ -125,41 +125,38 @@ def register_league_routes(rt, STYLE):
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
-                    H2("Leagues"),
-                    *(
-                        [
-                            Div(cls="container-white")(
-                                H3("Create New League"),
-                                Form(
-                                    Div(cls="input-group")(
-                                        Input(
-                                            type="text",
-                                            name="name",
-                                            placeholder="League name",
-                                            required=True,
-                                            style="flex: 1; margin-right: 10px;",
-                                        ),
-                                        Textarea(
-                                            name="description",
-                                            placeholder="Description (optional)",
-                                            style="flex: 1; margin-right: 10px; min-height: 60px;",
-                                        ),
-                                        Button(
-                                            "Create League",
-                                            type="submit",
-                                            cls="btn-success",
-                                        ),
-                                    ),
-                                    method="post",
-                                    action="/create_league",
-                                ),
-                            )
-                        ]
-                        if can_create
-                        else []
+                    # The action sits beside the heading rather than as a form
+                    # permanently unrolled above the list.
+                    Div(cls="section-header")(
+                        H2(f"Leagues ({len(leagues)})", style="margin: 0;"),
+                        (
+                            A("Create League", href="/create_league", cls="btn-success")
+                            if can_create
+                            else ""
+                        ),
                     ),
-                    H3("All Leagues"),
                     render_leagues_list(leagues, user),
+                ),
+            ),
+        )
+
+    @rt("/create_league")
+    def create_league_page(req: Request = None, error: str = None, sess=None):
+        """The form for creating a league."""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        if not user.get("is_superuser"):
+            return RedirectResponse("/leagues", status_code=303)
+
+        return Html(
+            render_head("Create League - Football Manager", STYLE),
+            Body(
+                render_navbar(user, sess, req.url.path if req else "/"),
+                Div(cls="container")(
+                    H2("Create League"),
+                    render_create_league_form(error),
                 ),
             ),
         )

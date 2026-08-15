@@ -71,6 +71,12 @@ def init_db():
                   physical_attrs TEXT DEFAULT '{}',
                   gk_attrs TEXT DEFAULT '{}',
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  -- Set on every edit so the list can show what changed
+                  -- recently. Starts equal to created_at.
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  -- Who added this player. NULL for rows that predate the
+                  -- column and for anything created outside the app.
+                  created_by INTEGER REFERENCES users(id),
                   FOREIGN KEY (club_id) REFERENCES clubs(id),
                   UNIQUE(name, club_id))"""
     )

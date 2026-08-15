@@ -412,7 +412,7 @@ class TestAttributeUnknownCreators:
         finally:
             conn.close()
 
-        assert credited == 2
+        assert credited["users"] == 2
         by_name = {u["username"]: u["created_by_username"] for u in get_all_users()}
         assert by_name["older"] == "admin"
         assert by_name["newer"] == "admin"
@@ -445,7 +445,7 @@ class TestAttributeUnknownCreators:
         finally:
             conn.close()
 
-        assert (first, second) == (1, 0)
+        assert (first["users"], second["users"]) == (1, 0)
 
     def test_does_nothing_without_a_superuser(self, temp_db):
         create_user("someone", "hash", "salt")
@@ -457,7 +457,7 @@ class TestAttributeUnknownCreators:
         finally:
             conn.close()
 
-        assert credited == 0
+        assert credited == {"users": 0, "players": 0}
 
 
 class TestCreatedBy:
@@ -483,3 +483,53 @@ class TestCreatedBy:
         made = next(u for u in get_all_users() if u["username"] == "seeded")
         assert made["created_by"] is None
         assert made["created_by_username"] is None
+
+
+class TestAttributePlayerCreators:
+    """Players get the same treatment as accounts."""
+
+    def test_credits_players_with_no_creator(self, temp_db):
+        from db.clubs import create_club
+        from db.players import add_player, get_all_players
+
+        create_user("admin", "hash", "salt", is_superuser=True)
+        club = create_club("Test Club")
+        add_player("KEN-XIE", club)
+
+        conn = get_db()
+        try:
+            credited = attribute_unknown_creators(conn)
+            conn.commit()
+        finally:
+            conn.close()
+
+        assert credited["players"] == 1
+        assert get_all_players()[0]["created_by_username"] == "admin"
+
+
+class TestClubStaff:
+    """The clubs list shows who runs each club."""
+
+    def test_groups_admins_and_managers_by_club(self, temp_db):
+        from db.clubs import create_club
+        from db.users import add_user_to_club, get_club_staff
+
+        club = create_club("Concord FC")
+        boss = create_user("boss", "hash", "salt")
+        coach = create_user("coach", "hash", "salt")
+        add_user_to_club(boss, club, "admin")
+        add_user_to_club(coach, club, "manager")
+
+        staff = get_club_staff()
+
+        assert staff[club] == {"admin": ["boss"], "manager": ["coach"]}
+
+    def test_leaves_viewers_out(self, temp_db):
+        """Viewer is the default and says nothing about who runs the club."""
+        from db.clubs import create_club
+        from db.users import add_user_to_club, get_club_staff
+
+        club = create_club("Concord FC")
+        add_user_to_club(create_user("watcher", "hash", "salt"), club, "viewer")
+
+        assert get_club_staff() == {}

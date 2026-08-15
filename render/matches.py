@@ -8,7 +8,6 @@ from logic import calculate_overall_score
 from render.common import (
     format_match_meta,
     format_match_name,
-    get_match_score_display,
     is_match_completed,
 )
 from render.interactive_pitch import render_interactive_pitch
@@ -200,129 +199,61 @@ def render_recent_matches(matches, per_league=3):
 
 
 def render_all_matches(matches, user=None):
-    """Render all matches across all leagues"""
+    """Render every match, grouped under the league it belongs to.
+
+    Same shape as the recent matches on the home page: one card per league with
+    a row per match, rather than a card each. The match name already carries
+    the date, both teams and the score, so the row adds only when and where.
+
+    Deleting a match lives on the match's own page, as with players, users,
+    clubs and leagues -- it is not a control on every row here.
+    """
+    if not matches:
+        return Div(cls="container-white")(
+            P("No matches yet.", cls="empty-state"),
+        )
+
+    by_league = {}
+    for match in matches:
+        by_league.setdefault(match.get("league_name") or "Friendly", []).append(match)
+
+    sections = []
+    for league_name, league_matches in by_league.items():
+        sections.append(
+            Div(cls="container-white")(
+                P(league_name, cls="match-league"),
+                *[
+                    A(href=f"/match/{m['id']}", cls="match-row")(
+                        Div(
+                            P(format_match_name(m), cls="match-row-name"),
+                            (
+                                P(format_match_meta(m), cls="match-meta")
+                                if format_match_meta(m)
+                                else ""
+                            ),
+                        ),
+                    )
+                    for m in league_matches
+                ],
+            )
+        )
+
+    return Div(*sections)
+
+
+def can_user_create_match(user):
+    """Whether this user may create a match in any club they can reach."""
     from core.auth import check_club_permission, get_user_accessible_club_ids
     from core.config import USER_ROLES
 
-    content = []
-
-    # Only show create button if user can create matches (manager or superuser)
-    if user:
-        can_create = False
-        if user.get("is_superuser"):
-            can_create = True
-        else:
-            # Check if user is manager for any club
-            club_ids = get_user_accessible_club_ids(user)
-            can_create = any(
-                check_club_permission(user, cid, USER_ROLES["MANAGER"])
-                for cid in club_ids
-            )
-        if can_create:
-            content.append(
-                Div(cls="container-white", style="margin-bottom: 20px;")(
-                    H3("Create New Match"),
-                    A(
-                        Button("Create Match", cls="btn-success"),
-                        href="/create_match",
-                    ),
-                ),
-            )
-
-    if not matches:
-        content.append(
-            Div(cls="container-white")(
-                P(
-                    "No matches yet. Create your first match!",
-                    style="text-align: center; color: #666;",
-                )
-            )
-        )
-        return Div(*content)
-
-    # Group matches by league
-    matches_by_league = {}
-    for match in matches:
-        league_name = match.get("league_name", "Friendly")
-        if league_name not in matches_by_league:
-            matches_by_league[league_name] = []
-        matches_by_league[league_name].append(match)
-
-    for league_name, league_matches in matches_by_league.items():
-        content.append(H3(league_name))
-        for match in league_matches:
-            match_date = match.get("date", "")
-            start_time = match.get("start_time", "")
-            end_time = match.get("end_time", "")
-            match_location = match.get("location", "")
-
-            match_info = []
-            if match_date:
-                match_info.append(f"Date: {match_date}")
-            if start_time:
-                match_info.append(f"Start: {start_time}")
-            if end_time:
-                match_info.append(f"End: {end_time}")
-            if match_location:
-                match_info.append(f"Location: {match_location}")
-
-            # Get score if match is completed
-            score_display = ""
-            if is_match_completed(match):
-                score_display = get_match_score_display(match["id"])
-
-            content.append(
-                Div(cls="container-white", style="margin-bottom: 10px;")(
-                    Div(
-                        style="display: flex; justify-content: space-between; align-items: center;"
-                    )(
-                        A(
-                            H4(
-                                format_match_name(match),
-                                style="margin: 0; color: #007bff;",
-                            ),
-                            href=f"/match/{match['id']}",
-                            style="text-decoration: none; flex: 1;",
-                        ),
-                        *(
-                            [
-                                Form(
-                                    method="POST",
-                                    action=f"/delete_match/{match['id']}",
-                                    style="margin-left: 10px;",
-                                    **{
-                                        "onsubmit": "return confirm('Delete this match?');"
-                                    },
-                                )(
-                                    Button(
-                                        "Delete",
-                                        cls="btn-danger",
-                                        type="submit",
-                                        style="padding: 5px 10px; font-size: 14px;",
-                                    ),
-                                )
-                            ]
-                            if (user and can_user_edit_match(user, match["id"]))
-                            else []
-                        ),
-                    ),
-                    (
-                        P(" | ".join(match_info), style="margin: 5px 0; color: #666;")
-                        if match_info
-                        else ""
-                    ),
-                    (
-                        P(
-                            score_display,
-                            style="margin: 5px 0; font-weight: bold; color: #0066cc;",
-                        )
-                        if score_display
-                        else ""
-                    ),
-                )
-            )
-
-    return Div(*content)
+    if not user:
+        return False
+    if user.get("is_superuser"):
+        return True
+    return any(
+        check_club_permission(user, club_id, USER_ROLES["MANAGER"])
+        for club_id in get_user_accessible_club_ids(user)
+    )
 
 
 def render_match_teams(

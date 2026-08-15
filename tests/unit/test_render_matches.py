@@ -110,28 +110,35 @@ class TestRenderRecentMatches:
         assert result is not None
 
     @patch("render.matches.format_match_name")
-    @patch("render.matches.is_match_completed")
-    @patch("render.matches.get_match_score_display")
-    def test_render_recent_matches_with_matches(
-        self, mock_get_score, mock_is_completed, mock_format_name
-    ):
-        """Test rendering recent matches with matches"""
-        mock_format_name.return_value = "2024-01-15 Team A VS Team B"
-        mock_is_completed.return_value = True
-        mock_get_score.return_value = "Score: 3 - 2"
+    def test_groups_matches_under_their_league(self, mock_format_name):
+        mock_format_name.side_effect = lambda m: f"match {m['id']}"
 
-        matches = [
-            {
-                "id": 1,
-                "date": "2024-01-15",
-                "start_time": "10:00:00",
-                "location": "Field 1",
-            }
-        ]
+        html = to_xml(
+            render_recent_matches(
+                [
+                    {"id": 1, "league_name": "Sunday League"},
+                    {"id": 2, "league_name": "Sunday League"},
+                    {"id": 3, "league_name": "Friday Night"},
+                ]
+            )
+        )
 
-        result = render_recent_matches(matches)
+        assert html.count("Sunday League") == 1
+        assert html.count("Friday Night") == 1
+        assert 'href="/match/1"' in html
 
-        assert result is not None
+    @patch("render.matches.format_match_name")
+    def test_shows_at_most_the_requested_number_per_league(self, mock_format_name):
+        mock_format_name.side_effect = lambda m: f"match {m['id']}"
+
+        html = to_xml(
+            render_recent_matches(
+                [{"id": i, "league_name": "Sunday League"} for i in range(1, 6)],
+                per_league=3,
+            )
+        )
+
+        assert html.count("match-row-name") == 3
 
 
 class TestRenderAllMatches:
@@ -144,32 +151,47 @@ class TestRenderAllMatches:
         assert result is not None
 
     @patch("render.matches.format_match_name")
-    @patch("render.matches.can_user_edit_match")
-    @patch("render.matches.is_match_completed")
-    @patch("render.matches.get_match_score_display")
-    def test_render_all_matches_with_matches(
-        self, mock_get_score, mock_is_completed, mock_can_edit, mock_format_name
-    ):
-        """Test rendering all matches with matches"""
-        mock_format_name.return_value = "2024-01-15 Team A VS Team B"
-        mock_can_edit.return_value = False
-        mock_is_completed.return_value = (
-            False  # Prevent database access via get_match_score_display
+    def test_lists_every_match_under_its_league(self, mock_format_name):
+        """Unlike the home page, this one is not capped."""
+        mock_format_name.side_effect = lambda m: f"match {m['id']}"
+
+        html = to_xml(
+            render_all_matches(
+                [{"id": i, "league_name": "Sunday League"} for i in range(1, 6)], None
+            )
         )
-        mock_get_score.return_value = ""
 
-        matches = [
-            {
-                "id": 1,
-                "date": "2024-01-15",
-                "start_time": "10:00:00",
-                "location": "Field 1",
-            }
-        ]
+        assert html.count("match-row-name") == 5
 
-        result = render_all_matches(matches, None)
+    @patch("render.matches.format_match_name")
+    def test_row_carries_when_and_where(self, mock_format_name):
+        mock_format_name.side_effect = lambda m: f"match {m['id']}"
 
-        assert result is not None
+        html = to_xml(
+            render_all_matches(
+                [
+                    {
+                        "id": 1,
+                        "league_name": "Sunday League",
+                        "start_time": "15:30",
+                        "end_time": "17:30",
+                        "location": "Eric Primrose Reserve",
+                    }
+                ],
+                None,
+            )
+        )
+
+        assert "15:30–17:30 · Eric Primrose Reserve" in html
+
+    @patch("render.matches.format_match_name")
+    def test_has_no_delete_control(self, mock_format_name):
+        """Deleting a match lives on the match's own page."""
+        mock_format_name.side_effect = lambda m: f"match {m['id']}"
+
+        html = to_xml(render_all_matches([{"id": 1, "league_name": "L"}], None))
+
+        assert "/delete_match/" not in html
 
 
 class TestRenderMatchTeams:

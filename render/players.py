@@ -10,6 +10,7 @@ from core.config import (
     SCORE_RANGES,
     TECHNICAL_ATTRS,
 )
+from db.players import split_aliases
 from logic import (
     calculate_gk_score,
     calculate_mental_score,
@@ -20,9 +21,57 @@ from logic import (
 )
 from render.common import can_user_delete, can_user_edit, render_attr_input
 
+# Filtering happens in the browser: the whole squad is already on the page, so
+# a round trip per keystroke would only make it slower.
+PLAYER_SEARCH_SCRIPT = """
+(function () {
+    var box = document.getElementById('player-search');
+    var table = document.getElementById('player-table');
+    if (!box || !table) return;
 
-def render_player_table(players, match_id=None):
-    """Render player list as table"""
+    var rows = Array.prototype.slice.call(table.tBodies[0].rows);
+    var count = document.getElementById('player-search-count');
+
+    function apply() {
+        var needle = box.value.trim().toLowerCase();
+        var shown = 0;
+        rows.forEach(function (row) {
+            var hit = !needle || row.dataset.search.indexOf(needle) !== -1;
+            row.hidden = !hit;
+            if (hit) shown++;
+        });
+        // Silent when nothing is typed: a count of everything says nothing.
+        count.textContent = needle
+            ? shown + ' of ' + rows.length
+            : '';
+    }
+
+    box.addEventListener('input', apply);
+    apply();
+})();
+"""
+
+
+def _date_only(timestamp):
+    """The date out of a stored timestamp.
+
+    The time of day is noise in a list you scan; the player's own page can
+    carry the full stamp if it ever needs to.
+    """
+    if not timestamp:
+        return "—"
+    return str(timestamp).split(" ")[0]
+
+
+def render_player_table(players, match_id=None, searchable=False):
+    """Render player list as table.
+
+    Args:
+        players: Player dicts.
+        match_id: When set, links carry a way back to that match.
+        searchable: Add a box that filters the rows as you type. Off in the
+            match views, where the list is already short and specific.
+    """
     if not players:
         return P("No players yet", cls="empty-state")
 
@@ -34,22 +83,57 @@ def render_player_table(players, match_id=None):
         if match_id:
             view_href += f"?back=/match/{match_id}"
 
+        aliases = split_aliases(p.get("alias"))
+
         row = Tr(
+            # Name and aliases both go in the filter key: people search for
+            # whichever name they know someone by.
+            **{"data-search": " ".join([p["name"], *aliases]).casefold()},
+        )(
             Td(A(p["name"], href=view_href)),
+            Td(
+                ", ".join(aliases) if aliases else "—",
+                style="color: var(--muted);",
+            ),
             Td(str(overall), style="font-weight: bold; color: var(--navy);"),
+            Td(p.get("created_by_username") or "—", style="color: var(--muted);"),
+            Td(_date_only(p.get("created_at")), style="color: var(--muted);"),
+            Td(_date_only(p.get("updated_at")), style="color: var(--muted);"),
         )
         rows.append(row)
 
     # No actions column: the name opens the player, and deleting one lives on
     # that page rather than being a second control on every row here.
-    return Table(cls="player-table")(
+    table = Table(cls="player-table", id="player-table")(
         Thead(
             Tr(
                 Th("Name"),
+                Th("Also known as"),
                 Th("Overall"),
+                Th("Added by"),
+                Th("Added"),
+                Th("Updated"),
             )
         ),
         Tbody(*rows),
+    )
+
+    if not searchable:
+        return table
+
+    return Div(
+        Div(cls="table-toolbar")(
+            Input(
+                type="search",
+                id="player-search",
+                placeholder="Search players",
+                aria_label="Search players",
+                autocomplete="off",
+            ),
+            P("", id="player-search-count", cls="table-toolbar-count"),
+        ),
+        table,
+        Script(NotStr(PLAYER_SEARCH_SCRIPT)),
     )
 
 
@@ -384,40 +468,110 @@ def render_player_detail_form(player, user=None, back=None):
     )
 
 
-def render_add_player_form(error=None):
-    """Render add player form"""
-    error_msg = None
-    if error:
-        # Decode URL-encoded error message
-        error_msg = unquote(str(error))
+def render_add_player_form(error=None, values=None):
+    """Render the add player form.
 
-    form_elements = [
-        H3("Add New Player"),
-    ]
+    Carries the same particulars as the player's own page, so someone can be
+    entered in one pass instead of being created bare and then edited. The
+    individual attributes are the exception: they are derived from the overall
+    score below, and thirty boxes in front of an unsaved player is a wall, not
+    a form. They are a tuning job for afterwards, on the page this lands on.
 
-    if error_msg:
-        form_elements.append(
-            Div(
-                error_msg,
-                style="color: #d32f2f; background-color: #ffebee; padding: 12px; border-radius: 4px; margin-bottom: 15px; border-left: 4px solid #d32f2f;",
-            )
-        )
+    Args:
+        error: Message to show above the form.
+        values: What was submitted last time, so a rejected form comes back
+            filled in rather than blank.
+    """
+    error_msg = unquote(str(error)) if error else None
+    values = values or {}
 
-    form_elements.append(
-        Form(
-            Div(cls="input-group")(
-                Input(
-                    type="text",
-                    name="name",
-                    placeholder="Player name",
-                    required=True,
-                    style="flex: 1;",
-                ),
-                Button("Add Player", type="submit", cls="btn-success"),
+    def field(label, control, hint=None):
+        return Div(style="margin-bottom: 15px;")(
+            Label(label, style="display: block; margin-bottom: 5px;"),
+            control,
+            (
+                P(hint, style="color: var(--muted); font-size: 12px; margin: 4px 0 0;")
+                if hint
+                else ""
             ),
-            method="post",
-            action="/add_player",
         )
-    )
 
-    return Div(cls="container-white")(*form_elements)
+    def number(name, low, high, default=""):
+        return Input(
+            type="number",
+            name=name,
+            value=str(values.get(name, default)),
+            min=str(low),
+            max=str(high),
+            style="width: 100%;",
+        )
+
+    overall_low, overall_high = SCORE_RANGES["overall"]
+
+    return Div(cls="container-white")(
+        H3("Add Player"),
+        Div(error_msg, cls="auth-error") if error_msg else "",
+        Form(method="post", action="/add_player")(
+            Div(cls="form-grid")(
+                field(
+                    "Name:",
+                    Input(
+                        type="text",
+                        name="name",
+                        value=values.get("name", ""),
+                        required=True,
+                        autofocus=True,
+                        style="width: 100%;",
+                    ),
+                ),
+                field(
+                    "Also known as:",
+                    Input(
+                        type="text",
+                        name="alias",
+                        value=values.get("alias", ""),
+                        style="width: 100%;",
+                    ),
+                    "Separate several with a semicolon.",
+                ),
+                field(
+                    "Preferred position:",
+                    Select(name="position_pref", style="width: 100%;")(
+                        *[
+                            Option(
+                                label,
+                                value=value,
+                                selected=values.get("position_pref", "") == value,
+                            )
+                            for label, value in (
+                                ("No preference", ""),
+                                ("Goalkeeper", "Goalkeeper"),
+                                ("Defender", "Defender"),
+                                ("Midfielder", "Midfielder"),
+                                ("Forward", "Forward"),
+                            )
+                        ]
+                    ),
+                ),
+            ),
+            Hr(),
+            Div(cls="form-grid")(
+                field("Height (cm):", number("height", 100, 250)),
+                field("Weight (kg):", number("weight", 30, 200)),
+                field(
+                    "Overall score:",
+                    number("score_overall", overall_low, overall_high, 100),
+                    f"{overall_low}-{overall_high}. Sets the starting attributes.",
+                ),
+            ),
+            Div(cls="btn-group", style="margin-top: 10px;")(
+                Button("Add Player", type="submit", cls="btn-success"),
+                A("Cancel", href="/players", cls="btn-secondary"),
+            ),
+        ),
+        P(
+            "Individual attributes start from the overall score and can be "
+            "tuned on the next screen.",
+            style="color: var(--muted); font-size: 13px; margin: 15px 0 0;",
+        ),
+    )

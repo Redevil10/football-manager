@@ -278,36 +278,24 @@ def register_user_routes(rt, STYLE):
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
-                    H2("User Management"),
-                    error_msg
-                    and P(
-                        error_msg.replace("+", " "),
-                        style="color: red; margin-bottom: 15px; padding: 10px; background: #fee; border: 1px solid #fcc; border-radius: 4px;",
-                    )
-                    or "",
-                    success_msg
-                    and P(
-                        success_msg.replace("+", " "),
-                        style="color: green; margin-bottom: 15px; padding: 10px; background: #efe; border: 1px solid #cfc; border-radius: 4px;",
-                    )
-                    or "",
-                    can_create
-                    and Div(cls="container-white", style="margin-bottom: 20px;")(
-                        H3("Create New User"),
-                        P(
-                            "Create a new user account and assign them to a club.",
-                            style="color: #666; margin-bottom: 15px;",
+                    # The action sits beside the heading, as on the players
+                    # page. It used to have a card of its own holding a title,
+                    # a sentence and one link.
+                    Div(cls="section-header")(
+                        H2(f"Users ({len(visible_users)})", style="margin: 0;"),
+                        (
+                            A("Create User", href="/register", cls="btn-success")
+                            if can_create
+                            else ""
                         ),
-                        A(
-                            "Create New User",
-                            href="/register",
-                            cls="btn-success",
-                            style="padding: 10px 20px; text-decoration: none; display: inline-block;",
-                        ),
-                    )
-                    or "",
-                    H3("Users"),
-                    render_users_list(visible_users, user),
+                    ),
+                    P(error_msg.replace("+", " "), cls="auth-error")
+                    if error_msg
+                    else "",
+                    P(success_msg.replace("+", " "), cls="auth-success")
+                    if success_msg
+                    else "",
+                    Div(cls="container-white")(render_users_list(visible_users, user)),
                 ),
             ),
         )

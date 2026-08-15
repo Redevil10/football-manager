@@ -1,5 +1,7 @@
 # routes/clubs.py - Club management routes
 
+from urllib.parse import unquote
+
 from fasthtml.common import *  # noqa: F403, F405
 
 from core.auth import get_current_user
@@ -28,6 +30,7 @@ from db.connection import get_db
 from db.users import (
     add_user_to_club,
     get_all_users,
+    get_club_staff,
     get_user_club_role,
 )
 from render.common import render_head, render_navbar
@@ -54,41 +57,32 @@ def register_club_routes(rt, STYLE):
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
-                    H2("Club Management"),
-                    Div(cls="container-white", style="margin-bottom: 20px;")(
-                        H3("Create New Club"),
-                        Form(
-                            Div(cls="input-group", style="margin-bottom: 15px;")(
-                                Label(
-                                    "Club Name:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="text",
-                                    name="name",
-                                    placeholder="Club name",
-                                    required=True,
-                                    style="width: 100%; padding: 8px;",
-                                ),
-                            ),
-                            Div(cls="input-group", style="margin-bottom: 15px;")(
-                                Label(
-                                    "Description:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Textarea(
-                                    name="description",
-                                    placeholder="Description (optional)",
-                                    style="width: 100%; padding: 8px; min-height: 60px;",
-                                ),
-                            ),
-                            Button("Create Club", type="submit", cls="btn-success"),
-                            method="post",
-                            action="/create_club",
-                        ),
+                    Div(cls="section-header")(
+                        H2(f"Clubs ({len(clubs)})", style="margin: 0;"),
+                        A("Create Club", href="/create_club", cls="btn-success"),
                     ),
-                    H3("All Clubs"),
                     render_clubs_list(clubs, user),
+                ),
+            ),
+        )
+
+    @rt("/create_club")
+    def create_club_page(req: Request = None, error: str = None, sess=None):
+        """The form for creating a club."""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        if not user.get("is_superuser"):
+            return RedirectResponse("/", status_code=303)
+
+        return Html(
+            render_head("Create Club - Football Manager", STYLE),
+            Body(
+                render_navbar(user, sess, req.url.path if req else "/"),
+                Div(cls="container")(
+                    H2("Create Club"),
+                    render_create_club_form(error),
                 ),
             ),
         )
@@ -444,20 +438,27 @@ def render_clubs_list(clubs, user=None):
             )
         )
 
+    # Who runs each club, in one grouped query rather than one per row.
+    staff = get_club_staff()
+
+    def people(club_id, role):
+        names = staff.get(club_id, {}).get(role, [])
+        return ", ".join(names) if names else "—"
+
     rows = []
     for club in clubs:
+        description = club.get("description") or ""
         rows.append(
             Tr(
+                Td(A(club["name"], href=f"/club/{club['id']}")),
                 Td(
-                    A(
-                        club["name"],
-                        href=f"/club/{club['id']}",
-                    )
+                    description[:100] + ("..." if len(description) > 100 else "")
+                    if description
+                    else "—",
+                    style="color: var(--muted);" if not description else "",
                 ),
-                Td(
-                    club.get("description", "")[:100]
-                    + ("..." if len(club.get("description", "")) > 100 else "")
-                ),
+                Td(people(club["id"], "admin"), style="color: var(--muted);"),
+                Td(people(club["id"], "manager"), style="color: var(--muted);"),
             )
         )
 
@@ -469,6 +470,8 @@ def render_clubs_list(clubs, user=None):
                 Tr(
                     Th("Name"),
                     Th("Description"),
+                    Th("Admins"),
+                    Th("Managers"),
                 )
             ),
             Tbody(*rows),
@@ -740,3 +743,50 @@ def render_club_leagues(club_id, leagues_for_club, all_leagues, user=None):
         )
 
     return Div(*content)
+
+
+def render_create_club_form(error=None, values=None):
+    """Render the create club form.
+
+    A page of its own, like adding a player: the list page had this form
+    permanently unrolled above it, which cost half a screen whether or not
+    anyone was creating anything.
+
+    Args:
+        error: Message to show above the form.
+        values: What was submitted last time, so a rejected form comes back
+            filled in rather than blank.
+    """
+    error_msg = unquote(str(error)) if error else None
+    values = values or {}
+
+    return Div(cls="container-white")(
+        H3("Create Club"),
+        Div(error_msg, cls="auth-error") if error_msg else "",
+        Form(method="post", action="/create_club")(
+            Div(style="margin-bottom: 15px;")(
+                Label("Name:", style="display: block; margin-bottom: 5px;"),
+                Input(
+                    type="text",
+                    name="name",
+                    value=values.get("name", ""),
+                    required=True,
+                    autofocus=True,
+                    style="width: 100%;",
+                ),
+            ),
+            Div(style="margin-bottom: 15px;")(
+                Label("Description:", style="display: block; margin-bottom: 5px;"),
+                Textarea(
+                    values.get("description", ""),
+                    name="description",
+                    rows="3",
+                    style="width: 100%;",
+                ),
+            ),
+            Div(cls="btn-group")(
+                Button("Create Club", type="submit", cls="btn-success"),
+                A("Cancel", href="/clubs", cls="btn-secondary"),
+            ),
+        ),
+    )
