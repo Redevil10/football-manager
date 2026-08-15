@@ -18,6 +18,7 @@ def create_user(
     password_salt: str,
     email: Optional[str] = None,
     is_superuser: bool = False,
+    created_by: Optional[int] = None,
 ) -> Optional[int]:
     """Create a new user.
 
@@ -27,6 +28,8 @@ def create_user(
         password_salt: Password salt
         email: Optional email address
         is_superuser: Whether user is a superuser (default: False)
+        created_by: ID of the user registering this account. None where there
+            is no one to credit, such as a seed or a first superuser.
 
     Returns:
         int: User ID on success
@@ -35,13 +38,14 @@ def create_user(
     try:
         with db_transaction("create_user") as conn:
             cursor = conn.execute(
-                "INSERT INTO users (username, email, password_hash, password_salt, is_superuser) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO users (username, email, password_hash, password_salt, is_superuser, created_by) VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     username,
                     email,
                     password_hash,
                     password_salt,
                     1 if is_superuser else 0,
+                    created_by,
                 ),
             )
             user_id = cursor.lastrowid
@@ -244,8 +248,13 @@ def get_all_users() -> list[dict]:
         list[dict]: List of all user dictionaries
     """
     conn = get_db()
+    # Self-join: created_by points at another row in this same table.
     users = conn.execute(
-        "SELECT id, username, email, is_superuser, created_at, last_login FROM users ORDER BY created_at DESC"
+        """SELECT u.id, u.username, u.email, u.is_superuser, u.created_at,
+                  u.last_login, u.created_by, c.username AS created_by_username
+             FROM users u
+             LEFT JOIN users c ON u.created_by = c.id
+            ORDER BY u.created_at DESC"""
     ).fetchall()
     conn.close()
     return [dict(user) for user in users]

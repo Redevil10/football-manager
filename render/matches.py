@@ -165,8 +165,8 @@ def render_recent_matches(matches, per_league=3):
     still worth listing, and a newly started league would otherwise be missing
     from the page entirely until its third fixture.
 
-    The match name already carries the date and both teams, so nothing else is
-    repeated on the row.
+    The match name already carries the date, both teams and -- once a match is
+    played -- the score, so the row is that one line and nothing else.
 
     Args:
         matches: Match dicts with league_name, newest first.
@@ -185,11 +185,6 @@ def render_recent_matches(matches, per_league=3):
                 *[
                     A(href=f"/match/{m['id']}", cls="match-row")(
                         P(format_match_name(m), cls="match-row-name"),
-                        (
-                            P(get_match_score_display(m["id"]), cls="match-score")
-                            if is_match_completed(m)
-                            else ""
-                        ),
                     )
                     for m in league_matches[:per_league]
                 ],

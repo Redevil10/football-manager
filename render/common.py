@@ -37,7 +37,10 @@ def render_head(title, STYLE, *extra):
     return Head(
         Meta(charset="UTF-8"),
         Meta(name="viewport", content="width=device-width, initial-scale=1"),
-        Link(rel="icon", href="/static/favicon.svg", type="image/svg+xml"),
+        # The tab icon is the logo itself. They were two files drawing the same
+        # thing and had already drifted apart (different gradients); one asset
+        # cannot fall out of step with itself.
+        Link(rel="icon", href="/static/logo.svg", type="image/svg+xml"),
         Link(rel="preconnect", href="https://fonts.googleapis.com"),
         Link(rel="preconnect", href="https://fonts.gstatic.com", crossorigin=""),
         Link(

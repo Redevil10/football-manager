@@ -38,6 +38,60 @@ def clear_placeholder_scores(conn):
     return cursor.rowcount
 
 
+def add_created_by_to_users(conn):
+    """Add users.created_by to databases made before the column existed.
+
+    ``CREATE TABLE IF NOT EXISTS`` never alters a table that is already there,
+    so an existing database keeps the old shape until something adds the column.
+    ADD COLUMN is the one schema change SQLite does in place, which makes this
+    safe to run against live data.
+
+    Rows that already exist stay NULL: nobody recorded who created those
+    accounts, and it cannot be reconstructed.
+
+    Safe to re-run: the column is only added when it is missing.
+
+    Returns:
+        bool: True if the column was added, False if it was already there
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+    if "created_by" in columns:
+        return False
+
+    conn.execute("ALTER TABLE users ADD COLUMN created_by INTEGER REFERENCES users(id)")
+    return True
+
+
+def attribute_unknown_creators(conn):
+    """Credit accounts with no recorded creator to the founding superuser.
+
+    Nobody recorded who registered the accounts that predate ``created_by``, so
+    the column would otherwise be a run of dashes forever. The earliest
+    superuser is the account that set the app up and is the reasonable
+    presumption -- though it is a presumption, not a record.
+
+    That superuser's own row stays NULL: nothing created the founding account,
+    and a row pointing at itself reads as a data error to whoever finds it next.
+
+    Safe to re-run: only rows still NULL are touched, and once filled they are
+    no longer matched.
+
+    Returns:
+        int: number of accounts credited
+    """
+    founder = conn.execute(
+        "SELECT id FROM users WHERE is_superuser = 1 ORDER BY id LIMIT 1"
+    ).fetchone()
+    if not founder:
+        return 0
+
+    cursor = conn.execute(
+        "UPDATE users SET created_by = ? WHERE created_by IS NULL AND id != ?",
+        (founder[0], founder[0]),
+    )
+    return cursor.rowcount
+
+
 def migrate_all():
     """Run all migrations in the correct order
 
@@ -48,6 +102,21 @@ def migrate_all():
     all_messages = []
 
     try:
+        # Schema first: the data steps below may rely on the new shape.
+        all_messages.append(
+            "Added users.created_by."
+            if add_created_by_to_users(conn)
+            else "users.created_by already present."
+        )
+
+        credited = attribute_unknown_creators(conn)
+        all_messages.append(
+            f"Credited {credited} account(s) with no recorded creator to the "
+            "founding superuser."
+            if credited
+            else "No accounts needed a creator."
+        )
+
         cleared = clear_placeholder_scores(conn)
         all_messages.append(
             f"Cleared {cleared} placeholder score(s) that were never entered."

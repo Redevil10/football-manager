@@ -219,46 +219,15 @@ def render_users_list(users, current_user=None):
             else:
                 clubs_display = "—"
 
-        # Check permissions
-        can_edit = can_user_edit_target_user(current_user, user)
-        can_delete = can_user_delete_target_user(current_user, user)
-
+        # No actions column: the name opens the user, and view, edit and delete
+        # all live on that page.
         rows.append(
             Tr(
-                Td(username),
+                Td(A(username, href=f"/users/{user_id}")),
                 Td(clubs_display),
+                Td(user.get("created_by_username") or "—"),
                 Td(created_display),
                 Td(last_login_display),
-                Td(
-                    Div(cls="player-row-actions")(
-                        A(
-                            "View",
-                            href=f"/users/{user_id}",
-                        ),
-                        can_edit
-                        and A(
-                            "Edit",
-                            href=f"/users/{user_id}/edit",
-                        )
-                        or "",
-                        can_delete
-                        and Form(
-                            method="POST",
-                            action=f"/users/{user_id}/delete",
-                            style="display: inline;",
-                            **{
-                                "onsubmit": f"return confirm('Are you sure you want to delete user {escape_js_string(username)}? This action cannot be undone.');"
-                            },
-                        )(
-                            Button(
-                                "Delete",
-                                type="submit",
-                                cls="btn-danger",
-                            )
-                        )
-                        or "",
-                    )
-                ),
             )
         )
 
@@ -267,9 +236,9 @@ def render_users_list(users, current_user=None):
             Tr(
                 Th("Username"),
                 Th("Clubs"),
+                Th("Created By"),
                 Th("Created At"),
                 Th("Last Login"),
-                Th("Actions"),
             )
         ),
         Tbody(*rows),
@@ -379,6 +348,7 @@ def register_user_routes(rt, STYLE):
 
         # Check permissions
         can_edit = can_user_edit_target_user(user, target_user)
+        can_delete = can_user_delete_target_user(user, target_user)
         is_own_profile = user.get("id") == user_id
 
         return Html(
@@ -474,6 +444,16 @@ def register_user_routes(rt, STYLE):
                                 href="/users",
                                 cls="btn-secondary",
                             ),
+                            can_delete
+                            and Form(
+                                method="POST",
+                                action=f"/users/{user_id}/delete",
+                                style="display: inline;",
+                                **{
+                                    "onsubmit": f"return confirm('Are you sure you want to delete user {escape_js_string(target_user['username'])}? This action cannot be undone.');"
+                                },
+                            )(Button("Delete User", type="submit", cls="btn-danger"))
+                            or "",
                         ),
                     ),
                     Div(cls="container-white", style="margin-top: 20px;")(

@@ -281,7 +281,12 @@ def register_auth_routes(rt, STYLE):
             logger.debug(f"Created password hash for user: {username}")
 
             user_id = create_user(
-                username, password_hash, password_salt, email, new_user_is_superuser
+                username,
+                password_hash,
+                password_salt,
+                email,
+                new_user_is_superuser,
+                created_by=user["id"],
             )
 
             if user_id:

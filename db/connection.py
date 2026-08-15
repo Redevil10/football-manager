@@ -25,7 +25,12 @@ def init_db():
                   password_salt TEXT NOT NULL,
                   is_superuser INTEGER DEFAULT 0,
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                  last_login TIMESTAMP)"""
+                  last_login TIMESTAMP,
+                  -- Who registered this account. NULL for the accounts that
+                  -- predate this column and for anyone created outside the
+                  -- registration form; that history was never recorded and
+                  -- cannot be worked out after the fact.
+                  created_by INTEGER REFERENCES users(id))"""
     )
 
     # Clubs table
