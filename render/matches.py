@@ -6,9 +6,11 @@ from core.auth import can_user_edit_match
 from db.match_recordings import get_match_recordings
 from logic import calculate_overall_score
 from render.common import (
+    confirm_delete_link,
     format_match_meta,
     format_match_name,
     is_match_completed,
+    match_fixture,
 )
 from render.interactive_pitch import render_interactive_pitch
 from render.pitch import render_player_table as render_player_table_pitch
@@ -198,15 +200,58 @@ def render_recent_matches(matches, per_league=3):
     return Div(H2("Recent Matches", style="margin-top: 30px;"), *sections)
 
 
+def render_match_table(matches, base="/match"):
+    """A set of matches as one table: date, both sides, the score, when, where.
+
+    The two sides and the score get a column each rather than being run together
+    into a match name -- in a table the home column lines up down the page,
+    which is most of what makes a table worth having over a list of sentences.
+
+    Args:
+        matches: Match dicts, already in the order they should appear.
+        base: Where a row links. "/public/match" for the anonymous view, which
+            is otherwise the same table.
+    """
+    rows = []
+    for m in matches:
+        home, score, away = match_fixture(m)
+        rows.append(
+            Tr(
+                # The date opens the match, the way the name does in every other
+                # table -- a fixture has no single name to click.
+                Td(A(m.get("date") or f"#{m['id']}", href=f"{base}/{m['id']}")),
+                Td(home),
+                Td(score or "—", cls="col-score-line"),
+                Td(away),
+                Td(_time_range(m) or "—", cls="col-quiet"),
+                Td(m.get("location") or "—", cls="col-quiet"),
+            )
+        )
+
+    return Div(cls="table-scroll")(
+        Table(cls="player-table")(
+            Thead(
+                Tr(
+                    Th("Date"),
+                    Th("Home"),
+                    Th("Score"),
+                    Th("Away"),
+                    Th("Time"),
+                    Th("Location"),
+                )
+            ),
+            Tbody(*rows),
+        )
+    )
+
+
 def render_all_matches(matches, user=None):
-    """Render every match, grouped under the league it belongs to.
+    """Render every match as a table, one table per league.
 
-    Same shape as the recent matches on the home page: one card per league with
-    a row per match, rather than a card each. The match name already carries
-    the date, both teams and the score, so the row adds only when and where.
+    Same shape as the players, users, leagues and clubs lists.
 
-    Deleting a match lives on the match's own page, as with players, users,
-    clubs and leagues -- it is not a control on every row here.
+    Deleting a match lives on the match's own page, behind the confirmation
+    page, as with every other entity -- it is not a control on every row here.
     """
     if not matches:
         return Div(cls="container-white")(
@@ -217,28 +262,21 @@ def render_all_matches(matches, user=None):
     for match in matches:
         by_league.setdefault(match.get("league_name") or "Friendly", []).append(match)
 
-    sections = []
-    for league_name, league_matches in by_league.items():
-        sections.append(
+    return Div(
+        *[
             Div(cls="container-white")(
                 P(league_name, cls="match-league"),
-                *[
-                    A(href=f"/match/{m['id']}", cls="match-row")(
-                        Div(
-                            P(format_match_name(m), cls="match-row-name"),
-                            (
-                                P(format_match_meta(m), cls="match-meta")
-                                if format_match_meta(m)
-                                else ""
-                            ),
-                        ),
-                    )
-                    for m in league_matches
-                ],
+                render_match_table(league_matches),
             )
-        )
+            for league_name, league_matches in by_league.items()
+        ]
+    )
 
-    return Div(*sections)
+
+def _time_range(match):
+    """The match's time window, e.g. "18:30-20:30", or just its start."""
+    times = [t for t in (match.get("start_time"), match.get("end_time")) if t]
+    return "\u2013".join(times)
 
 
 def can_user_create_match(user):
@@ -601,12 +639,7 @@ def render_match_recordings(match_id, recordings=None, can_edit=False):
                             "hx-confirm": "Delete this recording link?",
                         },
                     )(
-                        Button(
-                            "Delete",
-                            type="submit",
-                            cls="btn-danger",
-                            style="padding: 2px 8px; font-size: 12px;",
-                        ),
+                        Button("Delete", type="submit", cls="link-delete"),
                     )
                 )
             link_items.append(
@@ -725,39 +758,13 @@ def render_match_detail(
                 *(
                     [
                         Div(cls="btn-group")(
-                            *(
-                                [
-                                    A(
-                                        Button("Edit Match", cls="btn-primary"),
-                                        href=f"/edit_match/{match['id']}",
-                                    )
-                                ]
-                                if can_edit
-                                else []
-                            ),
-                            *(
-                                [
-                                    Form(
-                                        method="POST",
-                                        action=f"/delete_match/{match['id']}",
-                                        style="display: inline;",
-                                        **{
-                                            "onsubmit": "return confirm('Delete this match?');"
-                                        },
-                                    )(
-                                        Button(
-                                            "Delete Match",
-                                            cls="btn-danger",
-                                            type="submit",
-                                        ),
-                                    )
-                                ]
-                                if can_delete
-                                else []
-                            ),
+                            A(
+                                Button("Edit Match", cls="btn-primary"),
+                                href=f"/edit_match/{match['id']}",
+                            )
                         )
                     ]
-                    if (can_edit or can_delete)
+                    if can_edit
                     else []
                 ),
             ),
@@ -863,11 +870,7 @@ def render_match_detail(
                             "onsubmit": "return confirm('Remove all available players from this match? This will allow you to import again.');"
                         },
                     )(
-                        Button(
-                            "Remove All",
-                            type="submit",
-                            cls="btn-danger",
-                        ),
+                        Button("Remove All", type="submit", cls="btn-delete"),
                     ),
                 ),
             ]
@@ -934,12 +937,12 @@ def render_match_detail(
                 event_content = [event_desc]
                 if can_edit:
                     event_content.append(
-                        A(
-                            " [Delete]",
-                            href=f"/delete_match_event/{event['id']}",
-                            style="color: var(--danger); text-decoration: none; margin-left: 10px;",
-                            **{"onclick": "return confirm('Delete this event?');"},
-                        )
+                        Form(
+                            method="POST",
+                            action=f"/delete_match_event/{event['id']}",
+                            style="display: inline; margin-left: 10px;",
+                            **{"onsubmit": "return confirm('Delete this event?');"},
+                        )(Button("Delete", type="submit", cls="link-delete"))
                     )
 
                 events_list.append(Li(*event_content, style="margin-bottom: 5px;"))
@@ -959,6 +962,13 @@ def render_match_detail(
                 cls="container-white section-collapsible",
                 style="margin-top: 20px;",
                 **({"open": True} if events else {}),
+            )
+        )
+
+    if can_delete:
+        content.append(
+            Div(cls="danger-zone")(
+                confirm_delete_link("match", match["id"], "Delete Match")
             )
         )
 

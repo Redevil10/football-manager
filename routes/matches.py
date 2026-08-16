@@ -1680,7 +1680,8 @@ def register_match_routes(rt, STYLE):
                                     A(
                                         "Remove",
                                         href=f"/remove_match_player/{p['id']}",
-                                        style="color: #dc3545; margin-left: 10px;",
+                                        cls="link-delete",
+                                        style="margin-left: 10px;",
                                         **{
                                             "onclick": "return confirm('Remove this player?');"
                                         },
@@ -2105,7 +2106,9 @@ def register_match_routes(rt, STYLE):
 
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
-    @rt("/delete_match_event/{event_id}")
+    # POST only: as a GET route this was a URL that destroyed an event when
+    # anything merely fetched it -- a link prefetch, a crawler, a shared link.
+    @rt("/delete_match_event/{event_id}", methods=["POST"])
     def route_delete_match_event(event_id: int, req: Request = None, sess=None):
         """Delete a match event"""
         user = get_current_user(req, sess)

@@ -10,7 +10,7 @@ from render.common import (
     render_navbar,
 )
 from render.leagues import (
-    render_league_matches,
+    render_league_header,
     render_leagues_list,
 )
 from render.matches import (
@@ -58,5 +58,5 @@ __all__ = [
     "render_teams",
     # Leagues
     "render_leagues_list",
-    "render_league_matches",
+    "render_league_header",
 ]

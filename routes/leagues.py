@@ -15,7 +15,6 @@ from db import (
     get_all_clubs,
     get_all_leagues,
     get_league,
-    get_matches_by_league,
     set_league_public,
     update_league,
 )
@@ -24,17 +23,21 @@ from db.club_leagues import (
     get_clubs_in_league,
     remove_club_from_league,
 )
-from render import render_league_matches, render_leagues_list, render_navbar
-from render.common import render_head
+from render import render_league_header, render_leagues_list, render_navbar
+from render.common import confirm_delete_link, render_head
 from render.leagues import render_create_league_form, render_league_clubs
 
 
-def _render_public_sharing(league, req=None):
-    """Superuser-only block to toggle and show a league's public read-only link.
+def _render_public_sharing(league, req=None, can_manage=False):
+    """Whether a league is shared publicly, and for superusers the toggle.
 
     When public, anonymous visitors can view the league's matches (schedule,
     score, line-up names, goals, recordings) at /public/league/{id} — never any
     player attribute values.
+
+    Everyone in the league sees the status and, when it is public, the link —
+    that link is the point of the feature, and it is public by definition.
+    Flipping the switch stays with superusers.
     """
     league_id = league["id"]
     is_public = bool(league.get("is_public"))
@@ -59,17 +62,23 @@ def _render_public_sharing(league, req=None):
                 style=f"color: {'#28a745' if is_public else '#666'}; font-weight: bold;",
             ),
         ),
-        Form(
-            Input(type="hidden", name="is_public", value="0" if is_public else "1"),
-            Button(
-                "Make Private" if is_public else "Make Public",
-                type="submit",
-                cls="btn-danger" if is_public else "btn-success",
-            ),
-            method="POST",
-            action=f"/toggle_league_public/{league_id}",
-        ),
     ]
+
+    if can_manage:
+        children.append(
+            Form(
+                Input(type="hidden", name="is_public", value="0" if is_public else "1"),
+                Button(
+                    "Make Private" if is_public else "Make Public",
+                    type="submit",
+                    # Not red: red now means "irreversible" in this app, and this
+                    # toggle is neither destructive nor one-way.
+                    cls="btn-secondary" if is_public else "btn-success",
+                ),
+                method="POST",
+                action=f"/toggle_league_public/{league_id}",
+            )
+        )
 
     if is_public:
         children.append(
@@ -199,45 +208,64 @@ def register_league_routes(rt, STYLE):
 
     @rt("/league/{league_id}")
     def league_detail_page(league_id: int, req: Request = None, sess=None):
-        """League detail page showing matches"""
+        """League detail page: what the league is, who is in it, how it is shared.
+
+        Anyone whose club plays in the league can read all of it; every control
+        on the page is a superuser's. Which clubs are in a league is not one
+        club's decision to make, and neither is whether it is shared publicly.
+
+        Its fixtures are not here -- /matches lists every match already grouped
+        under its league, so this page repeating them was the same table twice.
+        """
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
 
+        can_manage = bool(user.get("is_superuser"))
+
         # Check if user has access to this league
         club_ids = get_user_club_ids_from_request(req, sess)
-        league = get_league(
-            league_id, club_ids=club_ids if not user.get("is_superuser") else None
-        )
+        league = get_league(league_id, club_ids=None if can_manage else club_ids)
         if not league:
             return RedirectResponse("/leagues", status_code=303)
 
-        matches = get_matches_by_league(league_id)
-
-        # Get clubs in this league (for superuser management)
-        clubs_in_league = (
-            get_clubs_in_league(league_id) if user.get("is_superuser") else []
-        )
-        all_clubs = get_all_clubs() if user.get("is_superuser") else []
+        clubs_in_league = get_clubs_in_league(league_id)
+        # Only the add form needs the clubs that are not in the league yet.
+        all_clubs = get_all_clubs() if can_manage else []
 
         return Html(
             render_head(f"{league['name']} - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
-                    render_league_matches(league, matches, user),
-                    *(
-                        [
-                            _render_public_sharing(league, req),
-                            Div(cls="container-white", style="margin-top: 20px;")(
-                                H3("Clubs in League"),
-                                render_league_clubs(
-                                    league_id, clubs_in_league, all_clubs, user
-                                ),
-                            ),
-                        ]
-                        if user.get("is_superuser")
-                        else []
+                    render_league_header(league, can_manage=can_manage),
+                    Div(cls="container-white", style="margin-top: 20px;")(
+                        H3("Clubs in League"),
+                        render_league_clubs(
+                            league_id,
+                            clubs_in_league,
+                            all_clubs,
+                            user,
+                            can_manage=can_manage,
+                        ),
+                    ),
+                    # Sharing is set once and then forgotten, so it goes under
+                    # the membership people actually come to look at. A reader
+                    # sees it only once it is public, when the link is theirs to
+                    # share; a private league has nothing to tell them.
+                    (
+                        _render_public_sharing(league, req, can_manage=can_manage)
+                        if can_manage or league.get("is_public")
+                        else ""
+                    ),
+                    # Last thing on the page, below every section, so it is
+                    # never in the way of what you came here for.
+                    (
+                        Div(cls="danger-zone")(
+                            confirm_delete_link("league", league_id, "Delete League")
+                        )
+                        if can_manage
+                        else ""
                     ),
                 ),
             ),

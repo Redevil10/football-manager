@@ -19,7 +19,12 @@ from logic import (
     calculate_player_overall,
     calculate_technical_score,
 )
-from render.common import can_user_delete, can_user_edit, render_attr_input
+from render.common import (
+    can_user_delete,
+    can_user_edit,
+    confirm_delete_link,
+    render_attr_input,
+)
 
 # Filtering happens in the browser: the whole squad is already on the page, so
 # a round trip per keystroke would only make it slower.
@@ -171,7 +176,7 @@ def render_match_available_players(
                         "onsubmit": "return confirm('Remove this player from match signup?');"
                     },
                 )(
-                    Button("Remove", type="submit", cls="btn-danger"),
+                    Button("Remove", type="submit", cls="link-delete"),
                 ),
             )
 
@@ -448,22 +453,18 @@ def render_player_detail_form(player, user=None, back=None):
             ),
             Div(cls="btn-group", style="margin-top: 20px;")(
                 Button("Save Attributes", type="submit", cls="btn-success"),
-                *(
-                    [
-                        A(
-                            "Delete Player",
-                            href=f"/delete_player/{player['id']}",
-                            cls="btn-danger",
-                            onclick="return confirm('Confirm delete?');",
-                            style="text-decoration: none;",
-                        )
-                    ]
-                    if can_delete
-                    else []
-                ),
             ),
             method="post",
             action=f"/update_player/{player['id']}",
+        ),
+        # Outside the form and below it: Save and Delete sitting side by side is
+        # exactly the misfire this page had.
+        (
+            Div(cls="danger-zone")(
+                confirm_delete_link("player", player["id"], "Delete Player")
+            )
+            if can_delete
+            else ""
         ),
     )
 

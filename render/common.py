@@ -55,10 +55,45 @@ def render_head(title, STYLE, *extra):
     )
 
 
+def match_fixture(match):
+    """The two sides of a match and the score between them, as separate parts.
+
+    A table wants these in their own columns, and the one-line match name wants
+    them run together; both come from here so the teams are fetched once and
+    described the same way.
+
+    Returns:
+        (home, score, away): names always strings; ``score`` is "3 : 2" once the
+        match has been played and both sides have a score, otherwise None.
+    """
+    match_id = match.get("id") if match else None
+    teams = get_match_teams(match_id) if match_id else []
+
+    home_name, away_name = "Home Team", "Away Team"
+    home_score = away_score = None
+    for team in teams:
+        number = team.get("team_number")
+        name = team.get("team_name", "")
+        if number == 1:
+            home_name = name or "Home Team"
+            home_score = team.get("score")
+        elif number == 2:
+            away_name = name or "Away Team"
+            away_score = team.get("score")
+
+    played = (
+        is_match_completed(match) and home_score is not None and away_score is not None
+    )
+    return home_name, (f"{home_score} : {away_score}" if played else None), away_name
+
+
 def format_match_name(match):
     """Format match name based on match status:
     - Not started: YYYY-MM-DD HomeTeamName VS AwayTeamName
     - Completed: YYYY-MM-DD HomeTeamName hometeamscore : awayteamscore AwayTeamName
+
+    For a table, which wants the two sides in columns of their own, use
+    ``match_fixture`` instead.
     """
     if not match:
         return "Match"
@@ -75,34 +110,8 @@ def format_match_name(match):
         date_obj = datetime.strptime(match_date, "%Y-%m-%d").date()
         date_str = date_obj.strftime("%Y-%m-%d")
 
-        # Get teams
-        teams = get_match_teams(match_id) if match_id else []
-
-        # Get team names and scores
-        home_team_name = "Home Team"
-        away_team_name = "Away Team"
-        home_team_score = None
-        away_team_score = None
-
-        for team in teams:
-            team_number = team.get("team_number")
-            team_name = team.get("team_name", "")
-            if team_number == 1:
-                home_team_name = team_name or "Home Team"
-                home_team_score = team.get("score")
-            elif team_number == 2:
-                away_team_name = team_name or "Away Team"
-                away_team_score = team.get("score")
-
-        # Check if match is completed
-        is_completed = is_match_completed(match)
-
-        if is_completed and home_team_score is not None and away_team_score is not None:
-            # Completed match with scores: YYYY-MM-DD HomeTeamName hometeamscore : awayteamscore AwayTeamName
-            return f"{date_str} {home_team_name} {home_team_score} : {away_team_score} {away_team_name}"
-        else:
-            # Not started match: YYYY-MM-DD HomeTeamName VS AwayTeamName
-            return f"{date_str} {home_team_name} VS {away_team_name}"
+        home_name, score, away_name = match_fixture(match)
+        return f"{date_str} {home_name} {score or 'VS'} {away_name}"
     except (ValueError, IndexError, AttributeError):
         # If parsing fails, fallback to ID
         return f"Match #{match_id}" if match_id else "Match"
@@ -197,6 +206,17 @@ def get_match_score_display(match_id):
     return ""
 
 
+def _belongs_to_a_club(user):
+    """Whether this user is in any club at all.
+
+    Imported here rather than at module scope: db.users imports back through
+    render for nothing, and the navbar is the only caller.
+    """
+    from db.users import get_user_clubs
+
+    return bool(get_user_clubs(user["id"]))
+
+
 def render_navbar(user=None, sess=None, current_url="/"):
     """Render navigation bar"""
     nav_items = [
@@ -213,8 +233,9 @@ def render_navbar(user=None, sess=None, current_url="/"):
         A("Leagues", href="/leagues"),
     ]
 
-    # Add Clubs link for superusers only
-    if user and user.get("is_superuser"):
+    # Anyone in a club can read that club's page; only a user in no club at all
+    # would land on an empty one, so they get no link.
+    if user and (user.get("is_superuser") or _belongs_to_a_club(user)):
         nav_items.append(A("Clubs", href="/clubs"))
 
     # Add Users link for all authenticated users
@@ -369,6 +390,17 @@ def can_user_edit(user: dict, club_id: int = None) -> bool:
 def can_user_delete(user: dict, club_id: int = None) -> bool:
     """Check if user can delete (manager or superuser)"""
     return can_user_edit(user, club_id)  # Same permission as edit
+
+
+def confirm_delete_link(kind, item_id, label):
+    """The only way any page offers to delete something.
+
+    Points at the shared confirmation page (see routes/delete_confirm.py)
+    rather than posting from here, so no page a person is merely reading can
+    destroy anything. Belongs in a .danger-zone at the foot of the page, never
+    in the button group beside Edit or Save.
+    """
+    return A(label, href=f"/confirm-delete/{kind}/{item_id}", cls="btn-delete")
 
 
 def render_csrf_input(sess: dict):

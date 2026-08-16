@@ -10,12 +10,8 @@
 
 from fasthtml.common import *
 
-from render.common import (
-    format_match_name,
-    get_match_score_display,
-    is_match_completed,
-    render_head,
-)
+from render.common import render_head
+from render.matches import render_match_table
 
 
 def _public_header():
@@ -115,62 +111,26 @@ def render_public_not_found(STYLE):
 
 
 def render_public_league(league, matches, STYLE):
-    """Render a league's match list for anonymous visitors (read-only)."""
-    content = [H2(league["name"])]
+    """Render a league's match list for anonymous visitors (read-only).
+
+    The same table the signed-in /matches page uses, only with the rows pointing
+    at /public/match. Sharing a league should show people what the app shows,
+    not a second-class copy of it.
+    """
+    content = [Div(cls="section-header")(H2(league["name"], style="margin: 0;"))]
 
     if league.get("description"):
-        content.append(P(league["description"], style="color: var(--muted);"))
+        content.append(Div(cls="container-white")(P(league["description"])))
 
-    if not matches:
+    if matches:
         content.append(
             Div(cls="container-white")(
-                P("No matches yet.", style="text-align: center; color: var(--muted);")
+                render_match_table(matches, base="/public/match")
             )
         )
-        return render_public_page(
-            f"{league['name']} - Football Manager", STYLE, *content
-        )
-
-    content.append(H3("Matches"))
-    for match in matches:
-        info = []
-        if match.get("date"):
-            info.append(f"Date: {match['date']}")
-        if match.get("start_time"):
-            info.append(f"Start: {match['start_time']}")
-        if match.get("end_time"):
-            info.append(f"End: {match['end_time']}")
-        if match.get("location"):
-            info.append(f"Location: {match['location']}")
-
-        score_display = (
-            get_match_score_display(match["id"]) if is_match_completed(match) else ""
-        )
-
+    else:
         content.append(
-            Div(cls="container-white", style="margin-bottom: 10px;")(
-                A(
-                    H4(
-                        format_match_name(match),
-                        style="margin: 0; color: var(--navy);",
-                    ),
-                    href=f"/public/match/{match['id']}",
-                    style="text-decoration: none;",
-                ),
-                (
-                    P(" | ".join(info), style="margin: 5px 0; color: var(--muted);")
-                    if info
-                    else ""
-                ),
-                (
-                    P(
-                        score_display,
-                        style="margin: 5px 0; font-weight: bold; color: var(--navy-dark);",
-                    )
-                    if score_display
-                    else ""
-                ),
-            )
+            Div(cls="container-white")(P("No matches yet.", cls="empty-state"))
         )
 
     return render_public_page(f"{league['name']} - Football Manager", STYLE, *content)

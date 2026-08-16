@@ -31,9 +31,82 @@ from db.users import (
     add_user_to_club,
     get_all_users,
     get_club_staff,
+    get_user_by_id,
     get_user_club_role,
+    get_user_clubs,
 )
-from render.common import render_head, render_navbar
+from render.common import confirm_delete_link, render_head, render_navbar
+
+
+def visible_clubs_for(user):
+    """The clubs a non-superuser may look at: the ones they belong to.
+
+    Membership at any role is enough to read. Knowing who runs the club you play
+    for is not privileged; changing it is, and that is a separate check.
+    """
+    if not user:
+        return []
+    # get_user_clubs carries the membership row's role, which render_clubs_list
+    # has no use for; the club records themselves are what the page lists.
+    clubs = (get_club(club["id"]) for club in get_user_clubs(user["id"]))
+    return [club for club in clubs if club]
+
+
+def is_club_admin(user, club_id):
+    """Whether this user runs this particular club.
+
+    Club admins staff their own club and write its description. Everything that
+    is about the club's existence rather than its running -- creating it,
+    renaming it, deleting it, entering it into a league -- stays with superusers.
+    """
+    if not user:
+        return False
+    if user.get("is_superuser"):
+        return True
+    return get_user_club_role(user["id"], club_id) == USER_ROLES["ADMIN"]
+
+
+def may_restaff_member(actor, target_user_id, target_is_superuser, target_role):
+    """The rule, given facts the caller already has.
+
+    A club admin runs their club's viewers and managers. They cannot touch a
+    superuser, and they cannot touch a fellow admin: being handed a club does
+    not come with the power to hand it back. Assumes the actor is already known
+    to run this club.
+
+    Split out from ``may_restaff`` so the members table can grey out the rows it
+    may not touch without a round trip per row, and so the page and the routes
+    cannot drift apart on what the rule is.
+    """
+    if actor.get("is_superuser"):
+        return True
+    if actor.get("id") == target_user_id:
+        return False  # nobody demotes or removes themselves
+    if target_is_superuser:
+        return False
+    return target_role in (None, USER_ROLES["VIEWER"], USER_ROLES["MANAGER"])
+
+
+def may_restaff(actor, club_id, target_user_id):
+    """Whether `actor` may add, re-role or remove this member. Used by routes."""
+    if not is_club_admin(actor, club_id):
+        return False
+    target = get_user_by_id(target_user_id)
+    if not target:
+        return False
+    return may_restaff_member(
+        actor,
+        target_user_id,
+        bool(target.get("is_superuser")),
+        get_user_club_role(target_user_id, club_id),
+    )
+
+
+def assignable_roles(user):
+    """The roles this user may hand out. Only a superuser can mint an admin."""
+    if user and user.get("is_superuser"):
+        return VALID_ROLES
+    return [USER_ROLES["VIEWER"], USER_ROLES["MANAGER"]]
 
 
 def register_club_routes(rt, STYLE):
@@ -41,16 +114,20 @@ def register_club_routes(rt, STYLE):
 
     @rt("/clubs")
     def clubs_page(req: Request = None, sess=None):
-        """List all clubs (superuser only)"""
+        """List the clubs this user can see.
+
+        Superusers see every club; everyone else sees the ones they belong to,
+        at any role. Seeing a club is not managing it -- creating, renaming and
+        restaffing are separate checks on the club's own page.
+        """
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        # Only superusers can view all clubs
-        if not user.get("is_superuser"):
+        is_superuser = bool(user.get("is_superuser"))
+        clubs = get_all_clubs() if is_superuser else visible_clubs_for(user)
+        if not clubs and not is_superuser:
             return RedirectResponse("/", status_code=303)
-
-        clubs = get_all_clubs()
 
         return Html(
             render_head("Clubs - Football Manager", STYLE),
@@ -59,7 +136,11 @@ def register_club_routes(rt, STYLE):
                 Div(cls="container")(
                     Div(cls="section-header")(
                         H2(f"Clubs ({len(clubs)})", style="margin: 0;"),
-                        A("Create Club", href="/create_club", cls="btn-success"),
+                        (
+                            A("Create Club", href="/create_club", cls="btn-success")
+                            if is_superuser
+                            else ""
+                        ),
                     ),
                     render_clubs_list(clubs, user),
                 ),
@@ -124,12 +205,18 @@ def register_club_routes(rt, STYLE):
 
     @rt("/club/{club_id}")
     def club_detail_page(club_id: int, req: Request = None, sess=None):
-        """Club detail page with members (superuser only)"""
+        """A club: what it is, who is in it, which leagues it plays in.
+
+        Three levels of it. A superuser can do everything. The club's own admin
+        staffs it and writes its description. Everyone else in the club reads it.
+        """
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        if not user.get("is_superuser"):
+        is_superuser = bool(user.get("is_superuser"))
+        can_staff = is_club_admin(user, club_id)
+        if not can_staff and club_id not in {c["id"] for c in visible_clubs_for(user)}:
             return RedirectResponse("/", status_code=303)
 
         club = get_club(club_id)
@@ -160,35 +247,49 @@ def register_club_routes(rt, STYLE):
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
-                    H2(club["name"]),
-                    Div(cls="container-white")(
-                        P(f"Description: {club.get('description', 'N/A')}"),
-                        Div(cls="btn-group", style="margin-top: 10px;")(
+                    Div(cls="section-header")(
+                        H2(club["name"], style="margin: 0;"),
+                        (
                             A(
-                                Button("Edit Club", cls="btn-primary"),
+                                "Edit Club",
                                 href=f"/edit_club/{club_id}",
-                            ),
-                            Form(
-                                method="POST",
-                                action=f"/delete_club/{club_id}",
-                                style="display: inline;",
-                                **{
-                                    "onsubmit": "return confirm('Are you sure you want to delete this club?');"
-                                },
-                            )(
-                                Button("Delete Club", cls="btn-danger", type="submit"),
-                            ),
+                                cls="btn-success",
+                            )
+                            if can_staff
+                            else ""
                         ),
+                    ),
+                    # No description, no card: an empty white box says nothing
+                    # that the absence of one does not.
+                    (
+                        Div(cls="container-white")(P(club["description"]))
+                        if club.get("description")
+                        else ""
                     ),
                     Div(cls="container-white", style="margin-top: 20px;")(
                         H3("Club Members"),
-                        render_club_members(club_id, club_members, user),
+                        render_club_members(
+                            club_id, club_members, user, can_manage=can_staff
+                        ),
                     ),
                     Div(cls="container-white", style="margin-top: 20px;")(
                         H3("Leagues"),
+                        # Which leagues a club plays in is not the club admin's
+                        # to decide -- it affects the leagues too.
                         render_club_leagues(
-                            club_id, leagues_for_club, all_leagues, user
+                            club_id,
+                            leagues_for_club,
+                            all_leagues,
+                            user,
+                            can_manage=is_superuser,
                         ),
+                    ),
+                    (
+                        Div(cls="danger-zone")(
+                            confirm_delete_link("club", club_id, "Delete Club")
+                        )
+                        if is_superuser
+                        else ""
                     ),
                 ),
             ),
@@ -196,13 +297,18 @@ def register_club_routes(rt, STYLE):
 
     @rt("/edit_club/{club_id}")
     def edit_club_page(club_id: int, req: Request = None, sess=None):
-        """Edit club page (superuser only)"""
+        """Edit a club's name and description.
+
+        The club's own admin gets the description only: the name is how everyone
+        else refers to this club, so renaming it is a superuser's call.
+        """
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        if not user.get("is_superuser"):
+        if not is_club_admin(user, club_id):
             return RedirectResponse("/", status_code=303)
+        may_rename = bool(user.get("is_superuser"))
 
         club = get_club(club_id)
         if not club:
@@ -216,18 +322,22 @@ def register_club_routes(rt, STYLE):
                     H2(f"Edit {club['name']}"),
                     Div(cls="container-white")(
                         Form(
-                            Div(cls="input-group", style="margin-bottom: 15px;")(
-                                Label(
-                                    "Club Name:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="text",
-                                    name="name",
-                                    value=club.get("name", ""),
-                                    required=True,
-                                    style="width: 100%; padding: 8px;",
-                                ),
+                            (
+                                Div(cls="input-group", style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Club Name:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="name",
+                                        value=club.get("name", ""),
+                                        required=True,
+                                        style="width: 100%; padding: 8px;",
+                                    ),
+                                )
+                                if may_rename
+                                else ""
                             ),
                             Div(cls="input-group", style="margin-bottom: 15px;")(
                                 Label(
@@ -257,22 +367,31 @@ def register_club_routes(rt, STYLE):
 
     @rt("/update_club/{club_id}", methods=["POST"])
     async def route_update_club(club_id: int, req: Request, sess=None):
-        """Update club (superuser only)"""
+        """Update a club's name and description."""
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        if not user.get("is_superuser"):
+        if not is_club_admin(user, club_id):
             return RedirectResponse("/", status_code=303)
 
+        club = get_club(club_id)
+        if not club:
+            return RedirectResponse("/clubs", status_code=303)
+
         form = await req.form()
-        name = form.get("name", "").strip()
         description = form.get("description", "").strip()
 
-        if not name:
-            return RedirectResponse(
-                f"/edit_club/{club_id}?error=Club+name+is+required", status_code=303
-            )
+        # A club admin's form has no name field, and a posted one is ignored
+        # rather than trusted: the edit page is not the only way to reach here.
+        if user.get("is_superuser"):
+            name = form.get("name", "").strip()
+            if not name:
+                return RedirectResponse(
+                    f"/edit_club/{club_id}?error=Club+name+is+required", status_code=303
+                )
+        else:
+            name = club["name"]
 
         update_club(club_id, name=name, description=description)
         return RedirectResponse(f"/club/{club_id}", status_code=303)
@@ -292,12 +411,12 @@ def register_club_routes(rt, STYLE):
 
     @rt("/assign_user_to_club/{club_id}", methods=["POST"])
     async def route_assign_user_to_club(club_id: int, req: Request, sess=None):
-        """Assign user to club with role (superuser only)"""
+        """Add a member to a club. Superusers, or the club's own admin."""
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        if not user.get("is_superuser"):
+        if not is_club_admin(user, club_id):
             return RedirectResponse("/", status_code=303)
 
         form = await req.form()
@@ -311,11 +430,17 @@ def register_club_routes(rt, STYLE):
                 f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
             )
 
-        # Validate role
-        is_valid, error_msg = validate_in_list(role, VALID_ROLES, "Role")
+        # Checked against what this user may hand out, not the full list: a club
+        # admin cannot mint another admin by posting the form themselves.
+        is_valid, error_msg = validate_in_list(role, assignable_roles(user), "Role")
         if not is_valid:
             return RedirectResponse(
                 f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
+            )
+
+        if not may_restaff(user, club_id, user_id):
+            return RedirectResponse(
+                f"/club/{club_id}?error=Not+allowed+to+add+this+user", status_code=303
             )
 
         try:
@@ -333,13 +458,13 @@ def register_club_routes(rt, STYLE):
     def route_remove_user_from_club(
         club_id: int, user_id: int, req: Request = None, sess=None
     ):
-        """Remove user from club (superuser only)"""
+        """Remove a member from a club. Superusers, or the club's own admin."""
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        if not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
+        if not may_restaff(user, club_id, user_id):
+            return RedirectResponse(f"/club/{club_id}", status_code=303)
 
         from db.connection import get_db
 
@@ -357,19 +482,19 @@ def register_club_routes(rt, STYLE):
     async def route_update_user_club_role(
         club_id: int, user_id: int, req: Request, sess=None
     ):
-        """Update user's role in a club (superuser only)"""
+        """Change a member's role. Superusers, or the club's own admin."""
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
 
-        if not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
+        if not may_restaff(user, club_id, user_id):
+            return RedirectResponse(f"/club/{club_id}", status_code=303)
 
         form = await req.form()
         role = form.get("role", "").strip()
 
-        # Validate role
-        is_valid, error_msg = validate_in_list(role, VALID_ROLES, "Role")
+        # See route_assign_user_to_club: the list is what this user may hand out.
+        is_valid, error_msg = validate_in_list(role, assignable_roles(user), "Role")
         if not is_valid:
             return RedirectResponse(
                 f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
@@ -479,68 +604,78 @@ def render_clubs_list(clubs, user=None):
     )
 
 
-def render_club_members(club_id, club_members, user=None):
-    """Render club members with assignment form"""
+def render_club_members(club_id, club_members, user=None, can_manage=False):
+    """Render club members, with the assignment form only for those who may use it.
+
+    Args:
+        can_manage: Whether this user may change who is in the club. Off for the
+            admins and managers who can see their own club but not restaff it;
+            with it off this is a plain roster.
+    """
     from db.users import get_all_users
 
-    all_users = get_all_users()
+    all_users = get_all_users() if can_manage else []
 
     # Get users not yet in this club
     member_user_ids = {m["user_id"] for m in club_members if m["role"]}
     available_users = [u for u in all_users if u["id"] not in member_user_ids]
 
-    content = [
-        # Add member form
-        Div(cls="container-white", style="margin-bottom: 20px;")(
-            H4("Add Member to Club"),
-            Form(
-                Div(style="display: flex; gap: 10px; align-items: flex-end;")(
-                    Div(style="flex: 1;")(
-                        Label("User:", style="display: block; margin-bottom: 5px;"),
-                        (
+    content = []
+    if can_manage:
+        content.append(
+            # Add member form
+            Div(cls="container-white", style="margin-bottom: 20px;")(
+                H4("Add Member to Club"),
+                Form(
+                    Div(style="display: flex; gap: 10px; align-items: flex-end;")(
+                        Div(style="flex: 1;")(
+                            Label("User:", style="display: block; margin-bottom: 5px;"),
+                            (
+                                Select(
+                                    *[
+                                        Option(
+                                            f"{u['username']} ({u.get('email', '')})",
+                                            value=str(u["id"]),
+                                        )
+                                        for u in available_users
+                                    ],
+                                    name="user_id",
+                                    required=True,
+                                    style="width: 100%; padding: 8px;",
+                                )
+                                if available_users
+                                else P(
+                                    "All users are already members of this club.",
+                                    style="color: #666;",
+                                )
+                            ),
+                        ),
+                        Div(style="flex: 1;")(
+                            Label("Role:", style="display: block; margin-bottom: 5px;"),
                             Select(
                                 *[
-                                    Option(
-                                        f"{u['username']} ({u.get('email', '')})",
-                                        value=str(u["id"]),
-                                    )
-                                    for u in available_users
+                                    Option(role.title(), value=role)
+                                    for role in assignable_roles(user)
                                 ],
-                                name="user_id",
+                                name="role",
                                 required=True,
                                 style="width: 100%; padding: 8px;",
+                            ),
+                        ),
+                        (
+                            Div(
+                                Button("Add Member", type="submit", cls="btn-success"),
+                                style="padding-top: 20px;",
                             )
                             if available_users
-                            else P(
-                                "All users are already members of this club.",
-                                style="color: #666;",
-                            )
+                            else ""
                         ),
                     ),
-                    Div(style="flex: 1;")(
-                        Label("Role:", style="display: block; margin-bottom: 5px;"),
-                        Select(
-                            Option("Viewer", value=USER_ROLES["VIEWER"]),
-                            Option("Manager", value=USER_ROLES["MANAGER"]),
-                            name="role",
-                            required=True,
-                            style="width: 100%; padding: 8px;",
-                        ),
-                    ),
-                    (
-                        Div(
-                            Button("Add Member", type="submit", cls="btn-success"),
-                            style="padding-top: 20px;",
-                        )
-                        if available_users
-                        else ""
-                    ),
+                    method="post",
+                    action=f"/assign_user_to_club/{club_id}",
                 ),
-                method="post",
-                action=f"/assign_user_to_club/{club_id}",
-            ),
-        ),
-    ]
+            )
+        )
 
     # Members table
     if club_members:
@@ -555,52 +690,72 @@ def render_club_members(club_id, club_members, user=None):
                     if member["is_superuser"]
                     else ""
                 )
+                # Same rule the write routes enforce, so the page never offers a
+                # control that would bounce.
+                editable = can_manage and may_restaff_member(
+                    user or {},
+                    member["user_id"],
+                    bool(member["is_superuser"]),
+                    member["role"],
+                )
                 role_select = (
                     Select(
-                        Option(
-                            "Viewer",
-                            value=USER_ROLES["VIEWER"],
-                            selected=(member["role"] == USER_ROLES["VIEWER"]),
-                        ),
-                        Option(
-                            "Manager",
-                            value=USER_ROLES["MANAGER"],
-                            selected=(member["role"] == USER_ROLES["MANAGER"]),
-                        ),
+                        *[
+                            Option(
+                                role.title(),
+                                value=role,
+                                selected=(member["role"] == role),
+                            )
+                            for role in assignable_roles(user)
+                        ],
                         name="role",
                         **{
                             "onchange": f"this.form.action='/update_user_club_role/{club_id}/{member['user_id']}'; this.form.submit();",
                         },
                         style="padding: 4px;",
                     )
-                    if not member["is_superuser"]
-                    else Span("Superuser", style="color: #666;")
+                    if editable
+                    else Span(
+                        "Superuser"
+                        if member["is_superuser"]
+                        else member["role"].title(),
+                        style="color: var(--muted);",
+                    )
                 )
 
                 member_rows.append(
                     Tr(
                         Td(member["username"]),
-                        Td(member.get("email", "N/A")),
+                        # Addresses are for whoever can act on these people; a
+                        # reader would be seeing contact details the users page
+                        # does not show them either.
+                        *([Td(member.get("email") or "—")] if can_manage else []),
                         Td(role_badge, role_select),
-                        Td(
-                            (
-                                Form(
-                                    method="POST",
-                                    action=f"/remove_user_from_club/{club_id}/{member['user_id']}",
-                                    style="display: inline;",
-                                    **{
-                                        "onsubmit": "return confirm('Remove this user from the club?');",
-                                    },
-                                )(
-                                    Button(
-                                        "Remove",
-                                        type="submit",
-                                        cls="btn-danger",
+                        *(
+                            [
+                                Td(
+                                    (
+                                        Form(
+                                            method="POST",
+                                            action=f"/remove_user_from_club/{club_id}/{member['user_id']}",
+                                            style="display: inline;",
+                                            **{
+                                                "onsubmit": "return confirm('Remove this user from the club?');",
+                                            },
+                                        )(
+                                            Button(
+                                                "Remove",
+                                                type="submit",
+                                                cls="link-delete",
+                                            ),
+                                        )
+                                        if editable
+                                        else ""
                                     ),
                                 )
-                                if not member["is_superuser"]
-                                else ""
-                            ),
+                            ]
+                            if can_manage
+                            else []
                         ),
                     )
                 )
@@ -612,9 +767,9 @@ def render_club_members(club_id, club_members, user=None):
                     Thead(
                         Tr(
                             Th("Username"),
-                            Th("Email"),
+                            *([Th("Email")] if can_manage else []),
                             Th("Role"),
-                            Th("Actions"),
+                            *([Th("Actions")] if can_manage else []),
                         )
                     ),
                     Tbody(*member_rows),
@@ -625,8 +780,10 @@ def render_club_members(club_id, club_members, user=None):
         content.append(
             Div(cls="container-white")(
                 P(
-                    "No members yet. Add members using the form above.",
-                    style="color: #666;",
+                    "No members yet. Add members using the form above."
+                    if can_manage
+                    else "No members yet.",
+                    cls="empty-state",
                 )
             )
         )
@@ -634,53 +791,61 @@ def render_club_members(club_id, club_members, user=None):
     return Div(*content)
 
 
-def render_club_leagues(club_id, leagues_for_club, all_leagues, user=None):
-    """Render leagues for a club with management UI (superuser only)"""
+def render_club_leagues(
+    club_id, leagues_for_club, all_leagues, user=None, can_manage=False
+):
+    """Render leagues for a club, with the add form only for those who may use it."""
     # Get leagues not yet assigned to this club
     league_ids_for_club = {league["id"] for league in leagues_for_club}
     available_leagues = [
         league for league in all_leagues if league["id"] not in league_ids_for_club
     ]
 
-    content = [
-        # Add league form
-        Div(cls="container-white", style="margin-bottom: 20px;")(
-            H4("Add Club to League"),
-            Form(
-                Div(style="display: flex; gap: 10px; align-items: flex-end;")(
-                    Div(style="flex: 1;")(
-                        Label("League:", style="display: block; margin-bottom: 5px;"),
+    content = []
+    if can_manage:
+        content.append(
+            # Add league form
+            Div(cls="container-white", style="margin-bottom: 20px;")(
+                H4("Add Club to League"),
+                Form(
+                    Div(style="display: flex; gap: 10px; align-items: flex-end;")(
+                        Div(style="flex: 1;")(
+                            Label(
+                                "League:", style="display: block; margin-bottom: 5px;"
+                            ),
+                            (
+                                Select(
+                                    *[
+                                        Option(league["name"], value=str(league["id"]))
+                                        for league in available_leagues
+                                    ],
+                                    name="league_id",
+                                    required=True,
+                                    style="width: 100%; padding: 8px;",
+                                )
+                                if available_leagues
+                                else P(
+                                    "This club is already in all leagues.",
+                                    style="color: #666;",
+                                )
+                            ),
+                        ),
                         (
-                            Select(
-                                *[
-                                    Option(league["name"], value=str(league["id"]))
-                                    for league in available_leagues
-                                ],
-                                name="league_id",
-                                required=True,
-                                style="width: 100%; padding: 8px;",
+                            Div(
+                                Button(
+                                    "Add to League", type="submit", cls="btn-success"
+                                ),
+                                style="padding-top: 20px;",
                             )
                             if available_leagues
-                            else P(
-                                "This club is already in all leagues.",
-                                style="color: #666;",
-                            )
+                            else ""
                         ),
                     ),
-                    (
-                        Div(
-                            Button("Add to League", type="submit", cls="btn-success"),
-                            style="padding-top: 20px;",
-                        )
-                        if available_leagues
-                        else ""
-                    ),
+                    method="post",
+                    action=f"/add_club_to_league_from_club/{club_id}",
                 ),
-                method="post",
-                action=f"/add_club_to_league_from_club/{club_id}",
-            ),
-        ),
-    ]
+            )
+        )
 
     # Leagues table
     if leagues_for_club:
@@ -698,21 +863,23 @@ def render_club_leagues(club_id, leagues_for_club, all_leagues, user=None):
                         league.get("description", "")[:100]
                         + ("..." if len(league.get("description", "")) > 100 else "")
                     ),
-                    Td(
-                        Form(
-                            method="POST",
-                            action=f"/remove_club_from_league_from_club/{club_id}/{league['id']}",
-                            style="display: inline;",
-                            **{
-                                "onsubmit": "return confirm('Remove this club from the league?');",
-                            },
-                        )(
-                            Button(
-                                "Remove",
-                                type="submit",
-                                cls="btn-danger",
-                            ),
-                        )
+                    *(
+                        [
+                            Td(
+                                Form(
+                                    method="POST",
+                                    action=f"/remove_club_from_league_from_club/{club_id}/{league['id']}",
+                                    style="display: inline;",
+                                    **{
+                                        "onsubmit": "return confirm('Remove this club from the league?');",
+                                    },
+                                )(
+                                    Button("Remove", type="submit", cls="link-delete"),
+                                )
+                            )
+                        ]
+                        if can_manage
+                        else []
                     ),
                 )
             )
@@ -725,7 +892,7 @@ def render_club_leagues(club_id, leagues_for_club, all_leagues, user=None):
                         Tr(
                             Th("League Name"),
                             Th("Description"),
-                            Th("Actions"),
+                            *([Th("Actions")] if can_manage else []),
                         )
                     ),
                     Tbody(*league_rows),

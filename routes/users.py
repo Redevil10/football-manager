@@ -4,7 +4,7 @@ from urllib.parse import parse_qs
 
 from fasthtml.common import *
 
-from core.auth import escape_js_string, get_current_user, get_user_accessible_club_ids
+from core.auth import get_current_user, get_user_accessible_club_ids
 from core.config import USER_ROLES, VALID_ROLES
 from core.error_handling import handle_db_result, handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
@@ -20,7 +20,7 @@ from db.users import (
     update_user_club_role,
     update_user_superuser_status,
 )
-from render.common import render_head, render_navbar
+from render.common import confirm_delete_link, render_head, render_navbar
 
 logger = logging.getLogger(__name__)
 
@@ -432,16 +432,6 @@ def register_user_routes(rt, STYLE):
                                 href="/users",
                                 cls="btn-secondary",
                             ),
-                            can_delete
-                            and Form(
-                                method="POST",
-                                action=f"/users/{user_id}/delete",
-                                style="display: inline;",
-                                **{
-                                    "onsubmit": f"return confirm('Are you sure you want to delete user {escape_js_string(target_user['username'])}? This action cannot be undone.');"
-                                },
-                            )(Button("Delete User", type="submit", cls="btn-danger"))
-                            or "",
                         ),
                     ),
                     Div(cls="container-white", style="margin-top: 20px;")(
@@ -541,6 +531,13 @@ def register_user_routes(rt, STYLE):
                                 style="color: #666; padding: 10px;",
                             )
                         ),
+                    ),
+                    (
+                        Div(cls="danger-zone")(
+                            confirm_delete_link("user", user_id, "Delete User")
+                        )
+                        if can_delete
+                        else ""
                     ),
                 ),
             ),

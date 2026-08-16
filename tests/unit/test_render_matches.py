@@ -150,10 +150,10 @@ class TestRenderAllMatches:
 
         assert result is not None
 
-    @patch("render.matches.format_match_name")
-    def test_lists_every_match_under_its_league(self, mock_format_name):
+    @patch("render.matches.match_fixture")
+    def test_lists_every_match_under_its_league(self, mock_fixture):
         """Unlike the home page, this one is not capped."""
-        mock_format_name.side_effect = lambda m: f"match {m['id']}"
+        mock_fixture.return_value = ("Red", None, "White")
 
         html = to_xml(
             render_all_matches(
@@ -161,11 +161,12 @@ class TestRenderAllMatches:
             )
         )
 
-        assert html.count("match-row-name") == 5
+        assert html.count('href="/match/') == 5
+        assert html.count("Sunday League") == 1
 
-    @patch("render.matches.format_match_name")
-    def test_row_carries_when_and_where(self, mock_format_name):
-        mock_format_name.side_effect = lambda m: f"match {m['id']}"
+    @patch("render.matches.match_fixture")
+    def test_the_two_sides_and_the_score_get_a_column_each(self, mock_fixture):
+        mock_fixture.return_value = ("PCUSA Red", "3 : 2", "PCUSA White")
 
         html = to_xml(
             render_all_matches(
@@ -173,6 +174,7 @@ class TestRenderAllMatches:
                     {
                         "id": 1,
                         "league_name": "Sunday League",
+                        "date": "2026-08-14",
                         "start_time": "15:30",
                         "end_time": "17:30",
                         "location": "Eric Primrose Reserve",
@@ -182,16 +184,44 @@ class TestRenderAllMatches:
             )
         )
 
-        assert "15:30–17:30 · Eric Primrose Reserve" in html
+        assert "<td>PCUSA Red</td>" in html
+        assert "3 : 2" in html
+        assert "<td>PCUSA White</td>" in html
+        # The date is its own column and opens the match.
+        assert '<a href="/match/1">2026-08-14</a>' in html
+        assert "15:30–17:30" in html
+        assert "Eric Primrose Reserve" in html
 
-    @patch("render.matches.format_match_name")
-    def test_has_no_delete_control(self, mock_format_name):
+    @patch("render.matches.match_fixture")
+    def test_an_unplayed_match_shows_no_score(self, mock_fixture):
+        mock_fixture.return_value = ("Red", None, "White")
+
+        html = to_xml(
+            render_all_matches(
+                [{"id": 1, "league_name": "L", "date": "2027-01-01"}], None
+            )
+        )
+
+        assert "—" in html
+
+    @patch("render.matches.match_fixture")
+    def test_a_dateless_match_is_still_reachable(self, mock_fixture):
+        """Falling back to the id keeps the row from being a dead end."""
+        mock_fixture.return_value = ("Red", None, "White")
+
+        html = to_xml(render_all_matches([{"id": 42, "league_name": "L"}], None))
+
+        assert '<a href="/match/42">#42</a>' in html
+
+    @patch("render.matches.match_fixture")
+    def test_has_no_delete_control(self, mock_fixture):
         """Deleting a match lives on the match's own page."""
-        mock_format_name.side_effect = lambda m: f"match {m['id']}"
+        mock_fixture.return_value = ("Red", None, "White")
 
         html = to_xml(render_all_matches([{"id": 1, "league_name": "L"}], None))
 
         assert "/delete_match/" not in html
+        assert "/confirm-delete/match/" not in html
 
 
 class TestRenderMatchTeams:

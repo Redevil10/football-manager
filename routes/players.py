@@ -660,7 +660,10 @@ def register_player_routes(rt, STYLE):
             check_false=True,
         )
 
-    @rt("/delete_player/{player_id}", methods=["GET", "POST"])
+    # POST only: the GET form of this was a URL that deleted a player when
+    # anything merely fetched it. Nothing links to it that way any more -- the
+    # only route in is the confirmation page's form.
+    @rt("/delete_player/{player_id}", methods=["POST"])
     def route_delete_player(player_id: int, req: Request = None, sess=None):
         """Delete player"""
         user = get_current_user(req, sess)

@@ -121,6 +121,7 @@ init_db()
 # Note: Imports must be after app initialization to avoid circular dependencies
 from routes.auth import register_auth_routes  # noqa: E402
 from routes.clubs import register_club_routes  # noqa: E402
+from routes.delete_confirm import register_delete_confirm_routes  # noqa: E402
 from routes.home import register_home_routes  # noqa: E402
 from routes.leagues import register_league_routes  # noqa: E402
 from routes.matches import register_match_routes  # noqa: E402
@@ -133,6 +134,7 @@ from routes.users import register_user_routes  # noqa: E402
 # Register all routes
 register_auth_routes(rt, STYLE)
 register_club_routes(rt, STYLE)
+register_delete_confirm_routes(rt, STYLE)
 register_home_routes(rt, STYLE)
 register_player_routes(rt, STYLE)
 register_public_routes(rt, STYLE)
