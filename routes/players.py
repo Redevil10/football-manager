@@ -704,10 +704,17 @@ def register_player_routes(rt, STYLE):
         player = players.get(player_id)
 
         if not player:
-            raise NotFoundError("player", resource_id=player_id)
+            return handle_route_error(
+                NotFoundError("player", resource_id=player_id), "/players"
+            )
 
+        # Handled rather than raised: nothing catches these on the way out, so
+        # a manager who tries this used to get a 500 instead of being told no.
         if not can_user_delete(user, player.get("club_id")):
-            raise PermissionError("delete", resource=f"player {player_id}")
+            return handle_route_error(
+                PermissionError("delete", resource=f"player {player_id}"),
+                _player_url(player_id),
+            )
 
         if count_player_appearances(player_id):
             success = set_player_active(player_id, False)
@@ -736,10 +743,15 @@ def register_player_routes(rt, STYLE):
         player = players.get(player_id)
 
         if not player:
-            raise NotFoundError("player", resource_id=player_id)
+            return handle_route_error(
+                NotFoundError("player", resource_id=player_id), "/players"
+            )
 
         if not can_user_delete(user, player.get("club_id")):
-            raise PermissionError("restore", resource=f"player {player_id}")
+            return handle_route_error(
+                PermissionError("restore", resource=f"player {player_id}"),
+                _player_url(player_id),
+            )
 
         return handle_db_result(
             set_player_active(player_id, True),
