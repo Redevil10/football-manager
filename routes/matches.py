@@ -21,6 +21,7 @@ from db import (
     add_match_event,
     add_match_player,
     add_match_recording,
+    add_player_alias,
     create_match,
     create_match_team,
     delete_match,
@@ -2298,6 +2299,7 @@ def register_match_routes(rt, STYLE):
 
         existing = get_match_players(match_id)
         added_count = 0
+        remembered = 0
 
         for i in range(total_rows):
             # Check if this row is included (checkbox)
@@ -2323,6 +2325,13 @@ def register_match_routes(rt, STYLE):
                     continue
             else:
                 player_id = int(match_selection)
+                # Teach the lookup the spelling this person signed up under, so
+                # the same correction is not made by hand at every match. A name
+                # the player already answers to is a no-op inside.
+                if form.get(f"remember_{i}") and add_player_alias(
+                    player_id, extracted_name
+                ):
+                    remembered += 1
 
             # Skip if player already in match
             if any(p["player_id"] == player_id for p in existing):
@@ -2339,7 +2348,8 @@ def register_match_routes(rt, STYLE):
                 added_count += 1
 
         logger.info(
-            f"Import confirmed: added {added_count} players to match {match_id}"
+            f"Import confirmed: added {added_count} players to match {match_id}, "
+            f"learned {remembered} new aliases"
         )
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 

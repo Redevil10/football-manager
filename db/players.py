@@ -424,6 +424,57 @@ def update_player_name(player_id: int, name: str, alias: Optional[str] = None) -
         return False
 
 
+def add_player_alias(player_id: int, alias: str) -> bool:
+    """Remember another name this player answers to.
+
+    The import screen calls this when someone hand-matches a signup name the
+    lookup missed, so that spelling matches by itself next time rather than
+    being corrected by hand at every match.
+
+    A name the player already goes by is not stored twice: their own name and
+    their existing aliases are compared case-insensitively, though what gets
+    written is the spelling passed in.
+
+    Args:
+        player_id: ID of the player.
+        alias: The name to remember.
+
+    Returns:
+        bool: True if it was added, False if already known, the player does not
+        exist, or the write failed.
+    """
+    wanted = (alias or "").strip()
+    if not wanted:
+        return False
+
+    try:
+        with db_transaction("add_player_alias") as conn:
+            row = conn.execute(
+                "SELECT name, alias FROM players WHERE id = ?", (player_id,)
+            ).fetchone()
+            if not row:
+                logger.warning(f"Add alias: No player found with ID {player_id}")
+                return False
+
+            known = {(row["name"] or "").strip().casefold()}
+            existing = split_aliases(row["alias"])
+            known.update(a.casefold() for a in existing)
+            if wanted.casefold() in known:
+                return False
+
+            conn.execute(
+                """UPDATE players SET alias = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?""",
+                ("; ".join([*existing, wanted]), player_id),
+            )
+            conn.commit()
+            logger.info(f"Player {player_id} now also answers to '{wanted}'")
+            return True
+    except DatabaseError:
+        logger.error(f"Failed to add alias to player {player_id}", exc_info=True)
+        return False
+
+
 def update_player_height_weight(
     player_id: int, height: Optional[int] = None, weight: Optional[int] = None
 ) -> bool:

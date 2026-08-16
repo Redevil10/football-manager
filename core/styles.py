@@ -460,6 +460,20 @@ button.link-delete:hover {
     overflow-x: auto;
 }
 
+/* A checkbox column. The header has to be centred too, or it sits over the
+   left edge of the column while the tick sits in the middle of it. */
+.player-table .col-tick {
+    width: 90px;
+    text-align: center;
+}
+
+/* One line of guidance above a form, in the muted voice of the rest of the
+   page rather than as another paragraph of body text. */
+.form-hint {
+    color: var(--muted);
+    margin: 0 0 15px;
+}
+
 /* Times and places are context, not what you scan a fixture list for. */
 .player-table .col-quiet {
     color: var(--muted);

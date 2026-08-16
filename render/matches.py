@@ -978,6 +978,11 @@ def render_match_detail(
 def render_import_confirmation(match_id, results, existing_players, club_id):
     """Render confirmation page for import results (both smart and non-smart).
 
+    One row per extracted name. Where the lookup missed and someone picks the
+    right player by hand, "Remember" writes that spelling into the player's
+    aliases so the same signup name matches by itself next time -- the whole
+    point of the alias column, and otherwise the same correction every week.
+
     Args:
         match_id: Match ID
         results: List of dicts with extracted_name, matched_player_id,
@@ -992,6 +997,7 @@ def render_import_confirmation(match_id, results, existing_players, club_id):
     for i, result in enumerate(results):
         extracted_name = result["extracted_name"]
         matched_id = result.get("matched_player_id")
+        matched_name = result.get("matched_player_name") or ""
         confidence = result.get("confidence", "none")
 
         # Build dropdown options
@@ -1005,18 +1011,7 @@ def render_import_confirmation(match_id, results, existing_players, club_id):
         if is_new:
             options[0] = Option("-- New Player --", value="new", selected=True)
 
-        # Confidence display
-        if confidence == "high":
-            conf_display = "high"
-            conf_style = "color: #28a745;"
-        elif confidence == "medium":
-            conf_display = "medium"
-            conf_style = "color: #ffc107;"
-        else:
-            conf_display = "-"
-            conf_style = "color: #666;"
-
-        # Score input — visible only when "-- New Player --" is selected
+        # Score input -- visible only when "-- New Player --" is selected
         score_display = "block" if is_new else "none"
         score_input = Div(
             id=f"score_wrapper_{i}",
@@ -1032,6 +1027,19 @@ def render_import_confirmation(match_id, results, existing_players, club_id):
             ),
         )
 
+        # Offered where it could do something: a row already sitting on the
+        # player whose name it is has nothing to learn. The server no-ops the
+        # rest (a new player, or a name already in that player's aliases), so
+        # this is about not showing a pointless checkbox, not about safety.
+        worth_remembering = (
+            extracted_name.strip().casefold() != matched_name.strip().casefold()
+        )
+        remember = (
+            Input(type="checkbox", name=f"remember_{i}", value="1", checked=True)
+            if worth_remembering
+            else Span("—", style="color: var(--muted);")
+        )
+
         rows.append(
             Tr(
                 Td(extracted_name),
@@ -1044,67 +1052,67 @@ def render_import_confirmation(match_id, results, existing_players, club_id):
                         onchange=f"document.getElementById('score_wrapper_{i}').style.display = this.value === 'new' ? 'block' : 'none';",
                     )
                 ),
-                Td(
-                    Span(conf_display, style=conf_style),
-                ),
-                Td(score_input),
+                Td(_confidence_label(confidence)),
+                Td(score_input, cls="col-score"),
+                Td(remember, cls="col-tick"),
                 Td(
                     Input(
-                        type="checkbox",
-                        name=f"include_{i}",
-                        value="1",
-                        checked=True,
+                        type="checkbox", name=f"include_{i}", value="1", checked=True
                     ),
+                    cls="col-tick",
                 ),
                 # Hidden field for the extracted name
                 Td(
-                    Input(
-                        type="hidden",
-                        name=f"name_{i}",
-                        value=extracted_name,
-                    ),
+                    Input(type="hidden", name=f"name_{i}", value=extracted_name),
                     style="display: none;",
                 ),
             )
         )
 
-    return Div(cls="container-white")(
-        H3("Review Imported Players"),
-        P(
-            "Review the matches below. Adjust the dropdown to change player matching, "
-            "or uncheck to exclude a player.",
-            style="color: #666; margin-bottom: 15px;",
-        ),
+    return Div(
         Form(
             Input(type="hidden", name="total_rows", value=str(len(results))),
             Input(type="hidden", name="club_id", value=str(club_id)),
-            Table(style="width: 100%; border-collapse: collapse; margin-bottom: 15px;")(
-                Thead(
-                    Tr(
-                        Th("Extracted Name", style="text-align: left; padding: 8px;"),
-                        Th("Matched To", style="text-align: left; padding: 8px;"),
-                        Th("Confidence", style="text-align: left; padding: 8px;"),
-                        Th("Score", style="text-align: center; padding: 8px;"),
-                        Th("Include", style="text-align: center; padding: 8px;"),
+            Div(cls="container-white")(
+                P(
+                    "Adjust the dropdown to change who a name matches, or untick "
+                    "Include to leave someone out. Remember teaches the name to "
+                    "the player you picked, so next time it matches by itself.",
+                    cls="form-hint",
+                ),
+                Div(cls="table-scroll")(
+                    Table(cls="player-table")(
+                        Thead(
+                            Tr(
+                                Th("Signed up as"),
+                                Th("Matched to"),
+                                Th("Confidence"),
+                                Th("Score", cls="col-score"),
+                                Th("Remember", cls="col-tick"),
+                                Th("Include", cls="col-tick"),
+                            )
+                        ),
+                        Tbody(*rows),
                     )
                 ),
-                Tbody(*rows),
             ),
-            Div(cls="btn-group")(
+            Div(cls="btn-group", style="margin-top: 20px;")(
                 Button("Confirm Import", type="submit", cls="btn-success"),
-                Button(
-                    "Cancel",
-                    type="button",
-                    cls="btn-secondary",
-                    **{
-                        "onclick": f"window.location.href='/match/{match_id}'; return false;"
-                    },
-                ),
+                A("Cancel", href=f"/match/{match_id}", cls="btn-secondary"),
             ),
             method="POST",
             action=f"/confirm_import/{match_id}",
         ),
     )
+
+
+def _confidence_label(confidence):
+    """How sure the matcher was, in the palette rather than raw hex."""
+    if confidence == "high":
+        return Span("High", style="color: var(--success); font-weight: 600;")
+    if confidence == "medium":
+        return Span("Medium", style="color: var(--amber); font-weight: 600;")
+    return Span("No match", style="color: var(--muted);")
 
 
 def render_teams(players):
