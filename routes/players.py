@@ -23,10 +23,12 @@ from core.error_handling import handle_db_result, handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
 from core.validation import validate_non_empty_string
 from db import (
+    count_player_appearances,
     delete_player,
     find_player_by_name_or_alias,
     get_all_players,
     reset_teams,
+    set_player_active,
     swap_match_players,
     swap_players,
     update_player_attrs,
@@ -51,6 +53,7 @@ from logic import (
 )
 from render import (
     render_add_player_form,
+    render_archived_players,
     render_navbar,
     render_player_detail_form,
     render_player_table,
@@ -94,7 +97,9 @@ def register_player_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         club_ids = get_user_club_ids_from_request(req, sess)
-        players = get_all_players(club_ids)
+        everyone = get_all_players(club_ids, include_archived=True)
+        players = [p for p in everyone if p.get("active") != 0]
+        archived = [p for p in everyone if p.get("active") == 0]
         sorted_players = sorted(
             players, key=lambda x: calculate_player_overall(x), reverse=True
         )
@@ -116,6 +121,21 @@ def register_player_routes(rt, STYLE):
                     ),
                     Div(cls="container-white")(
                         render_player_table(sorted_players, searchable=True)
+                    ),
+                    # Folded away, and absent entirely when nothing is archived:
+                    # this is a place you go looking for someone, not something
+                    # the squad list should carry every day.
+                    (
+                        Details(
+                            Summary(
+                                f"Archived ({len(archived)})", cls="section-summary"
+                            ),
+                            render_archived_players(archived),
+                            cls="container-white section-collapsible",
+                            style="margin-top: 20px;",
+                        )
+                        if archived
+                        else ""
                     ),
                 ),
             ),
@@ -162,7 +182,9 @@ def register_player_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         club_ids = get_user_club_ids_from_request(req, sess)
-        players = {p["id"]: p for p in get_all_players(club_ids)}
+        # Archived players keep their page: it is where you go to restore one,
+        # and every past line-up still links here.
+        players = {p["id"]: p for p in get_all_players(club_ids, include_archived=True)}
         player = players.get(player_id)
 
         if not player:
@@ -665,14 +687,20 @@ def register_player_routes(rt, STYLE):
     # only route in is the confirmation page's form.
     @rt("/delete_player/{player_id}", methods=["POST"])
     def route_delete_player(player_id: int, req: Request = None, sess=None):
-        """Delete player"""
+        """Take a player off the books: archive them, or delete if brand new.
+
+        Deleting someone who has played would take them out of every past
+        line-up as well -- ``match_players`` holds only an id, so their name
+        goes with the row -- so anyone with appearances is archived. Which of
+        the two is happening is what the confirmation page says.
+        """
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
 
         # Check authorization
         club_ids = get_user_club_ids_from_request(req, sess)
-        players = {p["id"]: p for p in get_all_players(club_ids)}
+        players = {p["id"]: p for p in get_all_players(club_ids, include_archived=True)}
         player = players.get(player_id)
 
         if not player:
@@ -681,12 +709,43 @@ def register_player_routes(rt, STYLE):
         if not can_user_delete(user, player.get("club_id")):
             raise PermissionError("delete", resource=f"player {player_id}")
 
-        success = delete_player(player_id)
+        if count_player_appearances(player_id):
+            success = set_player_active(player_id, False)
+            message, failure = "Player+archived", "Failed to archive player"
+        else:
+            success = delete_player(player_id)
+            message, failure = "Player+deleted", "Failed to delete player"
+
         return handle_db_result(
             success,
-            "/players",
+            f"/players?success={message}",
             error_redirect="/players",
-            error_message="Failed to delete player",
+            error_message=failure,
+            check_false=True,
+        )
+
+    @rt("/restore_player/{player_id}", methods=["POST"])
+    def route_restore_player(player_id: int, req: Request = None, sess=None):
+        """Bring an archived player back into the squad."""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        club_ids = get_user_club_ids_from_request(req, sess)
+        players = {p["id"]: p for p in get_all_players(club_ids, include_archived=True)}
+        player = players.get(player_id)
+
+        if not player:
+            raise NotFoundError("player", resource_id=player_id)
+
+        if not can_user_delete(user, player.get("club_id")):
+            raise PermissionError("restore", resource=f"player {player_id}")
+
+        return handle_db_result(
+            set_player_active(player_id, True),
+            "/players?success=Player+restored",
+            error_redirect="/players",
+            error_message="Failed to restore player",
             check_false=True,
         )
 

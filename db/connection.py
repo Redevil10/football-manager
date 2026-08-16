@@ -77,6 +77,13 @@ def init_db():
                   -- Who added this player. NULL for rows that predate the
                   -- column and for anything created outside the app.
                   created_by INTEGER REFERENCES users(id),
+                  -- 0 once a player is archived. Deleting a player who has
+                  -- played would take them out of every past line-up too --
+                  -- match_players only stores an id, so the name is gone with
+                  -- them -- so anyone with history is archived instead. They
+                  -- drop out of the squad, the signup lookup and allocation,
+                  -- and stay in the matches they played.
+                  active INTEGER NOT NULL DEFAULT 1,
                   FOREIGN KEY (club_id) REFERENCES clubs(id),
                   UNIQUE(name, club_id))"""
     )

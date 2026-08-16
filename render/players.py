@@ -221,6 +221,7 @@ def render_player_detail_form(player, user=None, back=None):
     club_id = player.get("club_id")
     can_edit = can_user_edit(user, club_id) if user else False
     can_delete = can_user_delete(user, club_id) if user else False
+    archived = player.get("active") == 0
 
     # If user can't edit, show read-only view
     if not can_edit:
@@ -243,225 +244,244 @@ def render_player_detail_form(player, user=None, back=None):
     def back_input():
         return Input(type="hidden", name="back", value=back) if back else ""
 
-    return Div(cls="container-white")(
-        # Name and Alias edit form
-        Form(
-            back_input(),
-            Div(
-                cls="input-group",
-                style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;",
-            )(
-                Label("Name: ", style="font-weight: bold;"),
-                Input(
-                    type="text",
-                    name="name",
-                    value=player["name"],
-                    required=True,
-                    style="flex: 1; min-width: 150px;",
-                ),
-                Label("Alias: ", style="font-weight: bold; margin-left: 10px;"),
-                Input(
-                    type="text",
-                    name="alias",
-                    value=player.get("alias", "") or "",
-                    placeholder="Optional",
-                    style="flex: 1; min-width: 150px;",
-                ),
-                Button("Update Name/Alias", type="submit", cls="btn-success"),
-            ),
-            method="post",
-            action=f"/update_player_name/{player['id']}",
+    return Div(
+        (
+            Div(cls="notice")(
+                "Archived. This player is out of the squad, the signup lookup "
+                "and team allocation, and stays in the matches they played."
+            )
+            if archived
+            else ""
         ),
-        # Height and Weight form
-        Form(
-            back_input(),
-            Div(
-                cls="input-group",
-                style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;",
-            )(
-                Label("Height (cm): ", style="font-weight: bold;"),
-                Input(
-                    type="number",
-                    name="height",
-                    value=str(player.get("height", "") or ""),
-                    min="100",
-                    max="250",
-                    style="width: 100px;",
+        Div(cls="container-white")(
+            # Name and Alias edit form
+            Form(
+                back_input(),
+                Div(
+                    cls="input-group",
+                    style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;",
+                )(
+                    Label("Name: ", style="font-weight: bold;"),
+                    Input(
+                        type="text",
+                        name="name",
+                        value=player["name"],
+                        required=True,
+                        style="flex: 1; min-width: 150px;",
+                    ),
+                    Label("Alias: ", style="font-weight: bold; margin-left: 10px;"),
+                    Input(
+                        type="text",
+                        name="alias",
+                        value=player.get("alias", "") or "",
+                        placeholder="Optional",
+                        style="flex: 1; min-width: 150px;",
+                    ),
+                    Button("Update Name/Alias", type="submit", cls="btn-success"),
                 ),
-                Label("Weight (kg): ", style="font-weight: bold; margin-left: 15px;"),
-                Input(
-                    type="number",
-                    name="weight",
-                    value=str(player.get("weight", "") or ""),
-                    min="30",
-                    max="200",
-                    style="width: 100px;",
-                ),
-                Button("Update Height/Weight", type="submit", cls="btn-success"),
+                method="post",
+                action=f"/update_player_name/{player['id']}",
             ),
-            method="post",
-            action=f"/update_player_height_weight/{player['id']}",
-        ),
-        # Overall Score form
-        Form(
-            back_input(),
-            Div(cls="input-group", style="margin-bottom: 20px;")(
-                Label(
-                    f"Overall Score ({SCORE_RANGES['overall'][0]}-{SCORE_RANGES['overall'][1]}): ",
-                    style="margin-right: 10px; font-weight: bold;",
-                ),
-                Input(
-                    type="number",
-                    name="score_overall",
-                    value=str(round(overall)),
-                    min=str(SCORE_RANGES["overall"][0]),
-                    max=str(SCORE_RANGES["overall"][1]),
-                    style="width: 100px; margin-right: 10px;",
-                    required=True,
-                ),
-                Button("Update Overall Score", type="submit", cls="btn-success"),
-            ),
-            method="post",
-            action=f"/update_player_scores/{player['id']}",
-        ),
-        # Category Scores form
-        Form(
-            back_input(),
-            H3("Category Scores"),
-            Div(
-                cls="attr-section",
-                style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;",
-            )(
-                Div(style="display: flex; align-items: center; gap: 10px;")(
+            # Height and Weight form
+            Form(
+                back_input(),
+                Div(
+                    cls="input-group",
+                    style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;",
+                )(
+                    Label("Height (cm): ", style="font-weight: bold;"),
+                    Input(
+                        type="number",
+                        name="height",
+                        value=str(player.get("height", "") or ""),
+                        min="100",
+                        max="250",
+                        style="width: 100px;",
+                    ),
                     Label(
-                        f"Technical ({SCORE_RANGES['technical'][0]}-{SCORE_RANGES['technical'][1]}): ",
-                        cls="attr-label",
+                        "Weight (kg): ", style="font-weight: bold; margin-left: 15px;"
                     ),
                     Input(
                         type="number",
-                        name="score_technical",
-                        value=str(tech_score),
-                        min=str(SCORE_RANGES["technical"][0]),
-                        max=str(SCORE_RANGES["technical"][1]),
-                        style="width: 80px;",
-                        required=True,
+                        name="weight",
+                        value=str(player.get("weight", "") or ""),
+                        min="30",
+                        max="200",
+                        style="width: 100px;",
                     ),
+                    Button("Update Height/Weight", type="submit", cls="btn-success"),
                 ),
-                Div(style="display: flex; align-items: center; gap: 10px;")(
+                method="post",
+                action=f"/update_player_height_weight/{player['id']}",
+            ),
+            # Overall Score form
+            Form(
+                back_input(),
+                Div(cls="input-group", style="margin-bottom: 20px;")(
                     Label(
-                        f"Mental ({SCORE_RANGES['mental'][0]}-{SCORE_RANGES['mental'][1]}): ",
-                        cls="attr-label",
+                        f"Overall Score ({SCORE_RANGES['overall'][0]}-{SCORE_RANGES['overall'][1]}): ",
+                        style="margin-right: 10px; font-weight: bold;",
                     ),
                     Input(
                         type="number",
-                        name="score_mental",
-                        value=str(mental_score),
-                        min=str(SCORE_RANGES["mental"][0]),
-                        max=str(SCORE_RANGES["mental"][1]),
-                        style="width: 80px;",
+                        name="score_overall",
+                        value=str(round(overall)),
+                        min=str(SCORE_RANGES["overall"][0]),
+                        max=str(SCORE_RANGES["overall"][1]),
+                        style="width: 100px; margin-right: 10px;",
                         required=True,
                     ),
+                    Button("Update Overall Score", type="submit", cls="btn-success"),
                 ),
-                Div(style="display: flex; align-items: center; gap: 10px;")(
-                    Label(
-                        f"Physical ({SCORE_RANGES['physical'][0]}-{SCORE_RANGES['physical'][1]}): ",
-                        cls="attr-label",
-                    ),
-                    Input(
-                        type="number",
-                        name="score_physical",
-                        value=str(phys_score),
-                        min=str(SCORE_RANGES["physical"][0]),
-                        max=str(SCORE_RANGES["physical"][1]),
-                        style="width: 80px;",
-                        required=True,
-                    ),
-                ),
-                Div(style="display: flex; align-items: center; gap: 10px;")(
-                    Label(
-                        f"GK ({SCORE_RANGES['gk'][0]}-{SCORE_RANGES['gk'][1]}): ",
-                        cls="attr-label",
-                    ),
-                    Input(
-                        type="number",
-                        name="score_gk",
-                        value=str(gk_score),
-                        min=str(SCORE_RANGES["gk"][0]),
-                        max=str(SCORE_RANGES["gk"][1]),
-                        style="width: 80px;",
-                        required=True,
-                    ),
-                ),
+                method="post",
+                action=f"/update_player_scores/{player['id']}",
             ),
-            Div(cls="btn-group", style="margin-bottom: 20px;")(
-                Button("Update Category Scores", type="submit", cls="btn-success"),
+            # Category Scores form
+            Form(
+                back_input(),
+                H3("Category Scores"),
+                Div(
+                    cls="attr-section",
+                    style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;",
+                )(
+                    Div(style="display: flex; align-items: center; gap: 10px;")(
+                        Label(
+                            f"Technical ({SCORE_RANGES['technical'][0]}-{SCORE_RANGES['technical'][1]}): ",
+                            cls="attr-label",
+                        ),
+                        Input(
+                            type="number",
+                            name="score_technical",
+                            value=str(tech_score),
+                            min=str(SCORE_RANGES["technical"][0]),
+                            max=str(SCORE_RANGES["technical"][1]),
+                            style="width: 80px;",
+                            required=True,
+                        ),
+                    ),
+                    Div(style="display: flex; align-items: center; gap: 10px;")(
+                        Label(
+                            f"Mental ({SCORE_RANGES['mental'][0]}-{SCORE_RANGES['mental'][1]}): ",
+                            cls="attr-label",
+                        ),
+                        Input(
+                            type="number",
+                            name="score_mental",
+                            value=str(mental_score),
+                            min=str(SCORE_RANGES["mental"][0]),
+                            max=str(SCORE_RANGES["mental"][1]),
+                            style="width: 80px;",
+                            required=True,
+                        ),
+                    ),
+                    Div(style="display: flex; align-items: center; gap: 10px;")(
+                        Label(
+                            f"Physical ({SCORE_RANGES['physical'][0]}-{SCORE_RANGES['physical'][1]}): ",
+                            cls="attr-label",
+                        ),
+                        Input(
+                            type="number",
+                            name="score_physical",
+                            value=str(phys_score),
+                            min=str(SCORE_RANGES["physical"][0]),
+                            max=str(SCORE_RANGES["physical"][1]),
+                            style="width: 80px;",
+                            required=True,
+                        ),
+                    ),
+                    Div(style="display: flex; align-items: center; gap: 10px;")(
+                        Label(
+                            f"GK ({SCORE_RANGES['gk'][0]}-{SCORE_RANGES['gk'][1]}): ",
+                            cls="attr-label",
+                        ),
+                        Input(
+                            type="number",
+                            name="score_gk",
+                            value=str(gk_score),
+                            min=str(SCORE_RANGES["gk"][0]),
+                            max=str(SCORE_RANGES["gk"][1]),
+                            style="width: 80px;",
+                            required=True,
+                        ),
+                    ),
+                ),
+                Div(cls="btn-group", style="margin-bottom: 20px;")(
+                    Button("Update Category Scores", type="submit", cls="btn-success"),
+                ),
+                method="post",
+                action=f"/update_player_scores/{player['id']}",
             ),
-            method="post",
-            action=f"/update_player_scores/{player['id']}",
-        ),
-        # Individual Attributes edit form
-        Form(
-            back_input(),
-            H3("Individual Attributes"),
-            Div(cls="attr-grid")(
-                # Technical
-                Div(cls="attr-section")(
-                    Div("Technical Attributes", cls="attr-section-title"),
-                    *[
-                        render_attr_input(
-                            TECHNICAL_ATTRS[k],
-                            f"tech_{k}",
-                            player["technical_attrs"].get(k, 10),
-                        )
-                        for k in TECHNICAL_ATTRS.keys()
-                    ],
+            # Individual Attributes edit form
+            Form(
+                back_input(),
+                H3("Individual Attributes"),
+                Div(cls="attr-grid")(
+                    # Technical
+                    Div(cls="attr-section")(
+                        Div("Technical Attributes", cls="attr-section-title"),
+                        *[
+                            render_attr_input(
+                                TECHNICAL_ATTRS[k],
+                                f"tech_{k}",
+                                player["technical_attrs"].get(k, 10),
+                            )
+                            for k in TECHNICAL_ATTRS.keys()
+                        ],
+                    ),
+                    # Mental
+                    Div(cls="attr-section")(
+                        Div("Mental Attributes", cls="attr-section-title"),
+                        *[
+                            render_attr_input(
+                                MENTAL_ATTRS[k],
+                                f"mental_{k}",
+                                player["mental_attrs"].get(k, 10),
+                            )
+                            for k in MENTAL_ATTRS.keys()
+                        ],
+                    ),
+                    # Physical
+                    Div(cls="attr-section")(
+                        Div("Physical Attributes", cls="attr-section-title"),
+                        *[
+                            render_attr_input(
+                                PHYSICAL_ATTRS[k],
+                                f"phys_{k}",
+                                player["physical_attrs"].get(k, 10),
+                            )
+                            for k in PHYSICAL_ATTRS.keys()
+                        ],
+                    ),
+                    # Goalkeeper
+                    Div(cls="attr-section")(
+                        Div("Goalkeeper Attributes", cls="attr-section-title"),
+                        *[
+                            render_attr_input(
+                                GK_ATTRS[k], f"gk_{k}", player["gk_attrs"].get(k, 10)
+                            )
+                            for k in GK_ATTRS.keys()
+                        ],
+                    ),
                 ),
-                # Mental
-                Div(cls="attr-section")(
-                    Div("Mental Attributes", cls="attr-section-title"),
-                    *[
-                        render_attr_input(
-                            MENTAL_ATTRS[k],
-                            f"mental_{k}",
-                            player["mental_attrs"].get(k, 10),
-                        )
-                        for k in MENTAL_ATTRS.keys()
-                    ],
+                Div(cls="btn-group", style="margin-top: 20px;")(
+                    Button("Save Attributes", type="submit", cls="btn-success"),
                 ),
-                # Physical
-                Div(cls="attr-section")(
-                    Div("Physical Attributes", cls="attr-section-title"),
-                    *[
-                        render_attr_input(
-                            PHYSICAL_ATTRS[k],
-                            f"phys_{k}",
-                            player["physical_attrs"].get(k, 10),
-                        )
-                        for k in PHYSICAL_ATTRS.keys()
-                    ],
-                ),
-                # Goalkeeper
-                Div(cls="attr-section")(
-                    Div("Goalkeeper Attributes", cls="attr-section-title"),
-                    *[
-                        render_attr_input(
-                            GK_ATTRS[k], f"gk_{k}", player["gk_attrs"].get(k, 10)
-                        )
-                        for k in GK_ATTRS.keys()
-                    ],
-                ),
+                method="post",
+                action=f"/update_player/{player['id']}",
             ),
-            Div(cls="btn-group", style="margin-top: 20px;")(
-                Button("Save Attributes", type="submit", cls="btn-success"),
-            ),
-            method="post",
-            action=f"/update_player/{player['id']}",
         ),
         # Outside the form and below it: Save and Delete sitting side by side is
         # exactly the misfire this page had.
         (
             Div(cls="danger-zone")(
-                confirm_delete_link("player", player["id"], "Delete Player")
+                Form(method="POST", action=f"/restore_player/{player['id']}")(
+                    Button("Restore Player", type="submit", cls="btn-secondary")
+                )
+                if archived
+                # "Delete" is the honest word here even though a player with
+                # appearances is archived: the confirmation page is where that
+                # distinction is made, and it names which one is happening.
+                else confirm_delete_link("player", player["id"], "Delete Player")
             )
             if can_delete
             else ""
@@ -575,4 +595,40 @@ def render_add_player_form(error=None, values=None):
             "tuned on the next screen.",
             style="color: var(--muted); font-size: 13px; margin: 15px 0 0;",
         ),
+    )
+
+
+def render_archived_players(players):
+    """The players who have been taken out of the squad.
+
+    Name, when they were archived, and the way back. Their attributes are not
+    the point here -- you come to this list to find someone and restore them.
+    """
+    if not players:
+        return P("Nobody is archived.", cls="empty-state")
+
+    return Div(cls="table-scroll")(
+        Table(cls="player-table")(
+            Thead(Tr(Th("Name"), Th("Also known as"), Th("Archived"), Th("Actions"))),
+            Tbody(
+                *[
+                    Tr(
+                        Td(A(p["name"], href=f"/player/{p['id']}")),
+                        Td(
+                            ", ".join(split_aliases(p.get("alias"))) or "—",
+                            style="color: var(--muted);",
+                        ),
+                        Td(_date_only(p.get("updated_at")), cls="col-quiet"),
+                        Td(
+                            Form(
+                                method="POST",
+                                action=f"/restore_player/{p['id']}",
+                                style="display: inline;",
+                            )(Button("Restore", type="submit", cls="link-delete"))
+                        ),
+                    )
+                    for p in players
+                ]
+            ),
+        )
     )

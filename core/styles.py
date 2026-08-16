@@ -316,6 +316,24 @@ button.link-delete:hover {
     margin: 16px 0 20px;
 }
 
+/* Same slot as the warning above, for the one action here that is reversible.
+   Archiving a player does not deserve red. */
+.confirm-delete-note {
+    color: var(--muted);
+    margin: 16px 0 20px;
+}
+
+/* A state a page is in, said once at the top -- not an error and not an
+   action. Amber because it is a condition to notice, not a problem. */
+.notice {
+    background: var(--amber-tint);
+    border-left: 3px solid var(--amber);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    color: var(--ink);
+}
+
 .btn-group {
     display: flex;
     gap: 10px;

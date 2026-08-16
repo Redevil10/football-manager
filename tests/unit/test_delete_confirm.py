@@ -49,25 +49,67 @@ class TestTargets:
 
     @patch("routes.delete_confirm.get_matches_by_league")
     @patch("routes.delete_confirm.get_league")
-    def test_league_target_says_how_many_matches_reference_it(
+    def test_a_league_with_matches_cannot_be_deleted_yet(
         self, mock_get_league, mock_get_matches, superuser
     ):
+        """Its matches would be left behind pointing at a league that is gone."""
         mock_get_league.return_value = {"id": 3, "name": "Sunday League"}
         mock_get_matches.return_value = [{"id": 1}, {"id": 2}]
 
-        target = TARGETS["league"](3, superuser, None, None)
+        blocked = TARGETS["league"](3, superuser, None, None)["blocked"]
 
-        assert target["references"] == ["2 matches belong to this league"]
+        assert blocked is not None
+        assert "2 matches" in blocked
 
     @patch("routes.delete_confirm.get_matches_by_league")
     @patch("routes.delete_confirm.get_league")
-    def test_empty_league_says_nothing_extra(
+    def test_the_count_reads_naturally_for_one(
+        self, mock_get_league, mock_get_matches, superuser
+    ):
+        mock_get_league.return_value = {"id": 3, "name": "Sunday League"}
+        mock_get_matches.return_value = [{"id": 1}]
+
+        assert "1 match." in TARGETS["league"](3, superuser, None, None)["blocked"]
+
+    @patch("routes.delete_confirm.get_matches_by_league")
+    @patch("routes.delete_confirm.get_league")
+    def test_an_empty_league_is_not_blocked(
         self, mock_get_league, mock_get_matches, superuser
     ):
         mock_get_league.return_value = {"id": 3, "name": "Sunday League"}
         mock_get_matches.return_value = []
 
-        assert TARGETS["league"](3, superuser, None, None)["references"] == []
+        assert TARGETS["league"](3, superuser, None, None)["blocked"] is None
+
+    @patch("routes.delete_confirm.count_players_in_club")
+    @patch("routes.delete_confirm.get_club")
+    def test_a_club_with_players_cannot_be_deleted_yet(
+        self, mock_get_club, mock_count, superuser
+    ):
+        """Every squad list filters by club, so its players become unreachable."""
+        mock_get_club.return_value = {"id": 4, "name": "Concord FC"}
+        mock_count.return_value = 115
+
+        blocked = TARGETS["club"](4, superuser, None, None)["blocked"]
+
+        assert blocked is not None
+        assert "115 players" in blocked
+
+    @patch("routes.delete_confirm.count_players_in_club")
+    @patch("routes.delete_confirm.get_club")
+    def test_an_empty_club_is_not_blocked(self, mock_get_club, mock_count, superuser):
+        mock_get_club.return_value = {"id": 4, "name": "Concord FC"}
+        mock_count.return_value = 0
+
+        assert TARGETS["club"](4, superuser, None, None)["blocked"] is None
+
+    @patch("routes.delete_confirm.get_match")
+    def test_nothing_else_is_ever_blocked(self, mock_get_match, superuser):
+        """Only leagues and clubs have a child that would be stranded."""
+        mock_get_match.return_value = {"id": 5, "league_name": "L"}
+
+        with patch("routes.delete_confirm.can_user_edit_match", return_value=True):
+            assert TARGETS["match"](5, superuser, None, None).get("blocked") is None
 
     @patch("routes.delete_confirm.get_matches_by_league")
     @patch("routes.delete_confirm.get_league")
@@ -110,3 +152,48 @@ class TestTargets:
         mock_players.return_value = [{"id": 7, "name": "Someone", "club_id": 1}]
 
         assert TARGETS["player"](99, superuser, None, None) is None
+
+
+class TestTheGuardIsNotOnlyInThePage:
+    """A block that lives only in a rendered page is one refactor from gone."""
+
+    @patch("routes.delete_confirm.get_matches_by_league")
+    def test_a_league_with_matches_reports_a_reason(self, mock_get_matches):
+        from routes.delete_confirm import blocked_by_matches
+
+        mock_get_matches.return_value = [{"id": 1}, {"id": 2}, {"id": 3}]
+
+        assert "3 matches" in blocked_by_matches(7)
+
+    @patch("routes.delete_confirm.get_matches_by_league")
+    def test_an_empty_league_reports_none(self, mock_get_matches):
+        from routes.delete_confirm import blocked_by_matches
+
+        mock_get_matches.return_value = []
+
+        assert blocked_by_matches(7) is None
+
+    @patch("routes.delete_confirm.count_players_in_club")
+    def test_a_club_with_players_reports_a_reason(self, mock_count):
+        from routes.delete_confirm import blocked_by_players
+
+        mock_count.return_value = 1
+
+        assert "1 player." in blocked_by_players(4)
+
+    @patch("routes.delete_confirm.count_players_in_club")
+    def test_an_empty_club_reports_none(self, mock_count):
+        from routes.delete_confirm import blocked_by_players
+
+        mock_count.return_value = 0
+
+        assert blocked_by_players(4) is None
+
+    def test_the_delete_routes_consult_the_same_helpers(self):
+        """Imported by the handlers, not reimplemented there."""
+        import routes.clubs
+        import routes.leagues
+        from routes.delete_confirm import blocked_by_matches, blocked_by_players
+
+        assert routes.leagues.blocked_by_matches is blocked_by_matches
+        assert routes.clubs.blocked_by_players is blocked_by_players

@@ -62,6 +62,30 @@ def add_created_by_to_users(conn):
     return True
 
 
+def add_player_active_column(conn):
+    """Add players.active so players can be archived rather than deleted.
+
+    Deleting a player who has played takes them out of every past line-up too:
+    ``match_players`` stores only an id, and the name lives in ``players``, so
+    it goes with the row. Archiving keeps the history and takes them out of the
+    squad, the signup lookup and allocation instead.
+
+    Everyone already in the table is active -- a constant DEFAULT is the one
+    kind ADD COLUMN accepts, and it backfills existing rows on its own.
+
+    Safe to re-run: the column is only added when it is missing.
+
+    Returns:
+        bool: True if the column was added, False if it was already there
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(players)")}
+    if "active" in columns:
+        return False
+
+    conn.execute("ALTER TABLE players ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
+    return True
+
+
 def add_player_audit_columns(conn):
     """Add players.updated_at and players.created_by to older databases.
 
@@ -170,6 +194,12 @@ def migrate_all():
             f"Cleared {cleared} placeholder score(s) that were never entered."
             if cleared
             else "No placeholder scores to clear."
+        )
+
+        all_messages.append(
+            "Added players.active; every existing player starts active."
+            if add_player_active_column(conn)
+            else "players.active already present."
         )
 
         conn.commit()

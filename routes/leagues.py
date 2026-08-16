@@ -26,6 +26,7 @@ from db.club_leagues import (
 from render import render_league_header, render_leagues_list, render_navbar
 from render.common import confirm_delete_link, render_head
 from render.leagues import render_create_league_form, render_league_clubs
+from routes.delete_confirm import blocked_by_matches
 
 
 def _render_public_sharing(league, req=None, can_manage=False):
@@ -385,6 +386,15 @@ def register_league_routes(rt, STYLE):
         # Only superuser can delete leagues (matches create permission)
         if not user.get("is_superuser"):
             raise PermissionError("delete", resource=f"league {league_id}")
+
+        # Same check the confirmation page makes. It is the only way in today,
+        # but a guard that lives only in a page is one refactor from gone --
+        # and this one is what keeps a league's matches from being stranded.
+        blocked = blocked_by_matches(league_id)
+        if blocked:
+            return RedirectResponse(
+                f"/confirm-delete/league/{league_id}", status_code=303
+            )
 
         try:
             success = delete_league(league_id)

@@ -388,8 +388,20 @@ def can_user_edit(user: dict, club_id: int = None) -> bool:
 
 
 def can_user_delete(user: dict, club_id: int = None) -> bool:
-    """Check if user can delete (manager or superuser)"""
-    return can_user_edit(user, club_id)  # Same permission as edit
+    """Whether this user may remove a player from the club.
+
+    Stricter than editing. A manager runs the team -- picks squads, records
+    scores, fixes a player's attributes -- but taking someone off the books is
+    a club-level decision, so it wants a club admin or a superuser.
+    """
+    if not user:
+        return False
+    if user.get("is_superuser"):
+        return True
+    if club_id is None:
+        return False
+
+    return check_club_permission(user, club_id, "admin")
 
 
 def confirm_delete_link(kind, item_id, label):

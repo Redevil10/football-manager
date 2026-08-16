@@ -27,6 +27,7 @@ from render.matches import (
 )
 from render.players import (
     render_add_player_form,
+    render_archived_players,
     render_match_available_players,
     render_player_detail_form,
     render_player_table,
@@ -41,6 +42,7 @@ __all__ = [
     "render_match_info",
     "render_attr_input",
     # Players
+    "render_archived_players",
     "render_player_table",
     "render_player_detail_form",
     "render_add_player_form",

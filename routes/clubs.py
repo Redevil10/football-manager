@@ -36,6 +36,7 @@ from db.users import (
     get_user_clubs,
 )
 from render.common import confirm_delete_link, render_head, render_navbar
+from routes.delete_confirm import blocked_by_players
 
 
 def visible_clubs_for(user):
@@ -405,6 +406,10 @@ def register_club_routes(rt, STYLE):
 
         if not user.get("is_superuser"):
             return RedirectResponse("/", status_code=303)
+
+        # Same check the confirmation page makes; see blocked_by_players.
+        if blocked_by_players(club_id):
+            return RedirectResponse(f"/confirm-delete/club/{club_id}", status_code=303)
 
         delete_club(club_id)
         return RedirectResponse("/clubs", status_code=303)

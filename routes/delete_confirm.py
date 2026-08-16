@@ -25,7 +25,11 @@ from core.auth import (
 from db.clubs import get_club
 from db.leagues import get_league
 from db.matches import get_match, get_matches_by_league
-from db.players import get_all_players
+from db.players import (
+    count_player_appearances,
+    count_players_in_club,
+    get_all_players,
+)
 from db.users import get_user_by_id
 from render.common import (
     can_user_delete,
@@ -52,14 +56,33 @@ def _match_target(item_id, user, req, sess):
 
 def _player_target(item_id, user, req, sess):
     club_ids = get_user_club_ids_from_request(req, sess)
-    player = {p["id"]: p for p in get_all_players(club_ids)}.get(item_id)
+    player = {p["id"]: p for p in get_all_players(club_ids, include_archived=True)}.get(
+        item_id
+    )
     if not player:
         return None
+
+    # A player who has played is archived, not deleted: match_players stores
+    # only an id, so deleting the row takes their name out of every line-up
+    # they were ever on. One with no appearances has no history to protect and
+    # is usually a typo or a guest, so that one really goes.
+    appearances = count_player_appearances(item_id)
+    archiving = appearances > 0
     return {
         "noun": "player",
+        "verb": "Archive" if archiving else "Delete",
         "name": player["name"],
         "context": player.get("club_name") or "",
-        "references": [],
+        "references": (
+            [
+                f"Played in {appearances} match{'es' if appearances != 1 else ''}.",
+                "Archiving takes them out of the squad, the signup lookup and "
+                "team allocation. The matches they played keep them.",
+            ]
+            if archiving
+            else ["No appearances in any match."]
+        ),
+        "reversible": archiving,
         "action": f"/delete_player/{item_id}",
         "cancel": f"/player/{item_id}",
         "allowed": can_user_delete(user, player.get("club_id")),
@@ -70,17 +93,17 @@ def _league_target(item_id, user, req, sess):
     league = get_league(item_id)
     if not league:
         return None
-    match_count = len(get_matches_by_league(item_id) or [])
     return {
         "noun": "league",
         "name": league["name"],
         "context": "",
-        # Stated as a plain fact rather than "will also be deleted": the
-        # cascade the schema declares does not currently fire, so promising it
-        # would be a lie either way it goes.
-        "references": (
-            [f"{match_count} matches belong to this league"] if match_count else []
-        ),
+        "references": [],
+        # `matches.league_id` has no ON DELETE clause, so deleting the league
+        # would leave its matches behind pointing at one that is gone -- they
+        # would resurface on /matches filed under "Friendly". Emptying the
+        # league first is the only way to make the delete lossless, so that is
+        # what this asks for.
+        "blocked": blocked_by_matches(item_id),
         "action": f"/delete_league/{item_id}",
         "cancel": f"/league/{item_id}",
         "allowed": bool(user.get("is_superuser")),
@@ -96,10 +119,52 @@ def _club_target(item_id, user, req, sess):
         "name": club["name"],
         "context": club.get("description") or "",
         "references": [],
+        # Same shape as the league: `players.club_id` has no ON DELETE clause,
+        # and every player list filters by club, so the club's players would
+        # survive the delete with nobody able to reach them again.
+        "blocked": blocked_by_players(item_id),
         "action": f"/delete_club/{item_id}",
         "cancel": f"/club/{item_id}",
         "allowed": bool(user.get("is_superuser")),
     }
+
+
+def blocked_by_matches(league_id):
+    """Why this league cannot be deleted yet, or None.
+
+    Shared with the POST route so the page and the handler cannot disagree --
+    the page is the only way in today, but a guard that only exists in the page
+    is a guard one refactor away from being gone.
+    """
+    n = len(get_matches_by_league(league_id) or [])
+    if not n:
+        return None
+    if n == 1:
+        return (
+            "This league has 1 match. Deleting it would leave that match with "
+            "no league. Delete or move it first."
+        )
+    return (
+        f"This league has {n} matches. Deleting it would leave them with no "
+        "league. Delete or move them first."
+    )
+
+
+def blocked_by_players(club_id):
+    """Why this club cannot be deleted yet, or None. See blocked_by_matches."""
+    n = count_players_in_club(club_id)
+    if not n:
+        return None
+    if n == 1:
+        return (
+            "This club has 1 player. Deleting it would leave that player "
+            "unreachable, since every squad list is filtered by club. Move or "
+            "remove them first."
+        )
+    return (
+        f"This club has {n} players. Deleting it would leave them unreachable, "
+        "since every squad list is filtered by club. Move or remove them first."
+    )
 
 
 def _user_target(item_id, user, req, sess):
@@ -153,13 +218,22 @@ def register_delete_confirm_routes(rt, STYLE):
         if not target["allowed"]:
             return RedirectResponse(target["cancel"], status_code=303)
 
+        # Most things here can only be deleted. A player with match history is
+        # archived instead, which is reversible and so says so.
+        verb = target.get("verb", "Delete")
+        reversible = target.get("reversible", False)
+        # Something still depends on this that the delete would strand. Say what
+        # and why, and offer no button -- an explanation beats a SQLite
+        # "FOREIGN KEY constraint failed" that nobody can act on.
+        blocked = target.get("blocked")
+
         return Html(
-            render_head(f"Delete {target['noun']} - Football Manager", STYLE),
+            render_head(f"{verb} {target['noun']} - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
                     Div(cls="container-white confirm-delete")(
-                        H2(f"Delete this {target['noun']}?"),
+                        H2(f"{verb} this {target['noun']}?"),
                         P(target["name"], cls="confirm-delete-name"),
                         (
                             P(target["context"], cls="confirm-delete-context")
@@ -170,14 +244,39 @@ def register_delete_confirm_routes(rt, STYLE):
                             P(line, cls="confirm-delete-context")
                             for line in target["references"]
                         ],
-                        P("This cannot be undone.", cls="confirm-delete-warning"),
+                        (
+                            Div(blocked, cls="notice")
+                            if blocked
+                            else P(
+                                "You can bring them back later."
+                                if reversible
+                                else "This cannot be undone.",
+                                cls=(
+                                    "confirm-delete-note"
+                                    if reversible
+                                    else "confirm-delete-warning"
+                                ),
+                            )
+                        ),
                         Div(cls="btn-group")(
-                            A("Cancel", href=target["cancel"], cls="btn-outline"),
-                            Form(method="POST", action=target["action"])(
-                                Button(
-                                    f"Delete {target['noun']}",
-                                    type="submit",
-                                    cls="btn-danger",
+                            A(
+                                "Back" if blocked else "Cancel",
+                                href=target["cancel"],
+                                cls="btn-outline",
+                            ),
+                            (
+                                ""
+                                if blocked
+                                else Form(method="POST", action=target["action"])(
+                                    Button(
+                                        f"{verb} {target['noun']}",
+                                        type="submit",
+                                        cls=(
+                                            "btn-secondary"
+                                            if reversible
+                                            else "btn-danger"
+                                        ),
+                                    )
                                 )
                             ),
                         ),

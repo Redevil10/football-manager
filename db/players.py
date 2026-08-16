@@ -67,11 +67,19 @@ def parse_player_attributes(player_row: dict) -> dict:
     return player_dict
 
 
-def get_all_players(club_ids: Optional[list[int]] = None) -> list[dict]:
+def get_all_players(
+    club_ids: Optional[list[int]] = None, include_archived: bool = False
+) -> list[dict]:
     """Get all players, optionally filtered by club_ids (if None, returns all).
+
+    Archived players are left out by default. Every caller that means "the
+    squad" -- the players list, the signup import, allocation, the add-to-match
+    picker -- gets that for free; only a page that is specifically about
+    archived players passes ``include_archived``.
 
     Args:
         club_ids: Optional list of club IDs to filter by
+        include_archived: Also return players who have been archived.
 
     Returns:
         list[dict]: List of player dictionaries with parsed attributes
@@ -80,15 +88,24 @@ def get_all_players(club_ids: Optional[list[int]] = None) -> list[dict]:
     select = """SELECT p.*, u.username AS created_by_username
                   FROM players p
                   LEFT JOIN users u ON p.created_by = u.id"""
-    conn = get_db()
+    where = []
+    params: list = []
     if club_ids is not None and len(club_ids) > 0:
-        placeholders = ",".join("?" * len(club_ids))
-        players = conn.execute(
-            f"{select} WHERE p.club_id IN ({placeholders}) ORDER BY p.created_at DESC",
-            tuple(club_ids),
-        ).fetchall()
-    else:
-        players = conn.execute(f"{select} ORDER BY p.created_at DESC").fetchall()
+        where.append(f"p.club_id IN ({','.join('?' * len(club_ids))})")
+        params.extend(club_ids)
+    if not include_archived:
+        # `IS NOT 0` rather than `= 1` so the failure mode is showing someone
+        # who should be hidden rather than hiding someone who should be shown:
+        # a player vanishing from the squad with no explanation is the worse of
+        # the two. ADD COLUMN backfilled every existing row with 1, so nothing
+        # here is NULL today.
+        where.append("p.active IS NOT 0")
+
+    clause = f" WHERE {' AND '.join(where)}" if where else ""
+    conn = get_db()
+    players = conn.execute(
+        f"{select}{clause} ORDER BY p.created_at DESC", tuple(params)
+    ).fetchall()
     conn.close()
 
     result = []
@@ -125,6 +142,10 @@ def find_player_by_name_or_alias(
     at a time in Python rather than with SQL equality: `alias = ?` only ever
     matched players who had exactly one alias and nothing else.
 
+    Archived players are not returned: this is the lookup the signup import
+    uses, and an archived player turning up in next week's line-up because
+    someone typed their name is exactly what archiving is meant to prevent.
+
     Args:
         name: Player name or alias to search for
         club_ids: Optional list of club IDs to filter by
@@ -136,16 +157,20 @@ def find_player_by_name_or_alias(
     if not wanted:
         return None
 
+    # `IS NOT 0`: see get_all_players.
     conn = get_db()
     try:
         if club_ids is not None and len(club_ids) > 0:
             placeholders = ",".join("?" * len(club_ids))
             rows = conn.execute(
-                f"SELECT * FROM players WHERE club_id IN ({placeholders})",
+                f"""SELECT * FROM players
+                     WHERE club_id IN ({placeholders}) AND active IS NOT 0""",
                 tuple(club_ids),
             ).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM players").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM players WHERE active IS NOT 0"
+            ).fetchall()
     finally:
         conn.close()
 
@@ -421,6 +446,71 @@ def update_player_name(player_id: int, name: str, alias: Optional[str] = None) -
         return False
     except DatabaseError:
         logger.error(f"Failed to update player {player_id} name", exc_info=True)
+        return False
+
+
+def count_player_appearances(player_id: int) -> int:
+    """How many matches this player is on the team sheet for.
+
+    Decides whether removing them archives or deletes: a player with no
+    appearances has no history to protect, and is usually a typo or a guest who
+    never came back.
+    """
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM match_players WHERE player_id = ?", (player_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def count_players_in_club(club_id: int) -> int:
+    """How many players belong to this club, archived ones included.
+
+    Archived players are counted because deleting the club would strand them
+    exactly the same way: ``players.club_id`` has no ON DELETE clause, so the
+    rows survive pointing at a club that is gone, and every list filters by
+    club, which means nobody can reach them again.
+    """
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM players WHERE club_id = ?", (club_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def set_player_active(player_id: int, active: bool) -> bool:
+    """Archive a player, or bring one back.
+
+    Archiving takes someone out of the squad, the signup lookup and allocation
+    while leaving every match they played untouched -- which deleting them
+    cannot do, since match_players stores only an id and the name lives here.
+
+    Args:
+        player_id: ID of the player.
+        active: False to archive, True to restore.
+
+    Returns:
+        bool: True on success, False if there is no such player or on error.
+    """
+    try:
+        with db_transaction("set_player_active") as conn:
+            cursor = conn.execute(
+                """UPDATE players SET active = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?""",
+                (1 if active else 0, player_id),
+            )
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(f"Set active: No player found with ID {player_id}")
+                return False
+            logger.info(f"Player {player_id} {'restored' if active else 'archived'}")
+            return True
+    except DatabaseError:
+        logger.error(f"Failed to set active on player {player_id}", exc_info=True)
         return False
 
 

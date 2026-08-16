@@ -30,7 +30,8 @@ def db():
             mental_attrs TEXT,
             physical_attrs TEXT,
             gk_attrs TEXT,
-            updated_at TIMESTAMP
+            updated_at TIMESTAMP,
+            active INTEGER NOT NULL DEFAULT 1
         )"""
     )
     conn.execute(
