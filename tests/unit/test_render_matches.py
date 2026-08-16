@@ -110,28 +110,35 @@ class TestRenderRecentMatches:
         assert result is not None
 
     @patch("render.matches.format_match_name")
-    @patch("render.matches.is_match_completed")
-    @patch("render.matches.get_match_score_display")
-    def test_render_recent_matches_with_matches(
-        self, mock_get_score, mock_is_completed, mock_format_name
-    ):
-        """Test rendering recent matches with matches"""
-        mock_format_name.return_value = "2024-01-15 Team A VS Team B"
-        mock_is_completed.return_value = True
-        mock_get_score.return_value = "Score: 3 - 2"
+    def test_groups_matches_under_their_league(self, mock_format_name):
+        mock_format_name.side_effect = lambda m: f"match {m['id']}"
 
-        matches = [
-            {
-                "id": 1,
-                "date": "2024-01-15",
-                "start_time": "10:00:00",
-                "location": "Field 1",
-            }
-        ]
+        html = to_xml(
+            render_recent_matches(
+                [
+                    {"id": 1, "league_name": "Sunday League"},
+                    {"id": 2, "league_name": "Sunday League"},
+                    {"id": 3, "league_name": "Friday Night"},
+                ]
+            )
+        )
 
-        result = render_recent_matches(matches)
+        assert html.count("Sunday League") == 1
+        assert html.count("Friday Night") == 1
+        assert 'href="/match/1"' in html
 
-        assert result is not None
+    @patch("render.matches.format_match_name")
+    def test_shows_at_most_the_requested_number_per_league(self, mock_format_name):
+        mock_format_name.side_effect = lambda m: f"match {m['id']}"
+
+        html = to_xml(
+            render_recent_matches(
+                [{"id": i, "league_name": "Sunday League"} for i in range(1, 6)],
+                per_league=3,
+            )
+        )
+
+        assert html.count("match-row-name") == 3
 
 
 class TestRenderAllMatches:
@@ -143,33 +150,78 @@ class TestRenderAllMatches:
 
         assert result is not None
 
-    @patch("render.matches.format_match_name")
-    @patch("render.matches.can_user_edit_match")
-    @patch("render.matches.is_match_completed")
-    @patch("render.matches.get_match_score_display")
-    def test_render_all_matches_with_matches(
-        self, mock_get_score, mock_is_completed, mock_can_edit, mock_format_name
-    ):
-        """Test rendering all matches with matches"""
-        mock_format_name.return_value = "2024-01-15 Team A VS Team B"
-        mock_can_edit.return_value = False
-        mock_is_completed.return_value = (
-            False  # Prevent database access via get_match_score_display
+    @patch("render.matches.match_fixture")
+    def test_lists_every_match_under_its_league(self, mock_fixture):
+        """Unlike the home page, this one is not capped."""
+        mock_fixture.return_value = ("Red", None, "White")
+
+        html = to_xml(
+            render_all_matches(
+                [{"id": i, "league_name": "Sunday League"} for i in range(1, 6)], None
+            )
         )
-        mock_get_score.return_value = ""
 
-        matches = [
-            {
-                "id": 1,
-                "date": "2024-01-15",
-                "start_time": "10:00:00",
-                "location": "Field 1",
-            }
-        ]
+        assert html.count('href="/match/') == 5
+        assert html.count("Sunday League") == 1
 
-        result = render_all_matches(matches, None)
+    @patch("render.matches.match_fixture")
+    def test_the_two_sides_and_the_score_get_a_column_each(self, mock_fixture):
+        mock_fixture.return_value = ("PCUSA Red", "3 : 2", "PCUSA White")
 
-        assert result is not None
+        html = to_xml(
+            render_all_matches(
+                [
+                    {
+                        "id": 1,
+                        "league_name": "Sunday League",
+                        "date": "2026-08-14",
+                        "start_time": "15:30",
+                        "end_time": "17:30",
+                        "location": "Eric Primrose Reserve",
+                    }
+                ],
+                None,
+            )
+        )
+
+        assert "<td>PCUSA Red</td>" in html
+        assert "3 : 2" in html
+        assert "<td>PCUSA White</td>" in html
+        # The date is its own column and opens the match.
+        assert '<a href="/match/1">2026-08-14</a>' in html
+        assert "15:30–17:30" in html
+        assert "Eric Primrose Reserve" in html
+
+    @patch("render.matches.match_fixture")
+    def test_an_unplayed_match_shows_no_score(self, mock_fixture):
+        mock_fixture.return_value = ("Red", None, "White")
+
+        html = to_xml(
+            render_all_matches(
+                [{"id": 1, "league_name": "L", "date": "2027-01-01"}], None
+            )
+        )
+
+        assert "—" in html
+
+    @patch("render.matches.match_fixture")
+    def test_a_dateless_match_is_still_reachable(self, mock_fixture):
+        """Falling back to the id keeps the row from being a dead end."""
+        mock_fixture.return_value = ("Red", None, "White")
+
+        html = to_xml(render_all_matches([{"id": 42, "league_name": "L"}], None))
+
+        assert '<a href="/match/42">#42</a>' in html
+
+    @patch("render.matches.match_fixture")
+    def test_has_no_delete_control(self, mock_fixture):
+        """Deleting a match lives on the match's own page."""
+        mock_fixture.return_value = ("Red", None, "White")
+
+        html = to_xml(render_all_matches([{"id": 1, "league_name": "L"}], None))
+
+        assert "/delete_match/" not in html
+        assert "/confirm-delete/match/" not in html
 
 
 class TestRenderMatchTeams:

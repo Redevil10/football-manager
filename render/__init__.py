@@ -10,7 +10,7 @@ from render.common import (
     render_navbar,
 )
 from render.leagues import (
-    render_league_matches,
+    render_league_header,
     render_leagues_list,
 )
 from render.matches import (
@@ -27,6 +27,7 @@ from render.matches import (
 )
 from render.players import (
     render_add_player_form,
+    render_archived_players,
     render_match_available_players,
     render_player_detail_form,
     render_player_table,
@@ -41,6 +42,7 @@ __all__ = [
     "render_match_info",
     "render_attr_input",
     # Players
+    "render_archived_players",
     "render_player_table",
     "render_player_detail_form",
     "render_add_player_form",
@@ -58,5 +60,5 @@ __all__ = [
     "render_teams",
     # Leagues
     "render_leagues_list",
-    "render_league_matches",
+    "render_league_header",
 ]

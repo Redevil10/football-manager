@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0077ee"/>
-      <stop offset="100%" stop-color="#003388"/>
+      <stop offset="0%" stop-color="#0066cc"/>
+      <stop offset="100%" stop-color="#004499"/>
     </linearGradient>
     <linearGradient id="ball" x1="30%" y1="20%" x2="70%" y2="80%">
       <stop offset="0%" stop-color="#ffffff"/>
@@ -23,44 +23,67 @@
   <circle cx="640" cy="320" r="120" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/>
   <line x1="640" y1="0" x2="640" y2="640" stroke="rgba(255,255,255,0.06)" stroke-width="3"/>
 
-  <!-- Soccer ball (left side, within safe zone) -->
-  <circle cx="240" cy="270" r="120" fill="url(#ball)" stroke="rgba(200,200,200,0.5)" stroke-width="2"/>
+  <!-- The same artwork as logo.svg rather than a second hand-drawn copy.
+       The two had already drifted (different ball and clipboard geometry,
+       different blues) which is the whole reason this is shared now. Its
+       own box is centred on 256,256, so placing it is one transform. -->
+  <g transform="translate(250, 285) scale(0.80) translate(-256, -256)">
+    <!-- The wordmark used to sit under the drawing, so the ball and clipboard
+         were pitched high and left to fill only the top of the tile. With it
+         gone this recentres them on the plate (their own centre is y=237.5, the
+         plate's is 256) and takes up some of the freed room. -->
+    <g transform="translate(256, 256) scale(1.15) translate(-256, -237.5)">
+    <!-- Football / soccer ball -->
+    <circle cx="256" cy="200" r="120" fill="url(#ball)" stroke="#cccccc" stroke-width="2"/>
 
-  <!-- Ball pentagons -->
-  <polygon points="240,242 256,250 250,267 230,267 224,250" fill="#333"/>
-  <polygon points="240,198 253,206 248,220 232,220 227,206" fill="#333"/>
-  <polygon points="188,302 201,310 196,324 180,324 175,310" fill="#333"/>
-  <polygon points="292,302 305,310 300,324 284,324 279,310" fill="#333"/>
-  <polygon points="186,220 199,228 194,243 178,243 173,228" fill="#333"/>
-  <polygon points="294,220 307,228 302,243 286,243 281,228" fill="#333"/>
+    <!-- Pentagon patches on ball -->
+    <!-- Center pentagon -->
+    <polygon points="256,172 272,181 267,199 245,199 240,181" fill="#333" stroke="#333" stroke-width="1" stroke-linejoin="round"/>
 
-  <!-- Ball connecting lines -->
-  <line x1="224" y1="250" x2="199" y2="228" stroke="#555" stroke-width="2"/>
-  <line x1="256" y1="250" x2="281" y2="228" stroke="#555" stroke-width="2"/>
-  <line x1="230" y1="267" x2="201" y2="302" stroke="#555" stroke-width="2"/>
-  <line x1="250" y1="267" x2="279" y2="302" stroke="#555" stroke-width="2"/>
-  <line x1="240" y1="242" x2="240" y2="220" stroke="#555" stroke-width="2"/>
-  <line x1="232" y1="220" x2="194" y2="228" stroke="#555" stroke-width="2"/>
-  <line x1="248" y1="220" x2="286" y2="228" stroke="#555" stroke-width="2"/>
-  <line x1="182" y1="243" x2="184" y2="302" stroke="#555" stroke-width="2"/>
-  <line x1="298" y1="243" x2="296" y2="302" stroke="#555" stroke-width="2"/>
-  <line x1="196" y1="324" x2="284" y2="324" stroke="#555" stroke-width="2"/>
+    <!-- Top pentagon -->
+    <polygon points="256,124 270,133 265,149 247,149 242,133" fill="#333" stroke="#333" stroke-width="1" stroke-linejoin="round"/>
 
-  <!-- Clipboard (tucked under ball, within safe zone) -->
-  <rect x="280" y="305" width="95" height="105" rx="6" ry="6" fill="white" opacity="0.95" stroke="#b0b0b0" stroke-width="1.5"/>
-  <rect x="304" y="297" width="46" height="16" rx="3" ry="3" fill="#999"/>
-  <circle cx="327" cy="301" r="4" fill="white"/>
+    <!-- Bottom-left pentagon -->
+    <polygon points="204,234 218,243 213,259 195,259 190,243" fill="#333" stroke="#333" stroke-width="1" stroke-linejoin="round"/>
 
-  <!-- Clipboard lines -->
-  <line x1="295" y1="325" x2="360" y2="325" stroke="#ddd" stroke-width="1.5"/>
-  <line x1="295" y1="342" x2="360" y2="342" stroke="#ddd" stroke-width="1.5"/>
-  <line x1="295" y1="359" x2="360" y2="359" stroke="#ddd" stroke-width="1.5"/>
-  <line x1="295" y1="376" x2="336" y2="376" stroke="#ddd" stroke-width="1.5"/>
+    <!-- Bottom-right pentagon -->
+    <polygon points="308,234 322,243 317,259 299,259 294,243" fill="#333" stroke="#333" stroke-width="1" stroke-linejoin="round"/>
 
-  <!-- Checkmarks -->
-  <polyline points="297,323 301,327 309,317" fill="none" stroke="#0066cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <polyline points="297,340 301,344 309,334" fill="none" stroke="#0066cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <polyline points="297,357 301,361 309,351" fill="none" stroke="#0066cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Top-left pentagon -->
+    <polygon points="196,152 210,161 205,177 187,177 182,161" fill="#333" stroke="#333" stroke-width="1" stroke-linejoin="round"/>
+
+    <!-- Top-right pentagon -->
+    <polygon points="316,152 330,161 325,177 307,177 302,161" fill="#333" stroke="#333" stroke-width="1" stroke-linejoin="round"/>
+
+    <!-- Connecting lines between pentagons -->
+    <line x1="240" y1="181" x2="210" y2="161" stroke="#555" stroke-width="2"/>
+    <line x1="272" y1="181" x2="302" y2="161" stroke="#555" stroke-width="2"/>
+    <line x1="245" y1="199" x2="218" y2="234" stroke="#555" stroke-width="2"/>
+    <line x1="267" y1="199" x2="294" y2="234" stroke="#555" stroke-width="2"/>
+    <line x1="256" y1="172" x2="256" y2="149" stroke="#555" stroke-width="2"/>
+    <line x1="247" y1="149" x2="205" y2="161" stroke="#555" stroke-width="2"/>
+    <line x1="265" y1="149" x2="307" y2="161" stroke="#555" stroke-width="2"/>
+    <line x1="192" y1="177" x2="198" y2="234" stroke="#555" stroke-width="2"/>
+    <line x1="320" y1="177" x2="314" y2="234" stroke="#555" stroke-width="2"/>
+    <line x1="213" y1="259" x2="299" y2="259" stroke="#555" stroke-width="2"/>
+
+    <!-- Clipboard -->
+    <rect x="196" y="275" width="120" height="120" rx="8" ry="8" fill="white" opacity="0.95" stroke="#b0b0b0" stroke-width="2"/>
+    <rect x="230" y="265" width="52" height="20" rx="4" ry="4" fill="#999"/>
+    <circle cx="256" cy="270" r="5" fill="white"/>
+
+    <!-- Clipboard lines -->
+    <line x1="216" y1="300" x2="296" y2="300" stroke="#ccc" stroke-width="2"/>
+    <line x1="216" y1="320" x2="296" y2="320" stroke="#ccc" stroke-width="2"/>
+    <line x1="216" y1="340" x2="296" y2="340" stroke="#ccc" stroke-width="2"/>
+    <line x1="216" y1="360" x2="260" y2="360" stroke="#ccc" stroke-width="2"/>
+
+    <!-- Checkmarks on clipboard -->
+    <polyline points="218,298 224,304 234,292" fill="none" stroke="#0066cc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="218,318 224,324 234,312" fill="none" stroke="#0066cc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="218,338 224,344 234,332" fill="none" stroke="#0066cc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
 
   <!-- Title text (right side, within safe zone) -->
   <text x="810" y="260" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="68" font-weight="800" fill="white" letter-spacing="-1">Football Manager</text>

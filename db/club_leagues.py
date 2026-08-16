@@ -151,3 +151,23 @@ def is_club_in_league(club_id: int, league_id: int) -> bool:
     ).fetchone()
     conn.close()
     return result is not None
+
+
+def count_clubs_by_league() -> dict[int, int]:
+    """How many clubs are in each league, keyed by league id.
+
+    One grouped query rather than a count per league: the leagues list would
+    otherwise issue one round trip per row it renders.
+
+    Returns:
+        dict[int, int]: league id -> club count. Leagues with no clubs are
+            absent, so callers should read it with a default of 0.
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT league_id, COUNT(*) AS n FROM club_leagues GROUP BY league_id"
+        ).fetchall()
+    finally:
+        conn.close()
+    return {row["league_id"]: row["n"] for row in rows}

@@ -25,7 +25,12 @@ def init_db():
                   password_salt TEXT NOT NULL,
                   is_superuser INTEGER DEFAULT 0,
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                  last_login TIMESTAMP)"""
+                  last_login TIMESTAMP,
+                  -- Who registered this account. NULL for the accounts that
+                  -- predate this column and for anyone created outside the
+                  -- registration form; that history was never recorded and
+                  -- cannot be worked out after the fact.
+                  created_by INTEGER REFERENCES users(id))"""
     )
 
     # Clubs table
@@ -66,6 +71,19 @@ def init_db():
                   physical_attrs TEXT DEFAULT '{}',
                   gk_attrs TEXT DEFAULT '{}',
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  -- Set on every edit so the list can show what changed
+                  -- recently. Starts equal to created_at.
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  -- Who added this player. NULL for rows that predate the
+                  -- column and for anything created outside the app.
+                  created_by INTEGER REFERENCES users(id),
+                  -- 0 once a player is archived. Deleting a player who has
+                  -- played would take them out of every past line-up too --
+                  -- match_players only stores an id, so the name is gone with
+                  -- them -- so anyone with history is archived instead. They
+                  -- drop out of the squad, the signup lookup and allocation,
+                  -- and stay in the matches they played.
+                  active INTEGER NOT NULL DEFAULT 1,
                   FOREIGN KEY (club_id) REFERENCES clubs(id),
                   UNIQUE(name, club_id))"""
     )

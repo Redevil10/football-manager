@@ -2,9 +2,11 @@
 
 from unittest.mock import patch
 
+from fasthtml.common import to_xml
+
 from render.leagues import (
     render_league_clubs,
-    render_league_matches,
+    render_league_header,
     render_leagues_list,
 )
 
@@ -31,21 +33,21 @@ class TestRenderLeaguesList:
 
             assert result is not None
 
-    @patch("render.leagues.can_user_edit_league")
     @patch("render.leagues.get_matches_by_league")
-    def test_render_leagues_list_with_user_permissions(
-        self, mock_get_matches, mock_can_edit
-    ):
-        """Test rendering leagues list with user permissions"""
+    def test_the_list_carries_no_per_row_actions(self, mock_get_matches):
+        """The name opens the league; everything else lives on that page."""
         mock_get_matches.return_value = []
-        mock_can_edit.return_value = True
 
-        leagues = [{"id": 1, "name": "League 1"}]
-        user = {"id": 1, "is_superuser": False}
+        html = to_xml(
+            render_leagues_list(
+                [{"id": 1, "name": "League 1"}], {"id": 1, "is_superuser": True}
+            )
+        )
 
-        result = render_leagues_list(leagues, user)
-
-        assert result is not None
+        assert 'href="/league/1"' in html
+        assert "/edit_league/" not in html
+        assert "/delete_league/" not in html
+        assert "confirm-delete" not in html
 
     @patch("render.leagues.get_matches_by_league")
     def test_render_leagues_list_with_matches(self, mock_get_matches):
@@ -63,97 +65,53 @@ class TestRenderLeaguesList:
         mock_get_matches.assert_called()
 
 
-class TestRenderLeagueMatches:
-    """Tests for render_league_matches function"""
+class TestRenderLeagueHeader:
+    """Tests for render_league_header function"""
 
-    def test_render_league_matches_empty(self):
-        """Test rendering league matches with no matches"""
-        league = {"id": 1, "name": "Test League"}
+    def test_shows_the_name_and_description(self):
+        html = to_xml(
+            render_league_header(
+                {"id": 1, "name": "Sunday League", "description": "Rydalmere, 3pm"}
+            )
+        )
 
-        with patch("render.leagues.can_user_edit_league") as mock_can_edit:
-            mock_can_edit.return_value = False
-            result = render_league_matches(league, [], None)
+        assert "Sunday League" in html
+        assert "Rydalmere, 3pm" in html
 
-            assert result is not None
+    def test_no_description_means_no_card(self):
+        """An empty white box says nothing the absence of one does not."""
+        html = to_xml(render_league_header({"id": 1, "name": "Sunday League"}))
 
-    @patch("render.leagues.can_user_edit_league")
-    @patch("render.leagues.can_user_edit_match")
-    @patch("render.leagues.is_match_completed")
-    @patch("render.leagues.get_match_score_display")
-    @patch("render.leagues.format_match_name")
-    def test_render_league_matches_with_matches(
-        self,
-        mock_format_name,
-        mock_get_score,
-        mock_is_completed,
-        mock_can_edit_match,
-        mock_can_edit_league,
-    ):
-        """Test rendering league matches with matches"""
-        mock_can_edit_league.return_value = True
-        mock_can_edit_match.return_value = False
-        mock_is_completed.return_value = False
-        mock_get_score.return_value = ""
-        mock_format_name.return_value = "2024-01-15 Team A VS Team B"
+        assert "container-white" not in html
+        assert "Sunday League" in html
 
-        league = {"id": 1, "name": "Test League"}
-        matches = [
-            {
-                "id": 1,
-                "date": "2024-01-15",
-                "start_time": "10:00:00",
-                "location": "Field 1",
-            }
-        ]
+    def test_lists_no_matches(self):
+        """Fixtures live on /matches, already grouped by league."""
+        html = to_xml(render_league_header({"id": 1, "name": "Sunday League"}))
 
-        result = render_league_matches(league, matches, None)
+        assert "/match/" not in html
+        assert "/create_match" not in html
 
-        assert result is not None
+    def test_superusers_get_a_way_in_to_renaming_it(self):
+        html = to_xml(
+            render_league_header({"id": 7, "name": "Sunday League"}, can_manage=True)
+        )
 
-    @patch("render.leagues.can_user_edit_league")
-    @patch("render.leagues.can_user_edit_match")
-    @patch("render.leagues.is_match_completed")
-    @patch("render.leagues.get_match_score_display")
-    @patch("render.leagues.format_match_name")
-    def test_render_league_matches_with_completed_match(
-        self,
-        mock_format_name,
-        mock_get_score,
-        mock_is_completed,
-        mock_can_edit_match,
-        mock_can_edit_league,
-    ):
-        """Test rendering league matches with completed match"""
-        mock_can_edit_league.return_value = False
-        mock_can_edit_match.return_value = False
-        mock_is_completed.return_value = True
-        mock_get_score.return_value = "Score: 3 - 2"
-        mock_format_name.return_value = "2024-01-15 Team A 3 : 2 Team B"
+        assert 'href="/edit_league/7"' in html
 
-        league = {"id": 1, "name": "Test League"}
-        matches = [
-            {
-                "id": 1,
-                "date": "2024-01-15",
-                "start_time": "10:00:00",
-                "location": "Field 1",
-            }
-        ]
+    def test_everyone_else_gets_none(self):
+        html = to_xml(render_league_header({"id": 7, "name": "Sunday League"}))
 
-        result = render_league_matches(league, matches, None)
+        assert "/edit_league/" not in html
 
-        assert result is not None
+    def test_never_carries_the_delete(self):
+        """That belongs after every section, so the route appends it."""
+        html = to_xml(
+            render_league_header({"id": 7, "name": "Sunday League"}, can_manage=True)
+        )
 
-    @patch("render.leagues.can_user_edit_league")
-    def test_render_league_matches_with_edit_permission(self, mock_can_edit):
-        """Test rendering league matches with edit permission"""
-        mock_can_edit.return_value = True
-
-        league = {"id": 1, "name": "Test League"}
-
-        result = render_league_matches(league, [], None)
-
-        assert result is not None
+        assert "danger-zone" not in html
+        assert "confirm-delete" not in html
 
 
 class TestRenderLeagueClubs:
@@ -223,3 +181,39 @@ class TestRenderLeagueClubs:
         result = render_league_clubs(1, clubs_in_league, all_clubs)
 
         assert result is not None
+
+
+class TestLeagueClubsReadOnly:
+    """Which clubs are in a league is a superuser's call; everyone else reads."""
+
+    CLUBS = [{"id": 4, "name": "Concord FC", "description": "Lane Cove"}]
+
+    def test_a_reader_gets_the_list_and_nothing_to_press(self):
+        html = to_xml(render_league_clubs(7, self.CLUBS, [], {"id": 9}))
+
+        assert "Concord FC" in html
+        assert 'href="/club/4"' in html
+        assert "/add_club_to_league/" not in html
+        assert "/remove_club_from_league/" not in html
+        assert "Actions" not in html
+
+    def test_a_superuser_gets_the_controls(self):
+        html = to_xml(
+            render_league_clubs(
+                7,
+                self.CLUBS,
+                [{"id": 5, "name": "Other FC"}],
+                {"id": 9},
+                can_manage=True,
+            )
+        )
+
+        assert "/add_club_to_league/7" in html
+        assert "/remove_club_from_league/7/4" in html
+        assert "Actions" in html
+
+    def test_an_empty_league_does_not_point_a_reader_at_a_form(self):
+        html = to_xml(render_league_clubs(7, [], [], {"id": 9}))
+
+        assert "No clubs in this league yet." in html
+        assert "form above" not in html

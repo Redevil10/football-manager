@@ -15,6 +15,7 @@ from db.players import (
     get_all_players,
     parse_player_attributes,
     reset_teams,
+    split_aliases,
     swap_players,
     update_player_attrs,
     update_player_height_weight,
@@ -560,3 +561,110 @@ class TestResetTeams:
         for result in results:
             assert result["team"] is None
             assert result["position"] is None
+
+
+class TestSplitAliases:
+    """One player often answers to several names."""
+
+    def test_splits_on_semicolons_and_trims(self):
+        assert split_aliases("Ken; 小谢 ;  KX ") == ["Ken", "小谢", "KX"]
+
+    def test_empty_input_has_no_aliases(self):
+        assert split_aliases(None) == []
+        assert split_aliases("") == []
+        assert split_aliases("  ;  ") == []
+
+
+class TestFindByAnyAlias:
+    """Lookup has to match a single alias out of the list.
+
+    The column holds them semicolon-separated, so the old `alias = ?` test only
+    ever matched players who had exactly one and nothing else.
+    """
+
+    def test_finds_by_each_alias_in_the_list(self, temp_db):
+        club = create_club("Test Club")
+        add_player("KEN-XIE", club, alias="Ken; 小谢")
+
+        for probe in ("Ken", "小谢"):
+            assert find_player_by_name_or_alias(probe)["name"] == "KEN-XIE"
+
+    def test_finds_by_name_too(self, temp_db):
+        club = create_club("Test Club")
+        add_player("KEN-XIE", club, alias="Ken")
+
+        assert find_player_by_name_or_alias("KEN-XIE")["name"] == "KEN-XIE"
+
+    def test_a_name_outranks_someone_elses_alias(self, temp_db):
+        """Two players can lay claim to the same string; the owner wins."""
+        club = create_club("Test Club")
+        add_player("Nickname Holder", club, alias="Danny")
+        add_player("Danny", club)
+
+        assert find_player_by_name_or_alias("Danny")["name"] == "Danny"
+
+    def test_unknown_name_finds_nobody(self, temp_db):
+        club = create_club("Test Club")
+        add_player("KEN-XIE", club, alias="Ken")
+
+        assert find_player_by_name_or_alias("nobody") is None
+
+
+class TestPlayerAuditColumns:
+    """Who added a player, and when it last changed."""
+
+    def test_records_who_added_the_player(self, temp_db):
+        from core.auth import hash_password
+        from db.users import create_user
+
+        password_hash, salt = hash_password("x")
+        adder = create_user("admin", password_hash, salt, is_superuser=True)
+
+        club = create_club("Test Club")
+        add_player("KEN-XIE", club, created_by=adder)
+
+        player = get_all_players()[0]
+        assert player["created_by"] == adder
+        assert player["created_by_username"] == "admin"
+
+    def test_creator_is_empty_when_nobody_is_credited(self, temp_db):
+        club = create_club("Test Club")
+        add_player("KEN-XIE", club)
+
+        player = get_all_players()[0]
+        assert player["created_by"] is None
+        assert player["created_by_username"] is None
+
+    def test_editing_a_player_moves_updated_at(self, temp_db):
+        club = create_club("Test Club")
+        player_id = add_player("KEN-XIE", club)
+        before = _stamp(player_id)
+
+        update_player_name(player_id, "KEN-XIE", alias="Ken")
+
+        assert _stamp(player_id) >= before
+
+    def test_allocating_a_team_leaves_updated_at_alone(self, temp_db):
+        """Allocation writes every player before every match.
+
+        If that counted as an update, "last updated" would say the same thing
+        for the whole squad and answer nothing.
+        """
+        club = create_club("Test Club")
+        player_id = add_player("KEN-XIE", club)
+        before = _stamp(player_id)
+
+        update_player_team(player_id, 1, "Midfielder")
+
+        assert _stamp(player_id) == before
+
+
+def _stamp(player_id):
+    """The updated_at of one player."""
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT updated_at FROM players WHERE id = ?", (player_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()

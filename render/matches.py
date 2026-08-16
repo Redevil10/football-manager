@@ -6,10 +6,11 @@ from core.auth import can_user_edit_match
 from db.match_recordings import get_match_recordings
 from logic import calculate_overall_score
 from render.common import (
+    confirm_delete_link,
     format_match_meta,
     format_match_name,
-    get_match_score_display,
     is_match_completed,
+    match_fixture,
 )
 from render.interactive_pitch import render_interactive_pitch
 from render.pitch import render_player_table as render_player_table_pitch
@@ -165,8 +166,8 @@ def render_recent_matches(matches, per_league=3):
     still worth listing, and a newly started league would otherwise be missing
     from the page entirely until its third fixture.
 
-    The match name already carries the date and both teams, so nothing else is
-    repeated on the row.
+    The match name already carries the date, both teams and -- once a match is
+    played -- the score, so the row is that one line and nothing else.
 
     Args:
         matches: Match dicts with league_name, newest first.
@@ -185,11 +186,6 @@ def render_recent_matches(matches, per_league=3):
                 *[
                     A(href=f"/match/{m['id']}", cls="match-row")(
                         P(format_match_name(m), cls="match-row-name"),
-                        (
-                            P(get_match_score_display(m["id"]), cls="match-score")
-                            if is_match_completed(m)
-                            else ""
-                        ),
                     )
                     for m in league_matches[:per_league]
                 ],
@@ -204,130 +200,98 @@ def render_recent_matches(matches, per_league=3):
     return Div(H2("Recent Matches", style="margin-top: 30px;"), *sections)
 
 
+def render_match_table(matches, base="/match"):
+    """A set of matches as one table: date, both sides, the score, when, where.
+
+    The two sides and the score get a column each rather than being run together
+    into a match name -- in a table the home column lines up down the page,
+    which is most of what makes a table worth having over a list of sentences.
+
+    Args:
+        matches: Match dicts, already in the order they should appear.
+        base: Where a row links. "/public/match" for the anonymous view, which
+            is otherwise the same table.
+    """
+    rows = []
+    for m in matches:
+        home, score, away = match_fixture(m)
+        rows.append(
+            Tr(
+                # The date opens the match, the way the name does in every other
+                # table -- a fixture has no single name to click.
+                Td(A(m.get("date") or f"#{m['id']}", href=f"{base}/{m['id']}")),
+                Td(home),
+                Td(score or "—", cls="col-score-line"),
+                Td(away),
+                Td(_time_range(m) or "—", cls="col-quiet"),
+                Td(m.get("location") or "—", cls="col-quiet"),
+            )
+        )
+
+    return Div(cls="table-scroll")(
+        Table(cls="player-table")(
+            Thead(
+                Tr(
+                    Th("Date"),
+                    Th("Home"),
+                    Th("Score"),
+                    Th("Away"),
+                    Th("Time"),
+                    Th("Location"),
+                )
+            ),
+            Tbody(*rows),
+        )
+    )
+
+
 def render_all_matches(matches, user=None):
-    """Render all matches across all leagues"""
+    """Render every match as a table, one table per league.
+
+    Same shape as the players, users, leagues and clubs lists.
+
+    Deleting a match lives on the match's own page, behind the confirmation
+    page, as with every other entity -- it is not a control on every row here.
+    """
+    if not matches:
+        return Div(cls="container-white")(
+            P("No matches yet.", cls="empty-state"),
+        )
+
+    by_league = {}
+    for match in matches:
+        by_league.setdefault(match.get("league_name") or "Friendly", []).append(match)
+
+    return Div(
+        *[
+            Div(cls="container-white")(
+                P(league_name, cls="match-league"),
+                render_match_table(league_matches),
+            )
+            for league_name, league_matches in by_league.items()
+        ]
+    )
+
+
+def _time_range(match):
+    """The match's time window, e.g. "18:30-20:30", or just its start."""
+    times = [t for t in (match.get("start_time"), match.get("end_time")) if t]
+    return "\u2013".join(times)
+
+
+def can_user_create_match(user):
+    """Whether this user may create a match in any club they can reach."""
     from core.auth import check_club_permission, get_user_accessible_club_ids
     from core.config import USER_ROLES
 
-    content = []
-
-    # Only show create button if user can create matches (manager or superuser)
-    if user:
-        can_create = False
-        if user.get("is_superuser"):
-            can_create = True
-        else:
-            # Check if user is manager for any club
-            club_ids = get_user_accessible_club_ids(user)
-            can_create = any(
-                check_club_permission(user, cid, USER_ROLES["MANAGER"])
-                for cid in club_ids
-            )
-        if can_create:
-            content.append(
-                Div(cls="container-white", style="margin-bottom: 20px;")(
-                    H3("Create New Match"),
-                    A(
-                        Button("Create Match", cls="btn-success"),
-                        href="/create_match",
-                    ),
-                ),
-            )
-
-    if not matches:
-        content.append(
-            Div(cls="container-white")(
-                P(
-                    "No matches yet. Create your first match!",
-                    style="text-align: center; color: #666;",
-                )
-            )
-        )
-        return Div(*content)
-
-    # Group matches by league
-    matches_by_league = {}
-    for match in matches:
-        league_name = match.get("league_name", "Friendly")
-        if league_name not in matches_by_league:
-            matches_by_league[league_name] = []
-        matches_by_league[league_name].append(match)
-
-    for league_name, league_matches in matches_by_league.items():
-        content.append(H3(league_name))
-        for match in league_matches:
-            match_date = match.get("date", "")
-            start_time = match.get("start_time", "")
-            end_time = match.get("end_time", "")
-            match_location = match.get("location", "")
-
-            match_info = []
-            if match_date:
-                match_info.append(f"Date: {match_date}")
-            if start_time:
-                match_info.append(f"Start: {start_time}")
-            if end_time:
-                match_info.append(f"End: {end_time}")
-            if match_location:
-                match_info.append(f"Location: {match_location}")
-
-            # Get score if match is completed
-            score_display = ""
-            if is_match_completed(match):
-                score_display = get_match_score_display(match["id"])
-
-            content.append(
-                Div(cls="container-white", style="margin-bottom: 10px;")(
-                    Div(
-                        style="display: flex; justify-content: space-between; align-items: center;"
-                    )(
-                        A(
-                            H4(
-                                format_match_name(match),
-                                style="margin: 0; color: #007bff;",
-                            ),
-                            href=f"/match/{match['id']}",
-                            style="text-decoration: none; flex: 1;",
-                        ),
-                        *(
-                            [
-                                Form(
-                                    method="POST",
-                                    action=f"/delete_match/{match['id']}",
-                                    style="margin-left: 10px;",
-                                    **{
-                                        "onsubmit": "return confirm('Delete this match?');"
-                                    },
-                                )(
-                                    Button(
-                                        "Delete",
-                                        cls="btn-danger",
-                                        type="submit",
-                                        style="padding: 5px 10px; font-size: 14px;",
-                                    ),
-                                )
-                            ]
-                            if (user and can_user_edit_match(user, match["id"]))
-                            else []
-                        ),
-                    ),
-                    (
-                        P(" | ".join(match_info), style="margin: 5px 0; color: #666;")
-                        if match_info
-                        else ""
-                    ),
-                    (
-                        P(
-                            score_display,
-                            style="margin: 5px 0; font-weight: bold; color: #0066cc;",
-                        )
-                        if score_display
-                        else ""
-                    ),
-                )
-            )
-
-    return Div(*content)
+    if not user:
+        return False
+    if user.get("is_superuser"):
+        return True
+    return any(
+        check_club_permission(user, club_id, USER_ROLES["MANAGER"])
+        for club_id in get_user_accessible_club_ids(user)
+    )
 
 
 def render_match_teams(
@@ -675,12 +639,7 @@ def render_match_recordings(match_id, recordings=None, can_edit=False):
                             "hx-confirm": "Delete this recording link?",
                         },
                     )(
-                        Button(
-                            "Delete",
-                            type="submit",
-                            cls="btn-danger",
-                            style="padding: 2px 8px; font-size: 12px;",
-                        ),
+                        Button("Delete", type="submit", cls="link-delete"),
                     )
                 )
             link_items.append(
@@ -799,39 +758,13 @@ def render_match_detail(
                 *(
                     [
                         Div(cls="btn-group")(
-                            *(
-                                [
-                                    A(
-                                        Button("Edit Match", cls="btn-primary"),
-                                        href=f"/edit_match/{match['id']}",
-                                    )
-                                ]
-                                if can_edit
-                                else []
-                            ),
-                            *(
-                                [
-                                    Form(
-                                        method="POST",
-                                        action=f"/delete_match/{match['id']}",
-                                        style="display: inline;",
-                                        **{
-                                            "onsubmit": "return confirm('Delete this match?');"
-                                        },
-                                    )(
-                                        Button(
-                                            "Delete Match",
-                                            cls="btn-danger",
-                                            type="submit",
-                                        ),
-                                    )
-                                ]
-                                if can_delete
-                                else []
-                            ),
+                            A(
+                                Button("Edit Match", cls="btn-primary"),
+                                href=f"/edit_match/{match['id']}",
+                            )
                         )
                     ]
-                    if (can_edit or can_delete)
+                    if can_edit
                     else []
                 ),
             ),
@@ -937,11 +870,7 @@ def render_match_detail(
                             "onsubmit": "return confirm('Remove all available players from this match? This will allow you to import again.');"
                         },
                     )(
-                        Button(
-                            "Remove All",
-                            type="submit",
-                            cls="btn-danger",
-                        ),
+                        Button("Remove All", type="submit", cls="btn-delete"),
                     ),
                 ),
             ]
@@ -1008,12 +937,12 @@ def render_match_detail(
                 event_content = [event_desc]
                 if can_edit:
                     event_content.append(
-                        A(
-                            " [Delete]",
-                            href=f"/delete_match_event/{event['id']}",
-                            style="color: var(--danger); text-decoration: none; margin-left: 10px;",
-                            **{"onclick": "return confirm('Delete this event?');"},
-                        )
+                        Form(
+                            method="POST",
+                            action=f"/delete_match_event/{event['id']}",
+                            style="display: inline; margin-left: 10px;",
+                            **{"onsubmit": "return confirm('Delete this event?');"},
+                        )(Button("Delete", type="submit", cls="link-delete"))
                     )
 
                 events_list.append(Li(*event_content, style="margin-bottom: 5px;"))
@@ -1036,11 +965,23 @@ def render_match_detail(
             )
         )
 
+    if can_delete:
+        content.append(
+            Div(cls="danger-zone")(
+                confirm_delete_link("match", match["id"], "Delete Match")
+            )
+        )
+
     return Div(*content)
 
 
 def render_import_confirmation(match_id, results, existing_players, club_id):
     """Render confirmation page for import results (both smart and non-smart).
+
+    One row per extracted name. Where the lookup missed and someone picks the
+    right player by hand, "Remember" writes that spelling into the player's
+    aliases so the same signup name matches by itself next time -- the whole
+    point of the alias column, and otherwise the same correction every week.
 
     Args:
         match_id: Match ID
@@ -1056,6 +997,7 @@ def render_import_confirmation(match_id, results, existing_players, club_id):
     for i, result in enumerate(results):
         extracted_name = result["extracted_name"]
         matched_id = result.get("matched_player_id")
+        matched_name = result.get("matched_player_name") or ""
         confidence = result.get("confidence", "none")
 
         # Build dropdown options
@@ -1069,18 +1011,7 @@ def render_import_confirmation(match_id, results, existing_players, club_id):
         if is_new:
             options[0] = Option("-- New Player --", value="new", selected=True)
 
-        # Confidence display
-        if confidence == "high":
-            conf_display = "high"
-            conf_style = "color: #28a745;"
-        elif confidence == "medium":
-            conf_display = "medium"
-            conf_style = "color: #ffc107;"
-        else:
-            conf_display = "-"
-            conf_style = "color: #666;"
-
-        # Score input — visible only when "-- New Player --" is selected
+        # Score input -- visible only when "-- New Player --" is selected
         score_display = "block" if is_new else "none"
         score_input = Div(
             id=f"score_wrapper_{i}",
@@ -1096,6 +1027,30 @@ def render_import_confirmation(match_id, results, existing_players, club_id):
             ),
         )
 
+        # Offered where it could do something: a row already sitting on the
+        # player whose name it is has nothing to learn. The server no-ops the
+        # rest (a new player, or a name already in that player's aliases), so
+        # this is about not showing a pointless checkbox, not about safety.
+        worth_remembering = (
+            extracted_name.strip().casefold() != matched_name.strip().casefold()
+        )
+        # Ticked only where the row is one a person had to decide themselves.
+        # A medium-confidence row arrives already pointing at the matcher's
+        # guess; ticking that by default means confirming the import without
+        # reading it teaches a wrong alias permanently. An unmatched row
+        # defaults to "-- New Player --", so any existing player showing there
+        # was chosen by hand and is exactly what this is for.
+        remember = (
+            Input(
+                type="checkbox",
+                name=f"remember_{i}",
+                value="1",
+                checked=(confidence == "none"),
+            )
+            if worth_remembering
+            else Span("—", style="color: var(--muted);")
+        )
+
         rows.append(
             Tr(
                 Td(extracted_name),
@@ -1108,67 +1063,67 @@ def render_import_confirmation(match_id, results, existing_players, club_id):
                         onchange=f"document.getElementById('score_wrapper_{i}').style.display = this.value === 'new' ? 'block' : 'none';",
                     )
                 ),
-                Td(
-                    Span(conf_display, style=conf_style),
-                ),
-                Td(score_input),
+                Td(_confidence_label(confidence)),
+                Td(score_input, cls="col-score"),
+                Td(remember, cls="col-tick"),
                 Td(
                     Input(
-                        type="checkbox",
-                        name=f"include_{i}",
-                        value="1",
-                        checked=True,
+                        type="checkbox", name=f"include_{i}", value="1", checked=True
                     ),
+                    cls="col-tick",
                 ),
                 # Hidden field for the extracted name
                 Td(
-                    Input(
-                        type="hidden",
-                        name=f"name_{i}",
-                        value=extracted_name,
-                    ),
+                    Input(type="hidden", name=f"name_{i}", value=extracted_name),
                     style="display: none;",
                 ),
             )
         )
 
-    return Div(cls="container-white")(
-        H3("Review Imported Players"),
-        P(
-            "Review the matches below. Adjust the dropdown to change player matching, "
-            "or uncheck to exclude a player.",
-            style="color: #666; margin-bottom: 15px;",
-        ),
+    return Div(
         Form(
             Input(type="hidden", name="total_rows", value=str(len(results))),
             Input(type="hidden", name="club_id", value=str(club_id)),
-            Table(style="width: 100%; border-collapse: collapse; margin-bottom: 15px;")(
-                Thead(
-                    Tr(
-                        Th("Extracted Name", style="text-align: left; padding: 8px;"),
-                        Th("Matched To", style="text-align: left; padding: 8px;"),
-                        Th("Confidence", style="text-align: left; padding: 8px;"),
-                        Th("Score", style="text-align: center; padding: 8px;"),
-                        Th("Include", style="text-align: center; padding: 8px;"),
+            Div(cls="container-white")(
+                P(
+                    "Adjust the dropdown to change who a name matches, or untick "
+                    "Include to leave someone out. Remember teaches the name to "
+                    "the player you picked, so next time it matches by itself.",
+                    cls="form-hint",
+                ),
+                Div(cls="table-scroll")(
+                    Table(cls="player-table")(
+                        Thead(
+                            Tr(
+                                Th("Signed up as"),
+                                Th("Matched to"),
+                                Th("Confidence"),
+                                Th("Score", cls="col-score"),
+                                Th("Remember", cls="col-tick"),
+                                Th("Include", cls="col-tick"),
+                            )
+                        ),
+                        Tbody(*rows),
                     )
                 ),
-                Tbody(*rows),
             ),
-            Div(cls="btn-group")(
+            Div(cls="btn-group", style="margin-top: 20px;")(
                 Button("Confirm Import", type="submit", cls="btn-success"),
-                Button(
-                    "Cancel",
-                    type="button",
-                    cls="btn-secondary",
-                    **{
-                        "onclick": f"window.location.href='/match/{match_id}'; return false;"
-                    },
-                ),
+                A("Cancel", href=f"/match/{match_id}", cls="btn-secondary"),
             ),
             method="POST",
             action=f"/confirm_import/{match_id}",
         ),
     )
+
+
+def _confidence_label(confidence):
+    """How sure the matcher was, in the palette rather than raw hex."""
+    if confidence == "high":
+        return Span("High", style="color: var(--success); font-weight: 600;")
+    if confidence == "medium":
+        return Span("Medium", style="color: var(--amber); font-weight: 600;")
+    return Span("No match", style="color: var(--muted);")
 
 
 def render_teams(players):

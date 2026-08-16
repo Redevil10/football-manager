@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1E3A5F"/>
-      <stop offset="100%" stop-color="#0B1728"/>
+      <stop offset="0%" stop-color="#0066cc"/>
+      <stop offset="100%" stop-color="#004499"/>
     </linearGradient>
     <linearGradient id="ball" x1="30%" y1="20%" x2="70%" y2="80%">
       <stop offset="0%" stop-color="#ffffff"/>
@@ -13,6 +13,11 @@
   <!-- Rounded square background -->
   <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="url(#bg)"/>
 
+  <!-- The wordmark used to sit under the drawing, so the ball and clipboard
+       were pitched high and left to fill only the top of the tile. With it
+       gone this recentres them on the plate (their own centre is y=237.5, the
+       plate's is 256) and takes up some of the freed room. -->
+  <g transform="translate(256, 256) scale(1.15) translate(-256, -237.5)">
   <!-- Football / soccer ball -->
   <circle cx="256" cy="200" r="120" fill="url(#ball)" stroke="#cccccc" stroke-width="2"/>
 
@@ -59,10 +64,8 @@
   <line x1="216" y1="360" x2="260" y2="360" stroke="#ccc" stroke-width="2"/>
 
   <!-- Checkmarks on clipboard -->
-  <polyline points="218,298 224,304 234,292" fill="none" stroke="#C8873C" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <polyline points="218,318 224,324 234,312" fill="none" stroke="#C8873C" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <polyline points="218,338 224,344 234,332" fill="none" stroke="#C8873C" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-
-  <!-- "FM" text at bottom with clear space -->
-  <text x="256" y="462" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="52" font-weight="900" fill="white" letter-spacing="8">FM</text>
+  <polyline points="218,298 224,304 234,292" fill="none" stroke="#0066cc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="218,318 224,324 234,312" fill="none" stroke="#0066cc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="218,338 224,344 234,332" fill="none" stroke="#0066cc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>

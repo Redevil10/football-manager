@@ -203,7 +203,8 @@ button,
 a.btn-danger,
 a.btn-secondary,
 a.btn-success,
-a.btn-outline {
+a.btn-outline,
+a.btn-delete {
     display: inline-block;
     padding: 9px 18px;
     border-radius: 5px;
@@ -239,6 +240,99 @@ button:hover { background: var(--navy-dark); }
 }
 
 .btn-outline:hover { background: var(--navy-tint); color: var(--navy); }
+
+/* Deleting is irreversible and is never why anyone opened the page, so it does
+   not get a filled red button sitting next to the action they came for. It is
+   grey until you reach for it, and it lives alone in a .danger-zone at the foot
+   of the page rather than in the button group up top. The element selectors are
+   needed to out-specify the bare `button` colour rule above. */
+a.btn-delete,
+button.btn-delete {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+a.btn-delete:hover,
+button.btn-delete:hover {
+    background: transparent;
+    color: var(--danger);
+    border-color: var(--danger);
+}
+
+/* Separates the delete from whatever the page's real content was. */
+.danger-zone {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+}
+
+/* For deletes that sit in a row rather than at the foot of a page (a match
+   event, a recording link). Same idea as .btn-delete without the box. */
+a.link-delete,
+button.link-delete {
+    display: inline;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+a.link-delete:hover,
+button.link-delete:hover {
+    background: none;
+    color: var(--danger);
+}
+
+/* The confirmation page. Deliberately plain: the name of the thing is the only
+   thing worth reading, and Cancel comes first because it is the likelier
+   answer. */
+.confirm-delete {
+    max-width: 520px;
+}
+
+.confirm-delete-name {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0 0 4px;
+}
+
+.confirm-delete-context {
+    color: var(--muted);
+    margin: 0 0 4px;
+}
+
+.confirm-delete-warning {
+    color: var(--danger);
+    font-weight: 600;
+    margin: 16px 0 20px;
+}
+
+/* Same slot as the warning above, for the one action here that is reversible.
+   Archiving a player does not deserve red. */
+.confirm-delete-note {
+    color: var(--muted);
+    margin: 16px 0 20px;
+}
+
+/* A state a page is in, said once at the top -- not an error and not an
+   action. Amber because it is a condition to notice, not a problem. */
+.notice {
+    background: var(--amber-tint);
+    border-left: 3px solid var(--amber);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    color: var(--ink);
+}
 
 .btn-group {
     display: flex;
@@ -286,6 +380,25 @@ button:hover { background: var(--navy-dark); }
     flex-wrap: wrap;
     gap: 10px 20px;
     margin-bottom: 15px;
+}
+
+/* Sits above a table it filters. */
+.table-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.table-toolbar input {
+    flex: 1 1 220px;
+}
+
+.table-toolbar-count {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    white-space: nowrap;
 }
 
 /* Recent matches: a row per match inside one card, not a card per match. */
@@ -359,6 +472,40 @@ button:hover { background: var(--navy-dark); }
     margin-top: 15px;
 }
 
+/* A table with several columns of real text will not fit a phone. Let it
+   scroll inside its own box rather than pushing the whole page sideways. */
+.table-scroll {
+    overflow-x: auto;
+}
+
+/* A checkbox column. The header has to be centred too, or it sits over the
+   left edge of the column while the tick sits in the middle of it. */
+.player-table .col-tick {
+    width: 90px;
+    text-align: center;
+}
+
+/* One line of guidance above a form, in the muted voice of the rest of the
+   page rather than as another paragraph of body text. */
+.form-hint {
+    color: var(--muted);
+    margin: 0 0 15px;
+}
+
+/* Times and places are context, not what you scan a fixture list for. */
+.player-table .col-quiet {
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+/* The score is the one number in the row, so it gets the weight and stays on
+   one line -- "3 : 2" wrapping mid-colon reads as two separate cells. */
+.player-table .col-score-line {
+    white-space: nowrap;
+    font-weight: 600;
+    color: var(--navy);
+}
+
 .player-table th {
     background: var(--surface);
     padding: 12px;
@@ -395,9 +542,10 @@ button:hover { background: var(--navy-dark); }
 
 /* Row actions are compact controls. Links and the real submit button share one
    shape here, otherwise a row mixes a small flat link with a full-size
-   uppercase button and reads as two different control styles. */
-.player-row-actions a,
-.player-row-actions button {
+   uppercase button and reads as two different control styles. Scoped off
+   .link-delete, which is deliberately not a button shape. */
+.player-row-actions a:not(.link-delete),
+.player-row-actions button:not(.link-delete) {
     /* The display face is for full-size buttons; at this size it would set the
        row's one real <button> apart from the links beside it. */
     font-family: var(--font-body);
@@ -414,21 +562,9 @@ button:hover { background: var(--navy-dark); }
     transition: background 0.2s;
 }
 
-.player-row-actions a:hover,
-.player-row-actions button:hover {
+.player-row-actions a:not(.link-delete):hover,
+.player-row-actions button:not(.link-delete):hover {
     background: var(--navy-dark);
-}
-
-/* Scoped past `.player-row-actions button` above, which would otherwise
-   out-specify the plain .btn-danger colour and turn delete navy. */
-.player-row-actions a.delete,
-.player-row-actions .btn-danger {
-    background: var(--danger);
-}
-
-.player-row-actions a.delete:hover,
-.player-row-actions .btn-danger:hover {
-    background: var(--danger-dark);
 }
 
 .attr-grid {
@@ -1164,6 +1300,16 @@ button:hover { background: var(--navy-dark); }
     padding: 10px 12px;
     background: #F9E9E9;
     border: 1px solid #EBC5C5;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.auth-success {
+    color: var(--success-dark);
+    margin-bottom: 15px;
+    padding: 10px 12px;
+    background: #E9F3EE;
+    border: 1px solid #C4DFD1;
     border-radius: 4px;
     font-size: 13px;
 }

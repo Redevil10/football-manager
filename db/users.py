@@ -18,6 +18,7 @@ def create_user(
     password_salt: str,
     email: Optional[str] = None,
     is_superuser: bool = False,
+    created_by: Optional[int] = None,
 ) -> Optional[int]:
     """Create a new user.
 
@@ -27,6 +28,8 @@ def create_user(
         password_salt: Password salt
         email: Optional email address
         is_superuser: Whether user is a superuser (default: False)
+        created_by: ID of the user registering this account. None where there
+            is no one to credit, such as a seed or a first superuser.
 
     Returns:
         int: User ID on success
@@ -35,13 +38,14 @@ def create_user(
     try:
         with db_transaction("create_user") as conn:
             cursor = conn.execute(
-                "INSERT INTO users (username, email, password_hash, password_salt, is_superuser) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO users (username, email, password_hash, password_salt, is_superuser, created_by) VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     username,
                     email,
                     password_hash,
                     password_salt,
                     1 if is_superuser else 0,
+                    created_by,
                 ),
             )
             user_id = cursor.lastrowid
@@ -126,6 +130,21 @@ def get_user_club_ids(user_id: int) -> list[int]:
     ).fetchall()
     conn.close()
     return [row["club_id"] for row in club_ids]
+
+
+def count_members_in_club(club_id: int) -> int:
+    """How many users are attached to this club.
+
+    Used by the delete guard: a club's membership rows are not removed with it,
+    so they would be left pointing at a club that is gone.
+    """
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM user_clubs WHERE club_id = ?", (club_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
 
 
 def add_user_to_club(user_id: int, club_id: int, role: str) -> bool:
@@ -244,8 +263,13 @@ def get_all_users() -> list[dict]:
         list[dict]: List of all user dictionaries
     """
     conn = get_db()
+    # Self-join: created_by points at another row in this same table.
     users = conn.execute(
-        "SELECT id, username, email, is_superuser, created_at, last_login FROM users ORDER BY created_at DESC"
+        """SELECT u.id, u.username, u.email, u.is_superuser, u.created_at,
+                  u.last_login, u.created_by, c.username AS created_by_username
+             FROM users u
+             LEFT JOIN users c ON u.created_by = c.id
+            ORDER BY u.created_at DESC"""
     ).fetchall()
     conn.close()
     return [dict(user) for user in users]
@@ -398,3 +422,36 @@ def update_user_superuser_status(user_id: int, is_superuser: bool) -> bool:
             exc_info=True,
         )
         return False
+
+
+def get_club_staff() -> dict[int, dict[str, list[str]]]:
+    """The admins and managers of every club, keyed by club id.
+
+    One query rather than walking every user for every club: the clubs list
+    renders a row per club and would otherwise be quadratic in the number of
+    accounts.
+
+    Viewers are left out. They are the default and the common case, so listing
+    them would say nothing about who actually runs a club.
+
+    Returns:
+        dict[int, dict[str, list[str]]]: club id -> {"admin": [...],
+            "manager": [...]}, each list of usernames in alphabetical order.
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT uc.club_id, uc.role, u.username
+                 FROM user_clubs uc
+                 JOIN users u ON uc.user_id = u.id
+                WHERE uc.role IN ('admin', 'manager')
+                ORDER BY u.username"""
+        ).fetchall()
+    finally:
+        conn.close()
+
+    staff: dict[int, dict[str, list[str]]] = {}
+    for row in rows:
+        club = staff.setdefault(row["club_id"], {"admin": [], "manager": []})
+        club[row["role"]].append(row["username"])
+    return staff

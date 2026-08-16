@@ -4,7 +4,7 @@ from urllib.parse import parse_qs
 
 from fasthtml.common import *
 
-from core.auth import escape_js_string, get_current_user, get_user_accessible_club_ids
+from core.auth import get_current_user, get_user_accessible_club_ids
 from core.config import USER_ROLES, VALID_ROLES
 from core.error_handling import handle_db_result, handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
@@ -20,7 +20,7 @@ from db.users import (
     update_user_club_role,
     update_user_superuser_status,
 )
-from render.common import render_head, render_navbar
+from render.common import confirm_delete_link, render_head, render_navbar
 
 logger = logging.getLogger(__name__)
 
@@ -219,46 +219,15 @@ def render_users_list(users, current_user=None):
             else:
                 clubs_display = "—"
 
-        # Check permissions
-        can_edit = can_user_edit_target_user(current_user, user)
-        can_delete = can_user_delete_target_user(current_user, user)
-
+        # No actions column: the name opens the user, and view, edit and delete
+        # all live on that page.
         rows.append(
             Tr(
-                Td(username),
+                Td(A(username, href=f"/users/{user_id}")),
                 Td(clubs_display),
+                Td(user.get("created_by_username") or "—"),
                 Td(created_display),
                 Td(last_login_display),
-                Td(
-                    Div(cls="player-row-actions")(
-                        A(
-                            "View",
-                            href=f"/users/{user_id}",
-                        ),
-                        can_edit
-                        and A(
-                            "Edit",
-                            href=f"/users/{user_id}/edit",
-                        )
-                        or "",
-                        can_delete
-                        and Form(
-                            method="POST",
-                            action=f"/users/{user_id}/delete",
-                            style="display: inline;",
-                            **{
-                                "onsubmit": f"return confirm('Are you sure you want to delete user {escape_js_string(username)}? This action cannot be undone.');"
-                            },
-                        )(
-                            Button(
-                                "Delete",
-                                type="submit",
-                                cls="btn-danger",
-                            )
-                        )
-                        or "",
-                    )
-                ),
             )
         )
 
@@ -267,9 +236,9 @@ def render_users_list(users, current_user=None):
             Tr(
                 Th("Username"),
                 Th("Clubs"),
+                Th("Created By"),
                 Th("Created At"),
                 Th("Last Login"),
-                Th("Actions"),
             )
         ),
         Tbody(*rows),
@@ -309,36 +278,24 @@ def register_user_routes(rt, STYLE):
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
-                    H2("User Management"),
-                    error_msg
-                    and P(
-                        error_msg.replace("+", " "),
-                        style="color: red; margin-bottom: 15px; padding: 10px; background: #fee; border: 1px solid #fcc; border-radius: 4px;",
-                    )
-                    or "",
-                    success_msg
-                    and P(
-                        success_msg.replace("+", " "),
-                        style="color: green; margin-bottom: 15px; padding: 10px; background: #efe; border: 1px solid #cfc; border-radius: 4px;",
-                    )
-                    or "",
-                    can_create
-                    and Div(cls="container-white", style="margin-bottom: 20px;")(
-                        H3("Create New User"),
-                        P(
-                            "Create a new user account and assign them to a club.",
-                            style="color: #666; margin-bottom: 15px;",
+                    # The action sits beside the heading, as on the players
+                    # page. It used to have a card of its own holding a title,
+                    # a sentence and one link.
+                    Div(cls="section-header")(
+                        H2(f"Users ({len(visible_users)})", style="margin: 0;"),
+                        (
+                            A("Create User", href="/register", cls="btn-success")
+                            if can_create
+                            else ""
                         ),
-                        A(
-                            "Create New User",
-                            href="/register",
-                            cls="btn-success",
-                            style="padding: 10px 20px; text-decoration: none; display: inline-block;",
-                        ),
-                    )
-                    or "",
-                    H3("Users"),
-                    render_users_list(visible_users, user),
+                    ),
+                    P(error_msg.replace("+", " "), cls="auth-error")
+                    if error_msg
+                    else "",
+                    P(success_msg.replace("+", " "), cls="auth-success")
+                    if success_msg
+                    else "",
+                    Div(cls="container-white")(render_users_list(visible_users, user)),
                 ),
             ),
         )
@@ -379,6 +336,7 @@ def register_user_routes(rt, STYLE):
 
         # Check permissions
         can_edit = can_user_edit_target_user(user, target_user)
+        can_delete = can_user_delete_target_user(user, target_user)
         is_own_profile = user.get("id") == user_id
 
         return Html(
@@ -573,6 +531,13 @@ def register_user_routes(rt, STYLE):
                                 style="color: #666; padding: 10px;",
                             )
                         ),
+                    ),
+                    (
+                        Div(cls="danger-zone")(
+                            confirm_delete_link("user", user_id, "Delete User")
+                        )
+                        if can_delete
+                        else ""
                     ),
                 ),
             ),

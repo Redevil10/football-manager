@@ -457,3 +457,33 @@ class TestManyToManyRelationship:
         # Verify Club 3 is in League 2 and 3
         leagues = get_leagues_for_club(sample_clubs["club3_id"])
         assert len(leagues) == 2
+
+
+class TestCountClubsByLeague:
+    """The leagues list shows how many clubs are in each."""
+
+    def test_counts_clubs_per_league(self, temp_db):
+        from db.club_leagues import add_club_to_league, count_clubs_by_league
+        from db.clubs import create_club
+        from db.leagues import create_league
+
+        busy = create_league("Busy League")
+        quiet = create_league("Quiet League")
+        create_league("Empty League")
+        for name in ("A", "B", "C"):
+            add_club_to_league(create_club(name), busy)
+        add_club_to_league(create_club("D"), quiet)
+
+        counts = count_clubs_by_league()
+
+        assert counts[busy] == 3
+        assert counts[quiet] == 1
+
+    def test_a_league_with_no_clubs_is_absent(self, temp_db):
+        """Callers read this with a default of 0 rather than expecting a key."""
+        from db.club_leagues import count_clubs_by_league
+        from db.leagues import create_league
+
+        empty = create_league("Empty League")
+
+        assert count_clubs_by_league().get(empty, 0) == 0

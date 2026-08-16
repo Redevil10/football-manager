@@ -23,17 +23,19 @@ from core.error_handling import handle_db_result, handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
 from core.validation import validate_non_empty_string
 from db import (
+    count_player_appearances,
     delete_player,
     find_player_by_name_or_alias,
     get_all_players,
     reset_teams,
+    set_player_active,
     swap_match_players,
     swap_players,
     update_player_attrs,
     update_player_height_weight,
     update_player_name,
 )
-from db.players import add_player
+from db.players import add_player, add_player_with_score
 from logic import (
     adjust_category_attributes_by_single_attr,
     allocate_teams,
@@ -51,6 +53,7 @@ from logic import (
 )
 from render import (
     render_add_player_form,
+    render_archived_players,
     render_navbar,
     render_player_detail_form,
     render_player_table,
@@ -69,6 +72,20 @@ def _player_url(player_id, back=None):
     return url
 
 
+def _can_add_player(user):
+    """Whether this user may add players anywhere they can reach.
+
+    Superusers always may; everyone else needs manager rights in at least one
+    of their clubs.
+    """
+    if user.get("is_superuser"):
+        return True
+    return any(
+        check_club_permission(user, cid, USER_ROLES["MANAGER"])
+        for cid in get_user_accessible_club_ids(user)
+    )
+
+
 def register_player_routes(rt, STYLE):
     """Register player-related routes"""
 
@@ -80,30 +97,46 @@ def register_player_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         club_ids = get_user_club_ids_from_request(req, sess)
-        players = get_all_players(club_ids)
+        everyone = get_all_players(club_ids, include_archived=True)
+        players = [p for p in everyone if p.get("active") != 0]
+        archived = [p for p in everyone if p.get("active") == 0]
         sorted_players = sorted(
             players, key=lambda x: calculate_player_overall(x), reverse=True
         )
 
-        # Check if user can add players (manager or superuser)
-        can_add_player = False
-        if user.get("is_superuser"):
-            can_add_player = True
-        else:
-            accessible_club_ids = get_user_accessible_club_ids(user)
-            can_add_player = any(
-                check_club_permission(user, cid, USER_ROLES["MANAGER"])
-                for cid in accessible_club_ids
-            )
+        can_add_player = _can_add_player(user)
 
         return Html(
             render_head("All Players - Football Manager", STYLE),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
-                    H2(f"All Players ({len(players)})"),
-                    render_add_player_form(error) if can_add_player else "",
-                    Div(cls="container-white")(render_player_table(sorted_players)),
+                    Div(cls="section-header")(
+                        H2(f"All Players ({len(players)})", style="margin: 0;"),
+                        (
+                            A("Add Player", href="/add_player", cls="btn-success")
+                            if can_add_player
+                            else ""
+                        ),
+                    ),
+                    Div(cls="container-white")(
+                        render_player_table(sorted_players, searchable=True)
+                    ),
+                    # Folded away, and absent entirely when nothing is archived:
+                    # this is a place you go looking for someone, not something
+                    # the squad list should carry every day.
+                    (
+                        Details(
+                            Summary(
+                                f"Archived ({len(archived)})", cls="section-summary"
+                            ),
+                            render_archived_players(archived),
+                            cls="container-white section-collapsible",
+                            style="margin-top: 20px;",
+                        )
+                        if archived
+                        else ""
+                    ),
                 ),
             ),
         )
@@ -149,7 +182,9 @@ def register_player_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         club_ids = get_user_club_ids_from_request(req, sess)
-        players = {p["id"]: p for p in get_all_players(club_ids)}
+        # Archived players keep their page: it is where you go to restore one,
+        # and every past line-up still links here.
+        players = {p["id"]: p for p in get_all_players(club_ids, include_archived=True)}
         player = players.get(player_id)
 
         if not player:
@@ -209,6 +244,27 @@ def register_player_routes(rt, STYLE):
 
         return RedirectResponse("/players", status_code=303)
 
+    @rt("/add_player")
+    def add_player_page(req: Request = None, error: str = None, sess=None):
+        """The form for adding a player."""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        if not _can_add_player(user):
+            return RedirectResponse("/players", status_code=303)
+
+        return Html(
+            render_head("Add Player - Football Manager", STYLE),
+            Body(
+                render_navbar(user, sess, req.url.path if req else "/"),
+                Div(cls="container")(
+                    H2("Add Player"),
+                    render_add_player_form(error),
+                ),
+            ),
+        )
+
     @rt("/add_player", methods=["POST"])
     async def route_add_player(req: Request, sess=None):
         """Add single player"""
@@ -242,37 +298,76 @@ def register_player_routes(rt, STYLE):
         try:
             form = await req.form()
             name = form.get("name", "").strip()
+            alias = form.get("alias", "").strip()
+            position_pref = form.get("position_pref", "").strip()
+
+            def whole_number(field):
+                """A blank box means "not known", which is not the same as 0."""
+                raw = form.get(field, "").strip()
+                if not raw:
+                    return None
+                try:
+                    return int(raw)
+                except ValueError:
+                    raise ValidationError(field, f"{field} must be a whole number")
+
+            height = whole_number("height")
+            weight = whole_number("weight")
+            overall = whole_number("score_overall")
 
             # Validate player name
             is_valid, error_msg = validate_non_empty_string(name, "Player name")
             if not is_valid:
                 raise ValidationError("name", error_msg)
 
-            # Check if name matches an existing player's name or alias (within the same club)
-            existing_player = find_player_by_name_or_alias(name)
-            if existing_player and existing_player.get("club_id") == target_club_id:
-                if (
-                    existing_player.get("alias") == name
-                    and existing_player.get("name") != name
-                ):
+            # Scoped to the club being added to. Searching every club and then
+            # comparing club_id afterwards looked equivalent but was not: the
+            # lookup matches names before aliases, so another club's player with
+            # this exact name won, failed the club comparison, and hid a genuine
+            # alias collision in the club we are actually writing to.
+            existing_player = find_player_by_name_or_alias(name, [target_club_id])
+            if existing_player:
+                if existing_player.get("name") != name:
                     error_msg = f"Name '{name}' matches an existing player's alias (Player: {existing_player.get('name')})"
                 else:
                     error_msg = f"Player name '{name}' already exists in this club"
                 raise ValidationError("name", error_msg)
 
-            # Add player with club_id
-            player_id = add_player(name, club_id=target_club_id)
+            # An overall score seeds every attribute, so a player can be entered
+            # at roughly the right standard instead of at random.
+            if overall is None:
+                player_id = add_player(
+                    name,
+                    club_id=target_club_id,
+                    position_pref=position_pref,
+                    alias=alias or None,
+                    created_by=user["id"],
+                )
+            else:
+                player_id = add_player_with_score(
+                    name,
+                    club_id=target_club_id,
+                    overall_score=overall,
+                    position_pref=position_pref,
+                    alias=alias or None,
+                    created_by=user["id"],
+                )
+
+            if player_id and (height is not None or weight is not None):
+                update_player_height_weight(player_id, height=height, weight=weight)
+            # Land on the new player so their details can be filled in straight
+            # away, which is the point of having come here to add them.
             return handle_db_result(
                 player_id,
-                "/players",
-                error_redirect="/players",
+                f"/player/{player_id}" if player_id else "/players",
+                error_redirect="/add_player",
                 error_message="Failed to add player",
                 check_none=True,
             )
         except ValidationError as e:
-            return handle_route_error(e, "/players")
+            return handle_route_error(e, "/add_player")
         except Exception as e:
-            return handle_route_error(e, "/players")
+            return handle_route_error(e, "/add_player")
 
     @rt("/update_player_name/{player_id}", methods=["POST"])
     async def route_update_player_name(player_id: int, req: Request, sess=None):
@@ -591,30 +686,82 @@ def register_player_routes(rt, STYLE):
             check_false=True,
         )
 
-    @rt("/delete_player/{player_id}", methods=["GET", "POST"])
+    # POST only: the GET form of this was a URL that deleted a player when
+    # anything merely fetched it. Nothing links to it that way any more -- the
+    # only route in is the confirmation page's form.
+    @rt("/delete_player/{player_id}", methods=["POST"])
     def route_delete_player(player_id: int, req: Request = None, sess=None):
-        """Delete player"""
+        """Take a player off the books: archive them, or delete if brand new.
+
+        Deleting someone who has played would take them out of every past
+        line-up as well -- ``match_players`` holds only an id, so their name
+        goes with the row -- so anyone with appearances is archived. Which of
+        the two is happening is what the confirmation page says.
+        """
         user = get_current_user(req, sess)
         if not user:
             return RedirectResponse("/login", status_code=303)
 
         # Check authorization
         club_ids = get_user_club_ids_from_request(req, sess)
-        players = {p["id"]: p for p in get_all_players(club_ids)}
+        players = {p["id"]: p for p in get_all_players(club_ids, include_archived=True)}
         player = players.get(player_id)
 
         if not player:
-            raise NotFoundError("player", resource_id=player_id)
+            return handle_route_error(
+                NotFoundError("player", resource_id=player_id), "/players"
+            )
 
+        # Handled rather than raised: nothing catches these on the way out, so
+        # a manager who tries this used to get a 500 instead of being told no.
         if not can_user_delete(user, player.get("club_id")):
-            raise PermissionError("delete", resource=f"player {player_id}")
+            return handle_route_error(
+                PermissionError("delete", resource=f"player {player_id}"),
+                _player_url(player_id),
+            )
 
-        success = delete_player(player_id)
+        if count_player_appearances(player_id):
+            success = set_player_active(player_id, False)
+            message, failure = "Player+archived", "Failed to archive player"
+        else:
+            success = delete_player(player_id)
+            message, failure = "Player+deleted", "Failed to delete player"
+
         return handle_db_result(
             success,
-            "/players",
+            f"/players?success={message}",
             error_redirect="/players",
-            error_message="Failed to delete player",
+            error_message=failure,
+            check_false=True,
+        )
+
+    @rt("/restore_player/{player_id}", methods=["POST"])
+    def route_restore_player(player_id: int, req: Request = None, sess=None):
+        """Bring an archived player back into the squad."""
+        user = get_current_user(req, sess)
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+
+        club_ids = get_user_club_ids_from_request(req, sess)
+        players = {p["id"]: p for p in get_all_players(club_ids, include_archived=True)}
+        player = players.get(player_id)
+
+        if not player:
+            return handle_route_error(
+                NotFoundError("player", resource_id=player_id), "/players"
+            )
+
+        if not can_user_delete(user, player.get("club_id")):
+            return handle_route_error(
+                PermissionError("restore", resource=f"player {player_id}"),
+                _player_url(player_id),
+            )
+
+        return handle_db_result(
+            set_player_active(player_id, True),
+            "/players?success=Player+restored",
+            error_redirect="/players",
+            error_message="Failed to restore player",
             check_false=True,
         )
 

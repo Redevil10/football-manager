@@ -35,11 +35,12 @@ class TestRenderHead:
         html = to_xml(head)
         assert "https://unpkg.com/htmx.org" in html
 
-    def test_render_head_includes_favicon(self):
-        """render_head should include a favicon link"""
+    def test_render_head_points_the_tab_icon_at_the_logo(self):
+        """One asset serves as both logo and tab icon, so they cannot drift."""
         head = render_head("Test", "body{}")
         html = to_xml(head)
-        assert "favicon.svg" in html
+        assert 'rel="icon"' in html
+        assert "/static/logo.svg" in html
 
     def test_render_head_with_extra_scripts(self):
         """render_head should include extra elements passed via *extra"""

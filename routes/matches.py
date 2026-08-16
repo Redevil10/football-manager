@@ -21,6 +21,7 @@ from db import (
     add_match_event,
     add_match_player,
     add_match_recording,
+    add_player_alias,
     create_match,
     create_match_team,
     delete_match,
@@ -69,6 +70,7 @@ from render import (
     render_navbar,
 )
 from render.common import is_match_completed, render_head
+from render.matches import can_user_create_match
 
 logger = logging.getLogger(__name__)
 
@@ -152,10 +154,15 @@ def register_match_routes(rt, STYLE):
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
-                    H2("All Matches"),
-                    P(
-                        "View all matches across all leagues. Click on a match to see details.",
-                        style="color: #666; margin-bottom: 20px;",
+                    # The action sits beside the heading, as on every other
+                    # list page; it used to have a card of its own.
+                    Div(cls="section-header")(
+                        H2(f"All Matches ({len(matches)})", style="margin: 0;"),
+                        (
+                            A("Create Match", href="/create_match", cls="btn-success")
+                            if can_user_create_match(user)
+                            else ""
+                        ),
                     ),
                     render_all_matches(matches, user),
                 ),
@@ -1674,7 +1681,8 @@ def register_match_routes(rt, STYLE):
                                     A(
                                         "Remove",
                                         href=f"/remove_match_player/{p['id']}",
-                                        style="color: #dc3545; margin-left: 10px;",
+                                        cls="link-delete",
+                                        style="margin-left: 10px;",
                                         **{
                                             "onclick": "return confirm('Remove this player?');"
                                         },
@@ -2099,7 +2107,9 @@ def register_match_routes(rt, STYLE):
 
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
-    @rt("/delete_match_event/{event_id}")
+    # POST only: as a GET route this was a URL that destroyed an event when
+    # anything merely fetched it -- a link prefetch, a crawler, a shared link.
+    @rt("/delete_match_event/{event_id}", methods=["POST"])
     def route_delete_match_event(event_id: int, req: Request = None, sess=None):
         """Delete a match event"""
         user = get_current_user(req, sess)
@@ -2287,8 +2297,24 @@ def register_match_routes(rt, STYLE):
         if not total_rows or not club_id:
             return RedirectResponse(f"/match/{match_id}", status_code=303)
 
+        # Both the club to create players in and the players that may be picked
+        # come from the session, not the form. The form carries them, but form
+        # data is only as trustworthy as whoever posted it, and being allowed to
+        # edit this match does not make every club and player id in the database
+        # fair game -- otherwise a forged POST could hang an alias on anyone's
+        # player, or file a new one under someone else's club.
+        club_ids = get_user_club_ids_from_request(req, sess)
+        if club_id not in club_ids:
+            logger.warning(
+                f"Import for match {match_id} claimed club {club_id}, which "
+                f"user {user['id']} cannot reach -- rejected"
+            )
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
         existing = get_match_players(match_id)
         added_count = 0
+        remembered = 0
+        selectable = {p["id"] for p in get_all_players(club_ids)}
 
         for i in range(total_rows):
             # Check if this row is included (checkbox)
@@ -2308,12 +2334,31 @@ def register_match_routes(rt, STYLE):
 
                 score = int(form.get(f"score_{i}", 100))
                 player_id = add_player_with_score(
-                    extracted_name, club_id, overall_score=score
+                    extracted_name,
+                    club_id,
+                    overall_score=score,
+                    created_by=user["id"],
                 )
                 if not player_id:
                     continue
             else:
-                player_id = int(match_selection)
+                try:
+                    player_id = int(match_selection)
+                except ValueError:
+                    continue
+                if player_id not in selectable:
+                    logger.warning(
+                        f"Import for match {match_id} named player {player_id}, "
+                        f"which user {user['id']} cannot reach -- row skipped"
+                    )
+                    continue
+                # Teach the lookup the spelling this person signed up under, so
+                # the same correction is not made by hand at every match. A name
+                # the player already answers to is a no-op inside.
+                if form.get(f"remember_{i}") and add_player_alias(
+                    player_id, extracted_name
+                ):
+                    remembered += 1
 
             # Skip if player already in match
             if any(p["player_id"] == player_id for p in existing):
@@ -2330,7 +2375,8 @@ def register_match_routes(rt, STYLE):
                 added_count += 1
 
         logger.info(
-            f"Import confirmed: added {added_count} players to match {match_id}"
+            f"Import confirmed: added {added_count} players to match {match_id}, "
+            f"learned {remembered} new aliases"
         )
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
