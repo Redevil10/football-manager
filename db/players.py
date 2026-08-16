@@ -450,16 +450,26 @@ def update_player_name(player_id: int, name: str, alias: Optional[str] = None) -
 
 
 def count_player_appearances(player_id: int) -> int:
-    """How many matches this player is on the team sheet for.
+    """How many matches hold a record of this player.
 
-    Decides whether removing them archives or deletes: a player with no
-    appearances has no history to protect, and is usually a typo or a guest who
+    Decides whether removing them archives or deletes: a player with nothing
+    recorded has no history to protect, and is usually a typo or a guest who
     never came back.
+
+    Events count as well as team sheets. Taking someone off a match's signup
+    deletes their ``match_players`` row but leaves any goal they scored, so
+    counting only team sheets would call a scorer unrecorded and delete them,
+    and the goal would then name nobody.
     """
     conn = get_db()
     try:
         return conn.execute(
-            "SELECT COUNT(*) FROM match_players WHERE player_id = ?", (player_id,)
+            """SELECT COUNT(*) FROM (
+                   SELECT match_id FROM match_players WHERE player_id = ?
+                   UNION
+                   SELECT match_id FROM match_events WHERE player_id = ?
+               )""",
+            (player_id, player_id),
         ).fetchone()[0]
     finally:
         conn.close()

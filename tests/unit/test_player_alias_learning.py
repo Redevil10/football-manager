@@ -226,3 +226,45 @@ class TestTheCorrectionSticks:
 
         assert find_player_by_name_or_alias("A. Moreno", [3]) is not None
         assert find_player_by_name_or_alias("\u5c0f\u83ab", [3]) is not None
+
+
+class TestRememberDefaultsToWhatWasDecided:
+    """A tick nobody looked at should not teach the matcher anything.
+
+    An unmatched row arrives on "-- New Player --", so an existing player
+    showing there was chosen by hand. A medium-confidence row arrives already
+    pointing at the matcher's guess, and confirming the import without reading
+    it would make that guess permanent.
+    """
+
+    PLAYERS = [{"id": 1, "name": "Alex Moreno"}]
+
+    def _row(self, confidence, matched_id, matched_name):
+        return [
+            {
+                "extracted_name": "A. Moreno",
+                "matched_player_id": matched_id,
+                "matched_player_name": matched_name,
+                "confidence": confidence,
+            }
+        ]
+
+    def test_a_hand_picked_row_is_ticked(self):
+        html = to_xml(
+            render_import_confirmation(
+                5, self._row("none", None, None), self.PLAYERS, 3
+            )
+        )
+
+        assert 'name="remember_0"' in html
+        assert "checked" in html.split('name="remember_0"')[1][:40]
+
+    def test_a_guess_is_offered_but_not_ticked(self):
+        html = to_xml(
+            render_import_confirmation(
+                5, self._row("medium", 1, "Alex Moreno"), self.PLAYERS, 3
+            )
+        )
+
+        assert 'name="remember_0"' in html
+        assert "checked" not in html.split('name="remember_0"')[1][:40]

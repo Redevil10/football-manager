@@ -184,3 +184,76 @@ class TestDeletingAClub:
 
         assert "2 players" in page.text
         assert f'action="/delete_club/{world["club_id"]}"' not in page.text
+
+
+class TestTheImportDoesNotTrustTheForm:
+    """The dropdown values are form data; being able to edit a match is not a
+    licence to name any player id in the database."""
+
+    def test_a_player_from_another_club_is_skipped(self, world):  # noqa: F811
+        from db.clubs import create_club
+        from db.players import add_player, split_aliases
+        from db.players import get_all_players as all_players
+
+        other_club = create_club("Someone Else FC", "")
+        outsider = add_player("Not Yours", other_club)
+
+        # A forged POST naming a player the actor cannot reach.
+        sign_in("boss")  # seeds nothing; the manager below is the actor
+        client = sign_in("coach")
+        client.post(
+            f"/confirm_import/{world['match_id']}",
+            data={
+                "total_rows": "1",
+                "club_id": str(world["club_id"]),
+                "include_0": "1",
+                "name_0": "Hijack",
+                "match_0": str(outsider),
+                "remember_0": "1",
+            },
+            follow_redirects=False,
+        )
+
+        theirs = {p["id"]: p for p in all_players(include_archived=True)}[outsider]
+        assert split_aliases(theirs.get("alias")) == []
+
+    def test_a_club_the_actor_cannot_reach_is_rejected(self, world):  # noqa: F811
+        from db.clubs import create_club
+
+        other_club = create_club("Someone Else FC", "")
+        before = player_names(include_archived=True)
+
+        sign_in("coach").post(
+            f"/confirm_import/{world['match_id']}",
+            data={
+                "total_rows": "1",
+                "club_id": str(other_club),
+                "include_0": "1",
+                "name_0": "Planted",
+                "match_0": "new",
+                "score_0": "100",
+            },
+            follow_redirects=False,
+        )
+
+        assert player_names(include_archived=True) == before
+
+    def test_a_player_in_reach_still_works(self, world):  # noqa: F811
+        from db.players import get_all_players as all_players
+        from db.players import split_aliases
+
+        sign_in("coach").post(
+            f"/confirm_import/{world['match_id']}",
+            data={
+                "total_rows": "1",
+                "club_id": str(world["club_id"]),
+                "include_0": "1",
+                "name_0": "The Vet",
+                "match_0": str(world["veteran"]),
+                "remember_0": "1",
+            },
+            follow_redirects=False,
+        )
+
+        vet = {p["id"]: p for p in all_players(include_archived=True)}[world["veteran"]]
+        assert "The Vet" in split_aliases(vet.get("alias"))

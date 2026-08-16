@@ -10,6 +10,7 @@ from starlette.testclient import TestClient
 
 from core.auth import hash_password
 from core.config import USER_ROLES
+from db.club_leagues import add_club_to_league
 from db.clubs import create_club
 from db.leagues import create_league
 from db.match_players import add_match_player
@@ -39,6 +40,10 @@ def world(temp_db):
     """
     club_id = create_club("Test Club", "A club for tests")
     league_id = create_league("Test League", "")
+    # Without this the club's managers fail can_user_edit_match, and any test
+    # aimed at something further inside a match route passes because it never
+    # got there.
+    add_club_to_league(club_id, league_id)
 
     match_id = create_match(
         league_id, "2020-01-01", "14:00:00", "16:00:00", "Test Park", 2, 11

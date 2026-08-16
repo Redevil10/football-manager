@@ -320,9 +320,13 @@ def register_player_routes(rt, STYLE):
             if not is_valid:
                 raise ValidationError("name", error_msg)
 
-            # Check if name matches an existing player's name or alias (within the same club)
-            existing_player = find_player_by_name_or_alias(name)
-            if existing_player and existing_player.get("club_id") == target_club_id:
+            # Scoped to the club being added to. Searching every club and then
+            # comparing club_id afterwards looked equivalent but was not: the
+            # lookup matches names before aliases, so another club's player with
+            # this exact name won, failed the club comparison, and hid a genuine
+            # alias collision in the club we are actually writing to.
+            existing_player = find_player_by_name_or_alias(name, [target_club_id])
+            if existing_player:
                 if existing_player.get("name") != name:
                     error_msg = f"Name '{name}' matches an existing player's alias (Player: {existing_player.get('name')})"
                 else:

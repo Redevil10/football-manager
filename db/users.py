@@ -132,6 +132,21 @@ def get_user_club_ids(user_id: int) -> list[int]:
     return [row["club_id"] for row in club_ids]
 
 
+def count_members_in_club(club_id: int) -> int:
+    """How many users are attached to this club.
+
+    Used by the delete guard: a club's membership rows are not removed with it,
+    so they would be left pointing at a club that is gone.
+    """
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM user_clubs WHERE club_id = ?", (club_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
 def add_user_to_club(user_id: int, club_id: int, role: str) -> bool:
     """Add user to a club with a specific role.
 

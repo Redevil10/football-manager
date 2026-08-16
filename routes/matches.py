@@ -2297,9 +2297,24 @@ def register_match_routes(rt, STYLE):
         if not total_rows or not club_id:
             return RedirectResponse(f"/match/{match_id}", status_code=303)
 
+        # Both the club to create players in and the players that may be picked
+        # come from the session, not the form. The form carries them, but form
+        # data is only as trustworthy as whoever posted it, and being allowed to
+        # edit this match does not make every club and player id in the database
+        # fair game -- otherwise a forged POST could hang an alias on anyone's
+        # player, or file a new one under someone else's club.
+        club_ids = get_user_club_ids_from_request(req, sess)
+        if club_id not in club_ids:
+            logger.warning(
+                f"Import for match {match_id} claimed club {club_id}, which "
+                f"user {user['id']} cannot reach -- rejected"
+            )
+            return RedirectResponse(f"/match/{match_id}", status_code=303)
+
         existing = get_match_players(match_id)
         added_count = 0
         remembered = 0
+        selectable = {p["id"] for p in get_all_players(club_ids)}
 
         for i in range(total_rows):
             # Check if this row is included (checkbox)
@@ -2319,12 +2334,24 @@ def register_match_routes(rt, STYLE):
 
                 score = int(form.get(f"score_{i}", 100))
                 player_id = add_player_with_score(
-                    extracted_name, club_id, overall_score=score
+                    extracted_name,
+                    club_id,
+                    overall_score=score,
+                    created_by=user["id"],
                 )
                 if not player_id:
                     continue
             else:
-                player_id = int(match_selection)
+                try:
+                    player_id = int(match_selection)
+                except ValueError:
+                    continue
+                if player_id not in selectable:
+                    logger.warning(
+                        f"Import for match {match_id} named player {player_id}, "
+                        f"which user {user['id']} cannot reach -- row skipped"
+                    )
+                    continue
                 # Teach the lookup the spelling this person signed up under, so
                 # the same correction is not made by hand at every match. A name
                 # the player already answers to is a no-op inside.

@@ -1034,8 +1034,19 @@ def render_import_confirmation(match_id, results, existing_players, club_id):
         worth_remembering = (
             extracted_name.strip().casefold() != matched_name.strip().casefold()
         )
+        # Ticked only where the row is one a person had to decide themselves.
+        # A medium-confidence row arrives already pointing at the matcher's
+        # guess; ticking that by default means confirming the import without
+        # reading it teaches a wrong alias permanently. An unmatched row
+        # defaults to "-- New Player --", so any existing player showing there
+        # was chosen by hand and is exactly what this is for.
         remember = (
-            Input(type="checkbox", name=f"remember_{i}", value="1", checked=True)
+            Input(
+                type="checkbox",
+                name=f"remember_{i}",
+                value="1",
+                checked=(confidence == "none"),
+            )
             if worth_remembering
             else Span("—", style="color: var(--muted);")
         )

@@ -22,6 +22,7 @@ from core.auth import (
     get_current_user,
     get_user_club_ids_from_request,
 )
+from db.club_leagues import get_clubs_in_league, get_leagues_for_club
 from db.clubs import get_club
 from db.leagues import get_league
 from db.matches import get_match, get_matches_by_league
@@ -30,7 +31,7 @@ from db.players import (
     count_players_in_club,
     get_all_players,
 )
-from db.users import get_user_by_id
+from db.users import count_members_in_club, get_user_by_id
 from render.common import (
     can_user_delete,
     format_match_name,
@@ -75,12 +76,12 @@ def _player_target(item_id, user, req, sess):
         "context": player.get("club_name") or "",
         "references": (
             [
-                f"Played in {appearances} match{'es' if appearances != 1 else ''}.",
+                f"Recorded in {appearances} match{'es' if appearances != 1 else ''}.",
                 "Archiving takes them out of the squad, the signup lookup and "
                 "team allocation. The matches they played keep them.",
             ]
             if archiving
-            else ["No appearances in any match."]
+            else ["Not recorded in any match."]
         ),
         "reversible": archiving,
         "action": f"/delete_player/{item_id}",
@@ -98,11 +99,8 @@ def _league_target(item_id, user, req, sess):
         "name": league["name"],
         "context": "",
         "references": [],
-        # `matches.league_id` has no ON DELETE clause, so deleting the league
-        # would leave its matches behind pointing at one that is gone -- they
-        # would resurface on /matches filed under "Friendly". Emptying the
-        # league first is the only way to make the delete lossless, so that is
-        # what this asks for.
+        # Emptying it first is the only way to make the delete lossless; see
+        # blocked_by_matches for what "empty" has to mean.
         "blocked": blocked_by_matches(item_id),
         "action": f"/delete_league/{item_id}",
         "cancel": f"/league/{item_id}",
@@ -119,9 +117,7 @@ def _club_target(item_id, user, req, sess):
         "name": club["name"],
         "context": club.get("description") or "",
         "references": [],
-        # Same shape as the league: `players.club_id` has no ON DELETE clause,
-        # and every player list filters by club, so the club's players would
-        # survive the delete with nobody able to reach them again.
+        # Same shape as the league; see blocked_by_players.
         "blocked": blocked_by_players(item_id),
         "action": f"/delete_club/{item_id}",
         "cancel": f"/club/{item_id}",
@@ -129,41 +125,68 @@ def _club_target(item_id, user, req, sess):
     }
 
 
+def _holdings(counts):
+    """Phrase the non-empty counts as "3 matches and 1 club"."""
+    parts = [
+        f"{n} {noun if n == 1 else plural}"
+        for noun, plural, n in counts
+        if n  # a zero is nothing to say
+    ]
+    if len(parts) <= 1:
+        return parts[0] if parts else ""
+    return f"{', '.join(parts[:-1])} and {parts[-1]}"
+
+
 def blocked_by_matches(league_id):
     """Why this league cannot be deleted yet, or None.
 
-    Shared with the POST route so the page and the handler cannot disagree --
-    the page is the only way in today, but a guard that only exists in the page
-    is a guard one refactor away from being gone.
+    Everything hanging off a league is checked, not only its matches. The
+    declared cascades do not fire -- nothing enables SQLite's per-connection
+    `PRAGMA foreign_keys` -- so anything still attached is left behind rather
+    than removed with it, and a club-to-league link is as orphanable as a match.
+
+    Shared with the POST route so the page and the handler cannot disagree: the
+    page is the only way in today, but a guard that only exists in the page is a
+    guard one refactor away from being gone.
     """
-    n = len(get_matches_by_league(league_id) or [])
-    if not n:
+    held = _holdings(
+        [
+            ("match", "matches", len(get_matches_by_league(league_id) or [])),
+            ("club", "clubs", len(get_clubs_in_league(league_id) or [])),
+        ]
+    )
+    if not held:
         return None
-    if n == 1:
-        return (
-            "This league has 1 match. Deleting it would leave that match with "
-            "no league. Delete or move it first."
-        )
     return (
-        f"This league has {n} matches. Deleting it would leave them with no "
-        "league. Delete or move them first."
+        f"This league still has {held}. Deleting it would leave them behind "
+        "with nothing to belong to. Remove them first."
     )
 
 
 def blocked_by_players(club_id):
-    """Why this club cannot be deleted yet, or None. See blocked_by_matches."""
-    n = count_players_in_club(club_id)
-    if not n:
+    """Why this club cannot be deleted yet, or None. See blocked_by_matches.
+
+    Its players, its members and its league entries all count: none of them are
+    removed by deleting the club, and a player left over is worse than orphaned
+    -- every squad list filters by club, so nobody can reach them again.
+    """
+    held = _holdings(
+        [
+            ("player", "players", count_players_in_club(club_id)),
+            ("member", "members", count_members_in_club(club_id)),
+            (
+                "league entry",
+                "league entries",
+                len(get_leagues_for_club(club_id) or []),
+            ),
+        ]
+    )
+    if not held:
         return None
-    if n == 1:
-        return (
-            "This club has 1 player. Deleting it would leave that player "
-            "unreachable, since every squad list is filtered by club. Move or "
-            "remove them first."
-        )
     return (
-        f"This club has {n} players. Deleting it would leave them unreachable, "
-        "since every squad list is filtered by club. Move or remove them first."
+        f"This club still has {held}. Deleting it would leave them behind, and "
+        "its players would be unreachable since every squad list is filtered by "
+        "club. Remove them first."
     )
 
 

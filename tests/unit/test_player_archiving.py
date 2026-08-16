@@ -133,17 +133,17 @@ class TestConfirmationPageChoosesTheRightVerb:
 
         assert target["verb"] == "Archive"
         assert target["reversible"] is True
-        assert "Played in 12 matches." in target["references"]
+        assert "Recorded in 12 matches." in target["references"]
 
     def test_one_appearance_reads_as_one_match(self):
-        assert "Played in 1 match." in self._target(1)["references"]
+        assert "Recorded in 1 match." in self._target(1)["references"]
 
     def test_a_player_with_no_history_is_deleted(self):
         target = self._target(0)
 
         assert target["verb"] == "Delete"
         assert target["reversible"] is False
-        assert target["references"] == ["No appearances in any match."]
+        assert target["references"] == ["Not recorded in any match."]
 
     def test_both_post_to_the_same_route(self):
         """The server decides which one happens, from the same count."""
