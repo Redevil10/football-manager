@@ -897,11 +897,18 @@ button.link-delete:hover {
     left: 10px;
     margin: 0;
     z-index: 2;
-    font-size: 14px;
+    /* Sized against the pitch, like the marker text, and capped at 40% width so
+       the label can never reach the keeper's marker, which is centred and spans
+       44%-56% of the pitch. */
+    font-size: clamp(9px, 2.6cqw, 12px);
+    max-width: 40%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-weight: 600;
     color: white;
     background: rgba(0,0,0,0.45);
-    padding: 3px 10px;
+    padding: 2px 8px;
     border-radius: 4px;
     pointer-events: none;
 }
