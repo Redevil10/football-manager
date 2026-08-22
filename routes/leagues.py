@@ -6,6 +6,7 @@ from core.auth import (
     get_current_user,
     get_user_club_ids_from_request,
 )
+from core.csrf import csrf_protect
 from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import PermissionError, ValidationError
 from core.validation import validate_non_empty_string, validate_required_int
@@ -24,7 +25,7 @@ from db.club_leagues import (
     remove_club_from_league,
 )
 from render import render_league_header, render_leagues_list, render_navbar
-from render.common import confirm_delete_link, render_head
+from render.common import confirm_delete_link, render_csrf_input, render_head
 from render.leagues import render_create_league_form, render_league_clubs
 from routes.delete_confirm import blocked_by_matches
 
@@ -68,6 +69,7 @@ def _render_public_sharing(league, req=None, can_manage=False):
     if can_manage:
         children.append(
             Form(
+                render_csrf_input(),
                 Input(type="hidden", name="is_public", value="0" if is_public else "1"),
                 Button(
                     "Make Private" if is_public else "Make Public",
@@ -168,6 +170,7 @@ def create_league_page(req: Request = None, error: str = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_create_league(req: Request, sess=None):
     """Create a new league"""
     user = get_current_user(req, sess)
@@ -269,6 +272,7 @@ def league_detail_page(league_id: int, req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_toggle_league_public(league_id: int, req: Request, sess=None):
     """Enable/disable anonymous public viewing of a league (superuser only)."""
     user = get_current_user(req, sess)
@@ -305,6 +309,7 @@ def edit_league_page(league_id: int, req: Request = None, sess=None):
                 H2(f"Edit {league['name']}"),
                 Div(cls="container-white")(
                     Form(
+                        render_csrf_input(),
                         Div(cls="input-group", style="margin-bottom: 15px;")(
                             Label(
                                 "League Name:",
@@ -345,6 +350,7 @@ def edit_league_page(league_id: int, req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_update_league(league_id: int, req: Request, sess=None):
     """Update league (superuser only)"""
     user = get_current_user(req, sess)
@@ -371,6 +377,7 @@ async def route_update_league(league_id: int, req: Request, sess=None):
         return handle_route_error(e, f"/edit_league/{league_id}")
 
 
+@csrf_protect
 def route_delete_league(league_id: int, req: Request = None, sess=None):
     """Delete a league (superuser only)"""
     user = get_current_user(req, sess)
@@ -403,6 +410,7 @@ def route_delete_league(league_id: int, req: Request = None, sess=None):
         return handle_route_error(e, "/leagues")
 
 
+@csrf_protect
 async def route_add_club_to_league(league_id: int, req: Request, sess=None):
     """Add a club to a league (superuser only)"""
     user = get_current_user(req, sess)
@@ -435,6 +443,7 @@ async def route_add_club_to_league(league_id: int, req: Request, sess=None):
         return handle_route_error(e, f"/league/{league_id}")
 
 
+@csrf_protect
 def route_remove_club_from_league(
     league_id: int, club_id: int, req: Request = None, sess=None
 ):
@@ -454,8 +463,9 @@ def register_league_routes(rt):
     """Register league-related routes"""
 
     rt("/leagues")(leagues_page)
-    rt("/create_league")(create_league_page)
+    # POST first -- see the note in routes/clubs.py.
     rt("/create_league", methods=["POST"])(route_create_league)
+    rt("/create_league")(create_league_page)
     rt("/league/{league_id}")(league_detail_page)
     rt("/toggle_league_public/{league_id}", methods=["POST"])(
         route_toggle_league_public

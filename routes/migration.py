@@ -5,9 +5,10 @@ import traceback
 from fasthtml.common import *
 
 from core.auth import get_current_user
+from core.csrf import csrf_protect
 from migrations.migrate_all import migrate_all
 from render import render_navbar
-from render.common import render_head
+from render.common import render_csrf_input, render_head
 
 
 def migration_page(req: Request = None, sess=None):
@@ -42,6 +43,7 @@ def migration_page(req: Request = None, sess=None):
                             "hx-swap": "innerHTML",
                         },
                     )(
+                        render_csrf_input(),
                         Button(
                             "Run Migration",
                             type="submit",
@@ -56,6 +58,7 @@ def migration_page(req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 def route_run_migration(req: Request = None, sess=None):
     """Run database migration - only accessible to superusers"""
     user = get_current_user(req, sess)

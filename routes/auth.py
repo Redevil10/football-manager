@@ -14,6 +14,7 @@ from core.auth import (
     verify_password,
 )
 from core.config import USER_ROLES, VALID_ROLES
+from core.csrf import csrf_protect
 from core.error_responses import handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
 from core.validation import (
@@ -28,11 +29,12 @@ from db.users import (
     get_user_clubs,
     update_user_password,
 )
-from render.common import render_head
+from render.common import render_csrf_input, render_head
 
 logger = logging.getLogger(__name__)
 
 
+@csrf_protect
 async def route_login(req: Request, sess=None):
     """Handle login form submission."""
     try:
@@ -83,6 +85,7 @@ def login_page(req: Request = None):
                     and P(error_msg.replace("+", " "), cls="auth-error")
                     or "",
                     Form(
+                        render_csrf_input(),
                         Div(cls="input-group", style="margin-bottom: 15px;")(
                             Label("Username:"),
                             Input(
@@ -130,12 +133,14 @@ def login_page(req: Request = None):
     )
 
 
+@csrf_protect
 def route_logout(req: Request, sess=None):
     """Logout user"""
     logout_user(req, sess)
     return RedirectResponse("/login", status_code=303)
 
 
+@csrf_protect
 async def route_switch_club(req: Request, sess=None):
     """Switch the current club context"""
     user = get_current_user(req, sess)
@@ -173,6 +178,7 @@ async def route_switch_club(req: Request, sess=None):
     return RedirectResponse(redirect_to, status_code=303)
 
 
+@csrf_protect
 async def route_register(req: Request, sess=None):
     """Handle registration form submission - accessible to superusers and admins"""
     user = get_current_user(req, sess)
@@ -396,6 +402,7 @@ def register_page(req: Request = None, sess=None):
             Div(cls="container", style="max-width: 400px; margin: 100px auto;")(
                 H2("Register"),
                 Form(
+                    render_csrf_input(),
                     Div(cls="input-group", style="margin-bottom: 15px;")(
                         Label("Username:"),
                         Input(
@@ -498,6 +505,7 @@ def register_page(req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_change_password(req: Request, sess=None):
     """Handle password change form submission"""
     user = get_current_user(req, sess)
@@ -652,6 +660,7 @@ def change_password_page(req: Request = None, sess=None):
                 or "",
                 Form(
                     # For superusers: show user selector
+                    render_csrf_input(),
                     is_superuser
                     and Div(cls="input-group", style="margin-bottom: 15px;")(
                         Label("Select User:"),
@@ -735,7 +744,8 @@ def register_auth_routes(rt):
 
     rt("/login", methods=["POST"])(route_login)
     rt("/login")(login_page)
-    rt("/logout")(route_logout)
+    # POST-only: logging out is a state change, not a navigation.
+    rt("/logout", methods=["POST"])(route_logout)
     rt("/switch-club", methods=["POST"])(route_switch_club)
     rt("/register", methods=["POST"])(route_register)
     rt("/register")(register_page)

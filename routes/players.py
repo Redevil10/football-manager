@@ -19,6 +19,7 @@ from core.config import (
     TECHNICAL_ATTRS,
     USER_ROLES,
 )
+from core.csrf import csrf_protect
 from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
 from core.validation import validate_non_empty_string
@@ -59,7 +60,7 @@ from render import (
     render_player_table,
     render_teams,
 )
-from render.common import can_user_delete, can_user_edit, render_head
+from render.common import can_user_delete, can_user_edit, render_csrf_input, render_head
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +152,7 @@ def import_page(req: Request = None, sess=None):
                 H2("Import Players"),
                 Div(cls="container-white")(
                     Form(
+                        render_csrf_input(),
                         Textarea(
                             placeholder="Paste signup list here...",
                             name="signup_text",
@@ -215,6 +217,7 @@ def player_detail(player_id: int, req: Request = None, sess=None, back: str = No
     )
 
 
+@csrf_protect
 async def route_import_players(req: Request, sess=None):
     """Import players"""
     user = get_current_user(req, sess)
@@ -260,6 +263,7 @@ def add_player_page(req: Request = None, error: str = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_add_player(req: Request, sess=None):
     """Add single player"""
     user = get_current_user(req, sess)
@@ -364,6 +368,7 @@ async def route_add_player(req: Request, sess=None):
         return handle_route_error(e, "/add_player")
 
 
+@csrf_protect
 async def route_update_player_name(player_id: int, req: Request, sess=None):
     """Update player name and alias"""
     user = get_current_user(req, sess)
@@ -407,6 +412,7 @@ async def route_update_player_name(player_id: int, req: Request, sess=None):
         return handle_route_error(e, _player_url(player_id))
 
 
+@csrf_protect
 async def route_update_player_height_weight(player_id: int, req: Request, sess=None):
     """Update player height and weight"""
     user = get_current_user(req, sess)
@@ -445,6 +451,7 @@ async def route_update_player_height_weight(player_id: int, req: Request, sess=N
         return handle_route_error(e, _player_url(player_id))
 
 
+@csrf_protect
 async def route_update_player_scores(player_id: int, req: Request, sess=None):
     """Update player category scores or overall score"""
     user = get_current_user(req, sess)
@@ -510,6 +517,7 @@ async def route_update_player_scores(player_id: int, req: Request, sess=None):
     return RedirectResponse(redirect_url, status_code=303)
 
 
+@csrf_protect
 async def route_update_player(player_id: int, req: Request, sess=None):
     """Update player attributes"""
     user = get_current_user(req, sess)
@@ -682,6 +690,7 @@ async def route_update_player(player_id: int, req: Request, sess=None):
 # POST only: the GET form of this was a URL that deleted a player when
 # anything merely fetched it. Nothing links to it that way any more -- the
 # only route in is the confirmation page's form.
+@csrf_protect
 def route_delete_player(player_id: int, req: Request = None, sess=None):
     """Take a player off the books: archive them, or delete if brand new.
 
@@ -728,6 +737,7 @@ def route_delete_player(player_id: int, req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 def route_restore_player(player_id: int, req: Request = None, sess=None):
     """Bring an archived player back into the squad."""
     user = get_current_user(req, sess)
@@ -758,6 +768,7 @@ def route_restore_player(player_id: int, req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 def route_allocate(req: Request = None, sess=None):
     """Allocate teams"""
     user = get_current_user(req, sess)
@@ -795,6 +806,7 @@ def route_allocate(req: Request = None, sess=None):
         )
 
 
+@csrf_protect
 def route_reset(req: Request = None, sess=None):
     """Reset teams"""
     user = get_current_user(req, sess)
@@ -819,6 +831,7 @@ def route_reset(req: Request = None, sess=None):
     return render_teams(sorted_players)
 
 
+@csrf_protect
 def confirm_swap_page(player1_id: int, player2_id: int, req: Request = None, sess=None):
     """Confirm swap"""
     user = get_current_user(req, sess)
@@ -838,6 +851,7 @@ def confirm_swap_page(player1_id: int, player2_id: int, req: Request = None, ses
     return RedirectResponse("/", status_code=303)
 
 
+@csrf_protect
 def confirm_swap_match_page(
     match_id: int,
     match_player1_id: int,
@@ -866,8 +880,9 @@ def register_player_routes(rt):
     rt("/import")(import_page)
     rt("/player/{player_id}")(player_detail)
     rt("/import_players", methods=["POST"])(route_import_players)
-    rt("/add_player")(add_player_page)
+    # POST first -- see the note in routes/clubs.py.
     rt("/add_player", methods=["POST"])(route_add_player)
+    rt("/add_player")(add_player_page)
     rt("/update_player_name/{player_id}", methods=["POST"])(route_update_player_name)
     rt("/update_player_height_weight/{player_id}", methods=["POST"])(
         route_update_player_height_weight
@@ -880,7 +895,11 @@ def register_player_routes(rt):
     rt("/restore_player/{player_id}", methods=["POST"])(route_restore_player)
     rt("/allocate", methods=["POST"])(route_allocate)
     rt("/reset", methods=["POST"])(route_reset)
-    rt("/confirm_swap/{player1_id}/{player2_id}")(confirm_swap_page)
-    rt("/confirm_swap_match/{match_id}/{match_player1_id}/{match_player2_id}")(
-        confirm_swap_match_page
-    )
+    # POST-only: both of these perform the swap outright, so a GET that any
+    # <img> could fire must not reach them. Neither is linked from the UI --
+    # see the note on the handlers.
+    rt("/confirm_swap/{player1_id}/{player2_id}", methods=["POST"])(confirm_swap_page)
+    rt(
+        "/confirm_swap_match/{match_id}/{match_player1_id}/{match_player2_id}",
+        methods=["POST"],
+    )(confirm_swap_match_page)

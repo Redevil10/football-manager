@@ -6,6 +6,7 @@ from fasthtml.common import *
 
 from core.auth import get_current_user, get_user_accessible_club_ids
 from core.config import USER_ROLES, VALID_ROLES
+from core.csrf import csrf_protect
 from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
 from core.validation import validate_in_list
@@ -20,7 +21,12 @@ from db.users import (
     update_user_club_role,
     update_user_superuser_status,
 )
-from render.common import confirm_delete_link, render_head, render_navbar
+from render.common import (
+    confirm_delete_link,
+    render_csrf_input,
+    render_head,
+    render_navbar,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -448,6 +454,7 @@ def view_user_page(user_id: int, req: Request = None, sess=None):
                                                     action=f"/users/{user_id}/change-role/{club['id']}",
                                                     style="display: inline;",
                                                 )(
+                                                    render_csrf_input(),
                                                     Select(
                                                         Option(
                                                             "Viewer",
@@ -598,6 +605,7 @@ def edit_user_page(user_id: int, req: Request = None, sess=None):
                 or "",
                 Div(cls="container-white")(
                     Form(
+                        render_csrf_input(),
                         Div(cls="input-group", style="margin-bottom: 15px;")(
                             Label("Username:"),
                             Input(
@@ -705,6 +713,7 @@ def edit_user_page(user_id: int, req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_edit_user(user_id: int, req: Request, sess=None):
     """Handle user edit form submission"""
     user = get_current_user(req, sess)
@@ -770,6 +779,7 @@ async def route_edit_user(user_id: int, req: Request, sess=None):
         return handle_route_error(e, f"/users/{user_id}")
 
 
+@csrf_protect
 def route_delete_user(user_id: int, req: Request = None, sess=None):
     """Delete a user"""
     user = get_current_user(req, sess)
@@ -795,6 +805,7 @@ def route_delete_user(user_id: int, req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_change_user_role(user_id: int, club_id: int, req: Request, sess=None):
     """Change a user's role in a club"""
     user = get_current_user(req, sess)

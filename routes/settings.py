@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from fasthtml.common import *
 
 from core.auth import get_current_user, validate_csrf_token
+from core.csrf import csrf_protect
 from db.settings import get_setting, set_setting
 from render.settings import render_settings_page, render_smart_import_toggle
 
@@ -60,6 +61,7 @@ def settings_page(req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 async def toggle_smart_import(req: Request = None, sess=None):
     """Toggle smart import setting"""
     user = get_current_user(req, sess)

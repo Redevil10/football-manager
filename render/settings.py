@@ -82,7 +82,7 @@ def render_migration_section(sess):
             style="color: #666; margin-bottom: 15px;",
         ),
         Form(
-            render_csrf_input(sess),
+            render_csrf_input(),
             Button(
                 "Run Migration",
                 type="submit",
@@ -106,7 +106,7 @@ def render_smart_import_toggle(sess, enabled, has_api_key=True):
         )
 
     return Form(
-        render_csrf_input(sess),
+        render_csrf_input(),
         Div(style="display: flex; align-items: center; gap: 10px; margin-top: 10px;")(
             Label(
                 cls="switch",

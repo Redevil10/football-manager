@@ -7,6 +7,8 @@ import secrets
 from fasthtml.common import fast_app
 from fasthtml_hf import setup_hf_backup
 
+from core.csrf import CSRFTokenMiddleware
+
 # Importing db pulls in core.config, whose import creates the data/ directory
 # that init_db() below writes into.
 from db import init_db
@@ -73,6 +75,12 @@ try:
                 return await call_next(request)
 
         app.add_middleware(HTTPSDetectionMiddleware)
+
+    # Publishes the session's CSRF token for the request. Added *before*
+    # SessionMiddleware because add_middleware prepends: the last one added
+    # ends up outermost, so this one runs inside it and can see the session
+    # it just loaded.
+    app.add_middleware(CSRFTokenMiddleware)
 
     # Add SessionMiddleware with the correct configuration for our environment
     # (HF Spaces needs same_site="none", local dev can use "lax")

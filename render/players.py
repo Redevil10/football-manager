@@ -24,6 +24,7 @@ from render.common import (
     can_user_edit,
     confirm_delete_link,
     render_attr_input,
+    render_csrf_input,
 )
 
 # Filtering happens in the browser: the whole squad is already on the page, so
@@ -176,6 +177,7 @@ def render_match_available_players(
                         "onsubmit": "return confirm('Remove this player from match signup?');"
                     },
                 )(
+                    render_csrf_input(),
                     Button("Remove", type="submit", cls="link-delete"),
                 ),
             )
@@ -256,6 +258,7 @@ def render_player_detail_form(player, user=None, back=None):
         Div(cls="container-white")(
             # Name and Alias edit form
             Form(
+                render_csrf_input(),
                 back_input(),
                 Div(
                     cls="input-group",
@@ -284,6 +287,7 @@ def render_player_detail_form(player, user=None, back=None):
             ),
             # Height and Weight form
             Form(
+                render_csrf_input(),
                 back_input(),
                 Div(
                     cls="input-group",
@@ -316,6 +320,7 @@ def render_player_detail_form(player, user=None, back=None):
             ),
             # Overall Score form
             Form(
+                render_csrf_input(),
                 back_input(),
                 Div(cls="input-group", style="margin-bottom: 20px;")(
                     Label(
@@ -338,6 +343,7 @@ def render_player_detail_form(player, user=None, back=None):
             ),
             # Category Scores form
             Form(
+                render_csrf_input(),
                 back_input(),
                 H3("Category Scores"),
                 Div(
@@ -413,6 +419,7 @@ def render_player_detail_form(player, user=None, back=None):
             ),
             # Individual Attributes edit form
             Form(
+                render_csrf_input(),
                 back_input(),
                 H3("Individual Attributes"),
                 Div(cls="attr-grid")(
@@ -475,7 +482,8 @@ def render_player_detail_form(player, user=None, back=None):
         (
             Div(cls="danger-zone")(
                 Form(method="POST", action=f"/restore_player/{player['id']}")(
-                    Button("Restore Player", type="submit", cls="btn-secondary")
+                    render_csrf_input(),
+                    Button("Restore Player", type="submit", cls="btn-secondary"),
                 )
                 if archived
                 # "Delete" is the honest word here even though a player with
@@ -533,6 +541,7 @@ def render_add_player_form(error=None, values=None):
         H3("Add Player"),
         Div(error_msg, cls="auth-error") if error_msg else "",
         Form(method="post", action="/add_player")(
+            render_csrf_input(),
             Div(cls="form-grid")(
                 field(
                     "Name:",
@@ -624,7 +633,10 @@ def render_archived_players(players):
                                 method="POST",
                                 action=f"/restore_player/{p['id']}",
                                 style="display: inline;",
-                            )(Button("Restore", type="submit", cls="link-delete"))
+                            )(
+                                render_csrf_input(),
+                                Button("Restore", type="submit", cls="link-delete"),
+                            )
                         ),
                     )
                     for p in players

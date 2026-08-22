@@ -7,6 +7,7 @@ does not exist.
 
 from db.players import get_all_players
 from tests.unit.conftest_roles import sign_in, world  # noqa: F401
+from tests.unit.csrf_client import CSRFClient
 
 
 def player_names(include_archived=False):
@@ -83,11 +84,10 @@ class TestRemovingAPlayer:
         assert "Never Played" in player_names()
 
     def test_nor_anyone_signed_out(self, world):  # noqa: F811
-        from starlette.testclient import TestClient
 
         from routes import app
 
-        resp = TestClient(app).post(
+        resp = CSRFClient(app).post(
             f"/delete_player/{world['newcomer']}", follow_redirects=False
         )
 

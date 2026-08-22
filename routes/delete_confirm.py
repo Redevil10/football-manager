@@ -38,6 +38,7 @@ from db.users import count_members_in_club, get_user_by_id
 from render.common import (
     can_user_delete,
     format_match_name,
+    render_csrf_input,
     render_head,
     render_navbar,
 )
@@ -286,13 +287,14 @@ def route_confirm_delete(kind: str, item_id: int, req: Request = None, sess=None
                             ""
                             if blocked
                             else Form(method="POST", action=target["action"])(
+                                render_csrf_input(),
                                 Button(
                                     f"{verb} {target['noun']}",
                                     type="submit",
                                     cls=(
                                         "btn-secondary" if reversible else "btn-danger"
                                     ),
-                                )
+                                ),
                             )
                         ),
                     ),

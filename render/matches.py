@@ -11,6 +11,7 @@ from render.common import (
     format_match_name,
     is_match_completed,
     match_fixture,
+    render_csrf_input,
 )
 from render.interactive_pitch import render_interactive_pitch
 from render.players import render_match_available_players, render_player_table
@@ -681,6 +682,7 @@ def render_captain_selection(match_id, teams, match_players_dict, is_completed=F
                         "hx-swap": "innerHTML",
                     },
                 )(
+                    render_csrf_input(),
                     Select(
                         *options,
                         name="captain_id",
@@ -753,6 +755,7 @@ def render_match_recordings(match_id, recordings=None, can_edit=False):
                             "hx-confirm": "Delete this recording link?",
                         },
                     )(
+                        render_csrf_input(),
                         Button("Delete", type="submit", cls="link-delete"),
                     )
                 )
@@ -785,6 +788,7 @@ def render_match_recordings(match_id, recordings=None, can_edit=False):
                     "hx-swap": "outerHTML",
                 },
             )(
+                render_csrf_input(),
                 P(
                     "One link per line. To name a link, add ",
                     Code("| label"),
@@ -984,6 +988,7 @@ def render_match_detail(
                             "onsubmit": "return confirm('Remove all available players from this match? This will allow you to import again.');"
                         },
                     )(
+                        render_csrf_input(),
                         Button("Remove All", type="submit", cls="btn-delete"),
                     ),
                 ),
@@ -1056,7 +1061,10 @@ def render_match_detail(
                             action=f"/delete_match_event/{event['id']}",
                             style="display: inline; margin-left: 10px;",
                             **{"onsubmit": "return confirm('Delete this event?');"},
-                        )(Button("Delete", type="submit", cls="link-delete"))
+                        )(
+                            render_csrf_input(),
+                            Button("Delete", type="submit", cls="link-delete"),
+                        )
                     )
 
                 events_list.append(Li(*event_content, style="margin-bottom: 5px;"))
@@ -1196,6 +1204,7 @@ def render_import_confirmation(match_id, results, existing_players, club_id):
 
     return Div(
         Form(
+            render_csrf_input(),
             Input(type="hidden", name="total_rows", value=str(len(results))),
             Input(type="hidden", name="club_id", value=str(club_id)),
             Div(cls="container-white")(

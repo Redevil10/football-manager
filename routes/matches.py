@@ -14,6 +14,7 @@ from core.auth import (
     get_user_club_ids_from_request,
 )
 from core.config import USER_ROLES
+from core.csrf import csrf_protect
 from core.error_responses import handle_route_error
 from core.exceptions import DatabaseError
 from core.validation import parse_int, validate_non_empty_string, validate_url
@@ -69,7 +70,7 @@ from render import (
     render_match_teams,
     render_navbar,
 )
-from render.common import is_match_completed, render_head
+from render.common import is_match_completed, render_csrf_input, render_head
 from render.matches import can_user_create_match
 
 logger = logging.getLogger(__name__)
@@ -609,6 +610,7 @@ def create_match_page_with_league(league_id: int):
     )
 
 
+@csrf_protect
 async def route_create_match(req: Request, sess=None):
     """Create a new match"""
     user = get_current_user(req, sess)
@@ -858,6 +860,7 @@ def match_detail_page(
     )
 
 
+@csrf_protect
 def swap_pitch_players(
     match_id: int,
     player_id: int,
@@ -916,6 +919,7 @@ def swap_pitch_players(
         return RedirectResponse(f"/match/{match_id}?display={display}", status_code=303)
 
 
+@csrf_protect
 def route_allocate_match(match_id: int, req: Request = None, sess=None):
     """Allocate teams for a match"""
     user = get_current_user(req, sess)
@@ -988,6 +992,7 @@ def route_allocate_match(match_id: int, req: Request = None, sess=None):
         )
 
 
+@csrf_protect
 def route_reset_match_teams(match_id: int, req: Request = None, sess=None):
     """Reset teams for a match - remove all players from teams but keep them as signup"""
     user = get_current_user(req, sess)
@@ -1105,6 +1110,7 @@ def edit_match_page(match_id: int, req: Request = None, sess=None):
                 H2(f"Edit {format_match_name(match)}"),
                 Div(cls="container-white")(
                     Form(
+                        render_csrf_input(),
                         Div(style="margin-bottom: 15px;")(
                             Label(
                                 "League:",
@@ -1424,6 +1430,7 @@ def edit_match_page(match_id: int, req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_update_match(match_id: int, req: Request, sess=None):
     """Update a match"""
     user = get_current_user(req, sess)
@@ -1540,6 +1547,7 @@ async def route_update_match(match_id: int, req: Request, sess=None):
     return RedirectResponse(f"/match/{match_id}", status_code=303)
 
 
+@csrf_protect
 def route_delete_match(match_id: int, req: Request = None, sess=None):
     """Delete a match"""
     user = get_current_user(req, sess)
@@ -1600,6 +1608,7 @@ def edit_match_team_page(match_id: int, team_id: int, req: Request = None, sess=
                 Div(cls="container-white")(
                     H3("Current Players"),
                     Form(
+                        render_csrf_input(),
                         *[
                             Div(
                                 style="margin-bottom: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px;"
@@ -1650,9 +1659,18 @@ def edit_match_team_page(match_id: int, team_id: int, req: Request = None, sess=
                                     placeholder="0-10",
                                     style="width: 80px; margin: 0 10px;",
                                 ),
-                                A(
+                                # A submit button rather than a link: removing
+                                # a player changes data, so it must not be a
+                                # GET that any <img> could fire. It cannot be
+                                # its own <form> either -- one is already open
+                                # around it -- so formaction redirects this
+                                # submit, carrying the enclosing form's CSRF
+                                # field with it.
+                                Button(
                                     "Remove",
-                                    href=f"/remove_match_player/{p['id']}",
+                                    type="submit",
+                                    formaction=f"/remove_match_player/{p['id']}",
+                                    formmethod="post",
                                     cls="link-delete",
                                     style="margin-left: 10px;",
                                     **{
@@ -1681,6 +1699,7 @@ def edit_match_team_page(match_id: int, team_id: int, req: Request = None, sess=
                     H3("Add Players"),
                     (
                         Form(
+                            render_csrf_input(),
                             *[
                                 Div(style="margin-bottom: 10px;")(
                                     Input(
@@ -1746,6 +1765,7 @@ def edit_match_team_page(match_id: int, team_id: int, req: Request = None, sess=
     )
 
 
+@csrf_protect
 async def route_update_match_team(match_id: int, team_id: int, req: Request, sess=None):
     """Update team roster"""
     user = get_current_user(req, sess)
@@ -1788,6 +1808,7 @@ async def route_update_match_team(match_id: int, team_id: int, req: Request, ses
     return RedirectResponse(f"/match/{match_id}", status_code=303)
 
 
+@csrf_protect
 async def route_set_captain(match_id: int, team_id: int, req: Request, sess=None):
     """Set team captain"""
     user = get_current_user(req, sess)
@@ -1854,6 +1875,7 @@ async def route_set_captain(match_id: int, team_id: int, req: Request, sess=None
     )
 
 
+@csrf_protect
 async def route_add_match_players(match_id: int, team_id: int, req: Request, sess=None):
     """Add players to a team"""
     user = get_current_user(req, sess)
@@ -1882,6 +1904,7 @@ async def route_add_match_players(match_id: int, team_id: int, req: Request, ses
     return RedirectResponse(f"/match/{match_id}", status_code=303)
 
 
+@csrf_protect
 def route_remove_match_player(match_player_id: int, req: Request = None, sess=None):
     """Remove a player from a match"""
     user = get_current_user(req, sess)
@@ -2027,6 +2050,7 @@ def add_match_event_page(match_id: int, req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_add_match_event(match_id: int, req: Request, sess=None):
     """Add a match event"""
     user = get_current_user(req, sess)
@@ -2070,6 +2094,7 @@ async def route_add_match_event(match_id: int, req: Request, sess=None):
 
 # POST only: as a GET route this was a URL that destroyed an event when
 # anything merely fetched it -- a link prefetch, a crawler, a shared link.
+@csrf_protect
 def route_delete_match_event(event_id: int, req: Request = None, sess=None):
     """Delete a match event"""
     user = get_current_user(req, sess)
@@ -2148,6 +2173,7 @@ def import_match_players_page(match_id: int, req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_import_match_players(match_id: int, req: Request, sess=None):
     """Import players for a match"""
     user = get_current_user(req, sess)
@@ -2237,6 +2263,7 @@ async def route_import_match_players(match_id: int, req: Request, sess=None):
     return RedirectResponse(f"/match/{match_id}", status_code=303)
 
 
+@csrf_protect
 async def route_confirm_import(match_id: int, req: Request, sess=None):
     """Process confirmed import selections"""
     user = get_current_user(req, sess)
@@ -2431,6 +2458,7 @@ def add_match_player_manual_page(match_id: int, req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_add_match_player_manual(match_id: int, req: Request, sess=None):
     """Add player manually to a match"""
     user = get_current_user(req, sess)
@@ -2466,6 +2494,7 @@ async def route_add_match_player_manual(match_id: int, req: Request, sess=None):
     return RedirectResponse(f"/match/{match_id}", status_code=303)
 
 
+@csrf_protect
 def route_remove_match_signup_player(
     match_id: int, match_player_id: int, req: Request = None, sess=None
 ):
@@ -2482,6 +2511,7 @@ def route_remove_match_signup_player(
     return RedirectResponse(f"/match/{match_id}", status_code=303)
 
 
+@csrf_protect
 def route_remove_all_match_signup_players(
     match_id: int, req: Request = None, sess=None
 ):
@@ -2501,6 +2531,7 @@ def route_remove_all_match_signup_players(
 # ============ MATCH RECORDINGS (video links) ============
 
 
+@csrf_protect
 async def route_add_match_recordings(match_id: int, req: Request, sess=None):
     """Add one or more recording links to a match.
 
@@ -2526,6 +2557,7 @@ async def route_add_match_recordings(match_id: int, req: Request, sess=None):
     return render_match_recordings(match_id, recordings, can_edit=True)
 
 
+@csrf_protect
 def route_delete_match_recording(
     match_id: int, recording_id: int, req: Request = None, sess=None
 ):
@@ -2558,11 +2590,11 @@ def register_match_routes(rt):
     rt("/match/{match_id}")(match_detail_page)
     rt(
         "/swap_pitch_players/{match_id}/{player_id}/{target_position}/{target_player_id}",
-        methods=["GET", "POST"],
+        methods=["POST"],
     )(swap_pitch_players)
     rt(
         "/swap_pitch_players/{match_id}/{player_id}/{target_position}",
-        methods=["GET", "POST"],
+        methods=["POST"],
     )(swap_pitch_players)
     rt("/allocate_match/{match_id}", methods=["POST"])(route_allocate_match)
     rt("/reset_match_teams/{match_id}", methods=["POST"])(route_reset_match_teams)
@@ -2577,7 +2609,9 @@ def register_match_routes(rt):
     rt("/add_match_players/{match_id}/{team_id}", methods=["POST"])(
         route_add_match_players
     )
-    rt("/remove_match_player/{match_player_id}")(route_remove_match_player)
+    rt("/remove_match_player/{match_player_id}", methods=["POST"])(
+        route_remove_match_player
+    )
     rt("/add_match_event/{match_id}", methods=["GET"])(add_match_event_page)
     rt("/add_match_event/{match_id}", methods=["POST"])(route_add_match_event)
     rt("/delete_match_event/{event_id}", methods=["POST"])(route_delete_match_event)

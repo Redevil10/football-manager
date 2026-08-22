@@ -4,7 +4,8 @@ from datetime import date, datetime
 
 from fasthtml.common import *
 
-from core.auth import check_club_permission, get_csrf_token, get_current_club_info
+from core.auth import check_club_permission, get_current_club_info
+from core.csrf import CSRF_FIELD, CSRF_HEADER, current_csrf_token
 from core.styles import STYLE
 from db import get_match_teams
 
@@ -25,6 +26,22 @@ document.addEventListener('htmx:beforeSwap', function(event) {
     }
 });
 """
+
+
+# HTMX posts do not go through a <form>, so they carry the token in a header
+# instead of a hidden field. Reading it from the meta tag keeps the token in
+# exactly one place in the document.
+CSRF_HEADER_SCRIPT = (
+    """
+document.addEventListener('htmx:configRequest', function(event) {
+    var method = (event.detail.verb || 'get').toUpperCase();
+    if (method === 'GET' || method === 'HEAD') return;
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta) event.detail.headers['%s'] = meta.content;
+});
+"""
+    % CSRF_HEADER
+)
 
 
 def render_head(title, *extra):
@@ -50,10 +67,14 @@ def render_head(title, *extra):
             rel="stylesheet",
             href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap",
         ),
+        # The request's CSRF token, for HTMX to echo back in a header. Forms
+        # carry their own hidden field via render_csrf_input().
+        Meta(name="csrf-token", content=current_csrf_token()),
         Title(title),
         Style(STYLE),
         Script(src="https://unpkg.com/htmx.org@1.9.10"),
         Script(NotStr(BLUR_BEFORE_SWAP_SCRIPT)),
+        Script(NotStr(CSRF_HEADER_SCRIPT)),
         *extra,
     )
 
@@ -264,7 +285,14 @@ def render_navbar(user=None, sess=None, current_url="/"):
         if user.get("is_superuser"):
             right_items.append(Span("⭐ Superuser", cls="nav-badge"))
 
-        right_items.append(A("Logout", href="/logout", cls="nav-action"))
+        # A form, not a link: logging out changes state, and a GET that any
+        # <img src="/logout"> could fire would let another site sign you out.
+        right_items.append(
+            Form(method="POST", action="/logout", style="display: inline;")(
+                render_csrf_input(),
+                Button("Logout", type="submit", cls="nav-action"),
+            )
+        )
     else:
         right_items.append(
             A("Login", href="/login", cls="nav-action", style="margin-left: auto;")
@@ -327,6 +355,7 @@ def _render_club_selector(user, sess, current_url="/"):
         )
 
     return Form(
+        render_csrf_input(),
         Select(
             *options,
             name="club_id",
@@ -418,21 +447,18 @@ def confirm_delete_link(kind, item_id, label):
     return A(label, href=f"/confirm-delete/{kind}/{item_id}", cls="btn-delete")
 
 
-def render_csrf_input(sess: dict):
-    """Render a hidden CSRF token input field for forms.
+def render_csrf_input():
+    """Hidden CSRF field for a form that submits with an unsafe method.
+
+    Takes no session argument: the token for the request in flight comes from
+    a context variable that CSRFTokenMiddleware sets, so a form can be built
+    anywhere without the session being passed down to it.
 
     Usage:
         Form(
-            render_csrf_input(sess),
+            render_csrf_input(),
             # other form fields...
             method="POST",
         )
-
-    Args:
-        sess: Session dictionary
-
-    Returns:
-        Hidden input element with CSRF token
     """
-    token = get_csrf_token(sess)
-    return Input(type="hidden", name="csrf_token", value=token)
+    return Input(type="hidden", name=CSRF_FIELD, value=current_csrf_token())

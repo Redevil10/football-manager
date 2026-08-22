@@ -6,6 +6,7 @@ from fasthtml.common import *  # noqa: F403, F405
 
 from core.auth import get_current_user
 from core.config import USER_ROLES, VALID_ROLES
+from core.csrf import csrf_protect
 from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import ValidationError
 from core.validation import (
@@ -35,7 +36,12 @@ from db.users import (
     get_user_club_role,
     get_user_clubs,
 )
-from render.common import confirm_delete_link, render_head, render_navbar
+from render.common import (
+    confirm_delete_link,
+    render_csrf_input,
+    render_head,
+    render_navbar,
+)
 from routes.delete_confirm import blocked_by_players
 
 
@@ -166,6 +172,7 @@ def create_club_page(req: Request = None, error: str = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_create_club(req: Request, sess=None):
     """Create a new club (superuser only)"""
     user = get_current_user(req, sess)
@@ -320,6 +327,7 @@ def edit_club_page(club_id: int, req: Request = None, sess=None):
                 Div(cls="container-white")(
                     Form(
                         (
+                            render_csrf_input(),
                             Div(cls="input-group", style="margin-bottom: 15px;")(
                                 Label(
                                     "Club Name:",
@@ -334,7 +342,7 @@ def edit_club_page(club_id: int, req: Request = None, sess=None):
                                 ),
                             )
                             if may_rename
-                            else ""
+                            else "",
                         ),
                         Div(cls="input-group", style="margin-bottom: 15px;")(
                             Label(
@@ -363,6 +371,7 @@ def edit_club_page(club_id: int, req: Request = None, sess=None):
     )
 
 
+@csrf_protect
 async def route_update_club(club_id: int, req: Request, sess=None):
     """Update a club's name and description."""
     user = get_current_user(req, sess)
@@ -394,6 +403,7 @@ async def route_update_club(club_id: int, req: Request, sess=None):
     return RedirectResponse(f"/club/{club_id}", status_code=303)
 
 
+@csrf_protect
 def route_delete_club(club_id: int, req: Request = None, sess=None):
     """Delete club (superuser only)"""
     user = get_current_user(req, sess)
@@ -411,6 +421,7 @@ def route_delete_club(club_id: int, req: Request = None, sess=None):
     return RedirectResponse("/clubs", status_code=303)
 
 
+@csrf_protect
 async def route_assign_user_to_club(club_id: int, req: Request, sess=None):
     """Add a member to a club. Superusers, or the club's own admin."""
     user = get_current_user(req, sess)
@@ -456,6 +467,7 @@ async def route_assign_user_to_club(club_id: int, req: Request, sess=None):
         return handle_route_error(e, f"/club/{club_id}")
 
 
+@csrf_protect
 def route_remove_user_from_club(
     club_id: int, user_id: int, req: Request = None, sess=None
 ):
@@ -480,6 +492,7 @@ def route_remove_user_from_club(
     return RedirectResponse(f"/club/{club_id}", status_code=303)
 
 
+@csrf_protect
 async def route_update_user_club_role(
     club_id: int, user_id: int, req: Request, sess=None
 ):
@@ -512,6 +525,7 @@ async def route_update_user_club_role(
     return RedirectResponse(f"/club/{club_id}", status_code=303)
 
 
+@csrf_protect
 async def route_add_club_to_league_from_club(club_id: int, req: Request, sess=None):
     """Add a club to a league (superuser only) - from club page"""
     user = get_current_user(req, sess)
@@ -539,6 +553,7 @@ async def route_add_club_to_league_from_club(club_id: int, req: Request, sess=No
         )
 
 
+@csrf_protect
 def route_remove_club_from_league_from_club(
     club_id: int, league_id: int, req: Request = None, sess=None
 ):
@@ -558,8 +573,11 @@ def register_club_routes(rt):
     """Register all club management routes"""
 
     rt("/clubs")(clubs_page)
-    rt("/create_club")(create_club_page)
+    # POST first: rt() gives a page route an implicit POST method, and the
+    # first full match wins -- registered the other way round, the page
+    # handler swallows the form submission and nothing is created.
     rt("/create_club", methods=["POST"])(route_create_club)
+    rt("/create_club")(create_club_page)
     rt("/club/{club_id}")(club_detail_page)
     rt("/edit_club/{club_id}")(edit_club_page)
     rt("/update_club/{club_id}", methods=["POST"])(route_update_club)
@@ -653,6 +671,7 @@ def render_club_members(club_id, club_members, user=None, can_manage=False):
             Div(cls="container-white", style="margin-bottom: 20px;")(
                 H4("Add Member to Club"),
                 Form(
+                    render_csrf_input(),
                     Div(style="display: flex; gap: 10px; align-items: flex-end;")(
                         Div(style="flex: 1;")(
                             Label("User:", style="display: block; margin-bottom: 5px;"),
@@ -769,6 +788,7 @@ def render_club_members(club_id, club_members, user=None, can_manage=False):
                                                 "onsubmit": "return confirm('Remove this user from the club?');",
                                             },
                                         )(
+                                            render_csrf_input(),
                                             Button(
                                                 "Remove",
                                                 type="submit",
@@ -834,6 +854,7 @@ def render_club_leagues(
             Div(cls="container-white", style="margin-bottom: 20px;")(
                 H4("Add Club to League"),
                 Form(
+                    render_csrf_input(),
                     Div(style="display: flex; gap: 10px; align-items: flex-end;")(
                         Div(style="flex: 1;")(
                             Label(
@@ -900,6 +921,7 @@ def render_club_leagues(
                                         "onsubmit": "return confirm('Remove this club from the league?');",
                                     },
                                 )(
+                                    render_csrf_input(),
                                     Button("Remove", type="submit", cls="link-delete"),
                                 )
                             )
@@ -957,6 +979,7 @@ def render_create_club_form(error=None, values=None):
         H3("Create Club"),
         Div(error_msg, cls="auth-error") if error_msg else "",
         Form(method="post", action="/create_club")(
+            render_csrf_input(),
             Div(style="margin-bottom: 15px;")(
                 Label("Name:", style="display: block; margin-bottom: 5px;"),
                 Input(
