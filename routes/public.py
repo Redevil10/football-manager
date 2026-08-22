@@ -32,74 +32,79 @@ from render.public import (
 logger = logging.getLogger(__name__)
 
 
+def _not_found():
+    # Same response for missing and non-public leagues (don't leak existence)
+    return HTMLResponse(to_xml(render_public_not_found()), status_code=404)
+
+
+def public_leagues_index():
+    """Discoverable list of all publicly shared leagues (no login)."""
+    leagues = get_public_leagues()
+    return render_public_leagues_index(leagues)
+
+
+def public_league_page(league_id: int):
+    """Read-only match list for a publicly shared league."""
+    league = get_league(league_id)
+    if not league or not league.get("is_public"):
+        return _not_found()
+
+    matches = get_matches_by_league(league_id)
+    return render_public_league(league, matches)
+
+
+def public_match_page(match_id: int, display: str = "pitch"):
+    """Read-only detail for a match in a publicly shared league.
+
+    Renders the same view as the authenticated match page (pitch, line-ups,
+    scores, goals, recordings) but with user=None so every edit control is
+    suppressed.
+    """
+    match = get_match(match_id)
+    if not match:
+        return _not_found()
+
+    league_id = match.get("league_id")
+    league = get_league(league_id) if league_id else None
+    if not league or not league.get("is_public"):
+        return _not_found()
+
+    teams = get_match_teams(match_id)
+    match_players_dict = {}
+    match_player_ids = set()
+    for team in teams:
+        team_players = get_match_players(match_id, team["id"])
+        match_players_dict[team["id"]] = team_players
+        for player in team_players:
+            match_player_ids.add(player.get("player_id"))
+
+    signup_players = get_match_signup_players(match_id)
+    available_signup_players = [
+        mp for mp in signup_players if mp["player_id"] not in match_player_ids
+    ]
+
+    events = get_match_events(match_id)
+
+    detail = render_match_detail(
+        match,
+        teams,
+        match_players_dict,
+        events,
+        match_player_ids=match_player_ids,
+        signup_players=available_signup_players,
+        user=None,
+        display_mode=display,
+        read_only=True,
+    )
+    return render_public_page(
+        f"{match.get('date', 'Match')} - Football Manager",
+        Div(id="match-content")(detail),
+    )
+
+
 def register_public_routes(rt):
     """Register anonymous read-only public routes."""
 
-    def _not_found():
-        # Same response for missing and non-public leagues (don't leak existence)
-        return HTMLResponse(to_xml(render_public_not_found()), status_code=404)
-
-    @rt("/public")
-    def public_leagues_index():
-        """Discoverable list of all publicly shared leagues (no login)."""
-        leagues = get_public_leagues()
-        return render_public_leagues_index(leagues)
-
-    @rt("/public/league/{league_id}")
-    def public_league_page(league_id: int):
-        """Read-only match list for a publicly shared league."""
-        league = get_league(league_id)
-        if not league or not league.get("is_public"):
-            return _not_found()
-
-        matches = get_matches_by_league(league_id)
-        return render_public_league(league, matches)
-
-    @rt("/public/match/{match_id}")
-    def public_match_page(match_id: int, display: str = "pitch"):
-        """Read-only detail for a match in a publicly shared league.
-
-        Renders the same view as the authenticated match page (pitch, line-ups,
-        scores, goals, recordings) but with user=None so every edit control is
-        suppressed.
-        """
-        match = get_match(match_id)
-        if not match:
-            return _not_found()
-
-        league_id = match.get("league_id")
-        league = get_league(league_id) if league_id else None
-        if not league or not league.get("is_public"):
-            return _not_found()
-
-        teams = get_match_teams(match_id)
-        match_players_dict = {}
-        match_player_ids = set()
-        for team in teams:
-            team_players = get_match_players(match_id, team["id"])
-            match_players_dict[team["id"]] = team_players
-            for player in team_players:
-                match_player_ids.add(player.get("player_id"))
-
-        signup_players = get_match_signup_players(match_id)
-        available_signup_players = [
-            mp for mp in signup_players if mp["player_id"] not in match_player_ids
-        ]
-
-        events = get_match_events(match_id)
-
-        detail = render_match_detail(
-            match,
-            teams,
-            match_players_dict,
-            events,
-            match_player_ids=match_player_ids,
-            signup_players=available_signup_players,
-            user=None,
-            display_mode=display,
-            read_only=True,
-        )
-        return render_public_page(
-            f"{match.get('date', 'Match')} - Football Manager",
-            Div(id="match-content")(detail),
-        )
+    rt("/public")(public_leagues_index)
+    rt("/public/league/{league_id}")(public_league_page)
+    rt("/public/match/{match_id}")(public_match_page)

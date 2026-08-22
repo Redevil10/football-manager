@@ -108,351 +108,362 @@ def _render_public_sharing(league, req=None, can_manage=False):
     return Div(cls="container-white", style="margin-top: 20px;")(*children)
 
 
+def leagues_page(req: Request = None, sess=None):
+    """Leagues list page"""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    # Show only leagues where user's clubs participate (superusers see all)
+    club_ids = get_user_club_ids_from_request(req, sess)
+    if user.get("is_superuser"):
+        # Superusers see all leagues
+        leagues = get_all_leagues(club_ids=None)
+    else:
+        # Regular users only see leagues their clubs participate in
+        leagues = get_all_leagues(club_ids) if club_ids else []
+
+    # Only show create form if user is superuser (for now)
+    can_create = user.get("is_superuser")
+
+    return Html(
+        render_head("Leagues - Football Manager"),
+        Body(
+            render_navbar(user, sess, req.url.path if req else "/"),
+            Div(cls="container")(
+                # The action sits beside the heading rather than as a form
+                # permanently unrolled above the list.
+                Div(cls="section-header")(
+                    H2(f"Leagues ({len(leagues)})", style="margin: 0;"),
+                    (
+                        A("Create League", href="/create_league", cls="btn-success")
+                        if can_create
+                        else ""
+                    ),
+                ),
+                render_leagues_list(leagues, user),
+            ),
+        ),
+    )
+
+
+def create_league_page(req: Request = None, error: str = None, sess=None):
+    """The form for creating a league."""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not user.get("is_superuser"):
+        return RedirectResponse("/leagues", status_code=303)
+
+    return Html(
+        render_head("Create League - Football Manager"),
+        Body(
+            render_navbar(user, sess, req.url.path if req else "/"),
+            Div(cls="container")(
+                H2("Create League"),
+                render_create_league_form(error),
+            ),
+        ),
+    )
+
+
+async def route_create_league(req: Request, sess=None):
+    """Create a new league"""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    # Only superuser can create leagues for now
+    if not user.get("is_superuser"):
+        return RedirectResponse(
+            "/leagues?error=Only+superusers+can+create+leagues", status_code=303
+        )
+
+    try:
+        form = await req.form()
+        name = form.get("name", "").strip()
+        description = form.get("description", "").strip()
+
+        # Validate league name
+        is_valid, error_msg = validate_non_empty_string(name, "League name")
+        if not is_valid:
+            raise ValidationError("name", error_msg)
+
+        league_id = create_league(name, description)
+        return handle_db_result(
+            league_id,
+            f"/league/{league_id}",
+            error_redirect="/leagues",
+            error_message="Failed to create league",
+            check_none=True,
+        )
+    except ValidationError as e:
+        return handle_route_error(e, "/leagues")
+    except Exception as e:
+        return handle_route_error(e, "/leagues")
+
+
+def league_detail_page(league_id: int, req: Request = None, sess=None):
+    """League detail page: what the league is, who is in it, how it is shared.
+
+    Anyone whose club plays in the league can read all of it; every control
+    on the page is a superuser's. Which clubs are in a league is not one
+    club's decision to make, and neither is whether it is shared publicly.
+
+    Its fixtures are not here -- /matches lists every match already grouped
+    under its league, so this page repeating them was the same table twice.
+    """
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    can_manage = bool(user.get("is_superuser"))
+
+    # Check if user has access to this league
+    club_ids = get_user_club_ids_from_request(req, sess)
+    league = get_league(league_id, club_ids=None if can_manage else club_ids)
+    if not league:
+        return RedirectResponse("/leagues", status_code=303)
+
+    clubs_in_league = get_clubs_in_league(league_id)
+    # Only the add form needs the clubs that are not in the league yet.
+    all_clubs = get_all_clubs() if can_manage else []
+
+    return Html(
+        render_head(f"{league['name']} - Football Manager"),
+        Body(
+            render_navbar(user, sess, req.url.path if req else "/"),
+            Div(cls="container")(
+                render_league_header(league, can_manage=can_manage),
+                Div(cls="container-white", style="margin-top: 20px;")(
+                    H3("Clubs in League"),
+                    render_league_clubs(
+                        league_id,
+                        clubs_in_league,
+                        all_clubs,
+                        user,
+                        can_manage=can_manage,
+                    ),
+                ),
+                # Sharing is set once and then forgotten, so it goes under
+                # the membership people actually come to look at. A reader
+                # sees it only once it is public, when the link is theirs to
+                # share; a private league has nothing to tell them.
+                (
+                    _render_public_sharing(league, req, can_manage=can_manage)
+                    if can_manage or league.get("is_public")
+                    else ""
+                ),
+                # Last thing on the page, below every section, so it is
+                # never in the way of what you came here for.
+                (
+                    Div(cls="danger-zone")(
+                        confirm_delete_link("league", league_id, "Delete League")
+                    )
+                    if can_manage
+                    else ""
+                ),
+            ),
+        ),
+    )
+
+
+async def route_toggle_league_public(league_id: int, req: Request, sess=None):
+    """Enable/disable anonymous public viewing of a league (superuser only)."""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not user.get("is_superuser"):
+        return RedirectResponse("/", status_code=303)
+
+    form = await req.form()
+    make_public = form.get("is_public") == "1"
+    set_league_public(league_id, make_public)
+    return RedirectResponse(f"/league/{league_id}", status_code=303)
+
+
+def edit_league_page(league_id: int, req: Request = None, sess=None):
+    """Edit league page (superuser only)"""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not user.get("is_superuser"):
+        return RedirectResponse("/", status_code=303)
+
+    league = get_league(league_id)
+    if not league:
+        return RedirectResponse("/leagues", status_code=303)
+
+    return Html(
+        render_head(f"Edit {league['name']} - Football Manager"),
+        Body(
+            render_navbar(user, sess, req.url.path if req else "/"),
+            Div(cls="container")(
+                H2(f"Edit {league['name']}"),
+                Div(cls="container-white")(
+                    Form(
+                        Div(cls="input-group", style="margin-bottom: 15px;")(
+                            Label(
+                                "League Name:",
+                                style="display: block; margin-bottom: 5px;",
+                            ),
+                            Input(
+                                type="text",
+                                name="name",
+                                value=league.get("name", ""),
+                                required=True,
+                                style="width: 100%; padding: 8px;",
+                            ),
+                        ),
+                        Div(cls="input-group", style="margin-bottom: 15px;")(
+                            Label(
+                                "Description:",
+                                style="display: block; margin-bottom: 5px;",
+                            ),
+                            Textarea(
+                                name="description",
+                                value=league.get("description", ""),
+                                style="width: 100%; padding: 8px; min-height: 60px;",
+                            ),
+                        ),
+                        Div(cls="btn-group")(
+                            Button("Update League", type="submit", cls="btn-success"),
+                            A(
+                                Button("Cancel", cls="btn-secondary"),
+                                href=f"/league/{league_id}",
+                            ),
+                        ),
+                        method="post",
+                        action=f"/update_league/{league_id}",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+async def route_update_league(league_id: int, req: Request, sess=None):
+    """Update league (superuser only)"""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not user.get("is_superuser"):
+        return RedirectResponse("/", status_code=303)
+
+    try:
+        form = await req.form()
+        name = form.get("name", "").strip()
+        description = form.get("description", "").strip()
+
+        is_valid, error_msg = validate_non_empty_string(name, "League name")
+        if not is_valid:
+            raise ValidationError("name", error_msg)
+
+        update_league(league_id, name=name, description=description)
+        return RedirectResponse(f"/league/{league_id}", status_code=303)
+    except ValidationError as e:
+        return handle_route_error(e, f"/edit_league/{league_id}")
+    except Exception as e:
+        return handle_route_error(e, f"/edit_league/{league_id}")
+
+
+def route_delete_league(league_id: int, req: Request = None, sess=None):
+    """Delete a league (superuser only)"""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    # Only superuser can delete leagues (matches create permission)
+    if not user.get("is_superuser"):
+        raise PermissionError("delete", resource=f"league {league_id}")
+
+    # Same check the confirmation page makes. It is the only way in today,
+    # but a guard that lives only in a page is one refactor from gone --
+    # and this one is what keeps a league's matches from being stranded.
+    blocked = blocked_by_matches(league_id)
+    if blocked:
+        return RedirectResponse(f"/confirm-delete/league/{league_id}", status_code=303)
+
+    try:
+        success = delete_league(league_id)
+        return handle_db_result(
+            success,
+            "/leagues",
+            error_redirect="/leagues",
+            error_message="Failed to delete league",
+            check_false=True,
+        )
+    except PermissionError as e:
+        return handle_route_error(e, f"/league/{league_id}")
+    except Exception as e:
+        return handle_route_error(e, "/leagues")
+
+
+async def route_add_club_to_league(league_id: int, req: Request, sess=None):
+    """Add a club to a league (superuser only)"""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not user.get("is_superuser"):
+        return RedirectResponse("/", status_code=303)
+
+    try:
+        form = await req.form()
+        club_id_str = form.get("club_id", "").strip()
+
+        # Validate club ID
+        club_id, error_msg = validate_required_int(club_id_str, "Club ID")
+        if error_msg:
+            raise ValidationError("club_id", error_msg)
+
+        success = add_club_to_league(club_id, league_id)
+        return handle_db_result(
+            success,
+            f"/league/{league_id}",
+            error_redirect=f"/league/{league_id}",
+            error_message="Failed to add club to league",
+            check_false=True,
+        )
+    except ValidationError as e:
+        return handle_route_error(e, f"/league/{league_id}")
+    except Exception as e:
+        return handle_route_error(e, f"/league/{league_id}")
+
+
+def route_remove_club_from_league(
+    league_id: int, club_id: int, req: Request = None, sess=None
+):
+    """Remove a club from a league (superuser only)"""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not user.get("is_superuser"):
+        return RedirectResponse("/", status_code=303)
+
+    remove_club_from_league(club_id, league_id)
+    return RedirectResponse(f"/league/{league_id}", status_code=303)
+
+
 def register_league_routes(rt):
     """Register league-related routes"""
 
-    @rt("/leagues")
-    def leagues_page(req: Request = None, sess=None):
-        """Leagues list page"""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        # Show only leagues where user's clubs participate (superusers see all)
-        club_ids = get_user_club_ids_from_request(req, sess)
-        if user.get("is_superuser"):
-            # Superusers see all leagues
-            leagues = get_all_leagues(club_ids=None)
-        else:
-            # Regular users only see leagues their clubs participate in
-            leagues = get_all_leagues(club_ids) if club_ids else []
-
-        # Only show create form if user is superuser (for now)
-        can_create = user.get("is_superuser")
-
-        return Html(
-            render_head("Leagues - Football Manager"),
-            Body(
-                render_navbar(user, sess, req.url.path if req else "/"),
-                Div(cls="container")(
-                    # The action sits beside the heading rather than as a form
-                    # permanently unrolled above the list.
-                    Div(cls="section-header")(
-                        H2(f"Leagues ({len(leagues)})", style="margin: 0;"),
-                        (
-                            A("Create League", href="/create_league", cls="btn-success")
-                            if can_create
-                            else ""
-                        ),
-                    ),
-                    render_leagues_list(leagues, user),
-                ),
-            ),
-        )
-
-    @rt("/create_league")
-    def create_league_page(req: Request = None, error: str = None, sess=None):
-        """The form for creating a league."""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        if not user.get("is_superuser"):
-            return RedirectResponse("/leagues", status_code=303)
-
-        return Html(
-            render_head("Create League - Football Manager"),
-            Body(
-                render_navbar(user, sess, req.url.path if req else "/"),
-                Div(cls="container")(
-                    H2("Create League"),
-                    render_create_league_form(error),
-                ),
-            ),
-        )
-
-    @rt("/create_league", methods=["POST"])
-    async def route_create_league(req: Request, sess=None):
-        """Create a new league"""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        # Only superuser can create leagues for now
-        if not user.get("is_superuser"):
-            return RedirectResponse(
-                "/leagues?error=Only+superusers+can+create+leagues", status_code=303
-            )
-
-        try:
-            form = await req.form()
-            name = form.get("name", "").strip()
-            description = form.get("description", "").strip()
-
-            # Validate league name
-            is_valid, error_msg = validate_non_empty_string(name, "League name")
-            if not is_valid:
-                raise ValidationError("name", error_msg)
-
-            league_id = create_league(name, description)
-            return handle_db_result(
-                league_id,
-                f"/league/{league_id}",
-                error_redirect="/leagues",
-                error_message="Failed to create league",
-                check_none=True,
-            )
-        except ValidationError as e:
-            return handle_route_error(e, "/leagues")
-        except Exception as e:
-            return handle_route_error(e, "/leagues")
-
-    @rt("/league/{league_id}")
-    def league_detail_page(league_id: int, req: Request = None, sess=None):
-        """League detail page: what the league is, who is in it, how it is shared.
-
-        Anyone whose club plays in the league can read all of it; every control
-        on the page is a superuser's. Which clubs are in a league is not one
-        club's decision to make, and neither is whether it is shared publicly.
-
-        Its fixtures are not here -- /matches lists every match already grouped
-        under its league, so this page repeating them was the same table twice.
-        """
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        can_manage = bool(user.get("is_superuser"))
-
-        # Check if user has access to this league
-        club_ids = get_user_club_ids_from_request(req, sess)
-        league = get_league(league_id, club_ids=None if can_manage else club_ids)
-        if not league:
-            return RedirectResponse("/leagues", status_code=303)
-
-        clubs_in_league = get_clubs_in_league(league_id)
-        # Only the add form needs the clubs that are not in the league yet.
-        all_clubs = get_all_clubs() if can_manage else []
-
-        return Html(
-            render_head(f"{league['name']} - Football Manager"),
-            Body(
-                render_navbar(user, sess, req.url.path if req else "/"),
-                Div(cls="container")(
-                    render_league_header(league, can_manage=can_manage),
-                    Div(cls="container-white", style="margin-top: 20px;")(
-                        H3("Clubs in League"),
-                        render_league_clubs(
-                            league_id,
-                            clubs_in_league,
-                            all_clubs,
-                            user,
-                            can_manage=can_manage,
-                        ),
-                    ),
-                    # Sharing is set once and then forgotten, so it goes under
-                    # the membership people actually come to look at. A reader
-                    # sees it only once it is public, when the link is theirs to
-                    # share; a private league has nothing to tell them.
-                    (
-                        _render_public_sharing(league, req, can_manage=can_manage)
-                        if can_manage or league.get("is_public")
-                        else ""
-                    ),
-                    # Last thing on the page, below every section, so it is
-                    # never in the way of what you came here for.
-                    (
-                        Div(cls="danger-zone")(
-                            confirm_delete_link("league", league_id, "Delete League")
-                        )
-                        if can_manage
-                        else ""
-                    ),
-                ),
-            ),
-        )
-
-    @rt("/toggle_league_public/{league_id}", methods=["POST"])
-    async def route_toggle_league_public(league_id: int, req: Request, sess=None):
-        """Enable/disable anonymous public viewing of a league (superuser only)."""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        if not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
-
-        form = await req.form()
-        make_public = form.get("is_public") == "1"
-        set_league_public(league_id, make_public)
-        return RedirectResponse(f"/league/{league_id}", status_code=303)
-
-    @rt("/edit_league/{league_id}")
-    def edit_league_page(league_id: int, req: Request = None, sess=None):
-        """Edit league page (superuser only)"""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        if not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
-
-        league = get_league(league_id)
-        if not league:
-            return RedirectResponse("/leagues", status_code=303)
-
-        return Html(
-            render_head(f"Edit {league['name']} - Football Manager"),
-            Body(
-                render_navbar(user, sess, req.url.path if req else "/"),
-                Div(cls="container")(
-                    H2(f"Edit {league['name']}"),
-                    Div(cls="container-white")(
-                        Form(
-                            Div(cls="input-group", style="margin-bottom: 15px;")(
-                                Label(
-                                    "League Name:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Input(
-                                    type="text",
-                                    name="name",
-                                    value=league.get("name", ""),
-                                    required=True,
-                                    style="width: 100%; padding: 8px;",
-                                ),
-                            ),
-                            Div(cls="input-group", style="margin-bottom: 15px;")(
-                                Label(
-                                    "Description:",
-                                    style="display: block; margin-bottom: 5px;",
-                                ),
-                                Textarea(
-                                    name="description",
-                                    value=league.get("description", ""),
-                                    style="width: 100%; padding: 8px; min-height: 60px;",
-                                ),
-                            ),
-                            Div(cls="btn-group")(
-                                Button(
-                                    "Update League", type="submit", cls="btn-success"
-                                ),
-                                A(
-                                    Button("Cancel", cls="btn-secondary"),
-                                    href=f"/league/{league_id}",
-                                ),
-                            ),
-                            method="post",
-                            action=f"/update_league/{league_id}",
-                        ),
-                    ),
-                ),
-            ),
-        )
-
-    @rt("/update_league/{league_id}", methods=["POST"])
-    async def route_update_league(league_id: int, req: Request, sess=None):
-        """Update league (superuser only)"""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        if not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
-
-        try:
-            form = await req.form()
-            name = form.get("name", "").strip()
-            description = form.get("description", "").strip()
-
-            is_valid, error_msg = validate_non_empty_string(name, "League name")
-            if not is_valid:
-                raise ValidationError("name", error_msg)
-
-            update_league(league_id, name=name, description=description)
-            return RedirectResponse(f"/league/{league_id}", status_code=303)
-        except ValidationError as e:
-            return handle_route_error(e, f"/edit_league/{league_id}")
-        except Exception as e:
-            return handle_route_error(e, f"/edit_league/{league_id}")
-
-    @rt("/delete_league/{league_id}", methods=["POST"])
-    def route_delete_league(league_id: int, req: Request = None, sess=None):
-        """Delete a league (superuser only)"""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        # Only superuser can delete leagues (matches create permission)
-        if not user.get("is_superuser"):
-            raise PermissionError("delete", resource=f"league {league_id}")
-
-        # Same check the confirmation page makes. It is the only way in today,
-        # but a guard that lives only in a page is one refactor from gone --
-        # and this one is what keeps a league's matches from being stranded.
-        blocked = blocked_by_matches(league_id)
-        if blocked:
-            return RedirectResponse(
-                f"/confirm-delete/league/{league_id}", status_code=303
-            )
-
-        try:
-            success = delete_league(league_id)
-            return handle_db_result(
-                success,
-                "/leagues",
-                error_redirect="/leagues",
-                error_message="Failed to delete league",
-                check_false=True,
-            )
-        except PermissionError as e:
-            return handle_route_error(e, f"/league/{league_id}")
-        except Exception as e:
-            return handle_route_error(e, "/leagues")
-
-    @rt("/add_club_to_league/{league_id}", methods=["POST"])
-    async def route_add_club_to_league(league_id: int, req: Request, sess=None):
-        """Add a club to a league (superuser only)"""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        if not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
-
-        try:
-            form = await req.form()
-            club_id_str = form.get("club_id", "").strip()
-
-            # Validate club ID
-            club_id, error_msg = validate_required_int(club_id_str, "Club ID")
-            if error_msg:
-                raise ValidationError("club_id", error_msg)
-
-            success = add_club_to_league(club_id, league_id)
-            return handle_db_result(
-                success,
-                f"/league/{league_id}",
-                error_redirect=f"/league/{league_id}",
-                error_message="Failed to add club to league",
-                check_false=True,
-            )
-        except ValidationError as e:
-            return handle_route_error(e, f"/league/{league_id}")
-        except Exception as e:
-            return handle_route_error(e, f"/league/{league_id}")
-
-    @rt("/remove_club_from_league/{league_id}/{club_id}", methods=["POST"])
-    def route_remove_club_from_league(
-        league_id: int, club_id: int, req: Request = None, sess=None
-    ):
-        """Remove a club from a league (superuser only)"""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        if not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
-
-        remove_club_from_league(club_id, league_id)
-        return RedirectResponse(f"/league/{league_id}", status_code=303)
+    rt("/leagues")(leagues_page)
+    rt("/create_league")(create_league_page)
+    rt("/create_league", methods=["POST"])(route_create_league)
+    rt("/league/{league_id}")(league_detail_page)
+    rt("/toggle_league_public/{league_id}", methods=["POST"])(
+        route_toggle_league_public
+    )
+    rt("/edit_league/{league_id}")(edit_league_page)
+    rt("/update_league/{league_id}", methods=["POST"])(route_update_league)
+    rt("/delete_league/{league_id}", methods=["POST"])(route_delete_league)
+    rt("/add_club_to_league/{league_id}", methods=["POST"])(route_add_club_to_league)
+    rt("/remove_club_from_league/{league_id}/{club_id}", methods=["POST"])(
+        route_remove_club_from_league
+    )

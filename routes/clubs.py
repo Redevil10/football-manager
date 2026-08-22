@@ -110,452 +110,473 @@ def assignable_roles(user):
     return [USER_ROLES["VIEWER"], USER_ROLES["MANAGER"]]
 
 
-def register_club_routes(rt):
-    """Register all club management routes"""
+def clubs_page(req: Request = None, sess=None):
+    """List the clubs this user can see.
 
-    @rt("/clubs")
-    def clubs_page(req: Request = None, sess=None):
-        """List the clubs this user can see.
+    Superusers see every club; everyone else sees the ones they belong to,
+    at any role. Seeing a club is not managing it -- creating, renaming and
+    restaffing are separate checks on the club's own page.
+    """
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
 
-        Superusers see every club; everyone else sees the ones they belong to,
-        at any role. Seeing a club is not managing it -- creating, renaming and
-        restaffing are separate checks on the club's own page.
-        """
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
+    is_superuser = bool(user.get("is_superuser"))
+    clubs = get_all_clubs() if is_superuser else visible_clubs_for(user)
+    if not clubs and not is_superuser:
+        return RedirectResponse("/", status_code=303)
 
-        is_superuser = bool(user.get("is_superuser"))
-        clubs = get_all_clubs() if is_superuser else visible_clubs_for(user)
-        if not clubs and not is_superuser:
-            return RedirectResponse("/", status_code=303)
-
-        return Html(
-            render_head("Clubs - Football Manager"),
-            Body(
-                render_navbar(user, sess, req.url.path if req else "/"),
-                Div(cls="container")(
-                    Div(cls="section-header")(
-                        H2(f"Clubs ({len(clubs)})", style="margin: 0;"),
-                        (
-                            A("Create Club", href="/create_club", cls="btn-success")
-                            if is_superuser
-                            else ""
-                        ),
-                    ),
-                    render_clubs_list(clubs, user),
-                ),
-            ),
-        )
-
-    @rt("/create_club")
-    def create_club_page(req: Request = None, error: str = None, sess=None):
-        """The form for creating a club."""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        if not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
-
-        return Html(
-            render_head("Create Club - Football Manager"),
-            Body(
-                render_navbar(user, sess, req.url.path if req else "/"),
-                Div(cls="container")(
-                    H2("Create Club"),
-                    render_create_club_form(error),
-                ),
-            ),
-        )
-
-    @rt("/create_club", methods=["POST"])
-    async def route_create_club(req: Request, sess=None):
-        """Create a new club (superuser only)"""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        if not user.get("is_superuser"):
-            return RedirectResponse(
-                "/clubs?error=Only+superusers+can+create+clubs", status_code=303
-            )
-
-        try:
-            form = await req.form()
-            name = form.get("name", "").strip()
-            description = form.get("description", "").strip()
-
-            # Validate club name
-            is_valid, error_msg = validate_non_empty_string(name, "Club name")
-            if not is_valid:
-                raise ValidationError("name", error_msg)
-
-            club_id = create_club(name, description)
-            return handle_db_result(
-                club_id,
-                "/clubs",
-                error_redirect="/clubs",
-                error_message="Club name already exists",
-                check_none=True,
-            )
-        except ValidationError as e:
-            return handle_route_error(e, "/clubs")
-        except Exception as e:
-            return handle_route_error(e, "/clubs")
-
-    @rt("/club/{club_id}")
-    def club_detail_page(club_id: int, req: Request = None, sess=None):
-        """A club: what it is, who is in it, which leagues it plays in.
-
-        Three levels of it. A superuser can do everything. The club's own admin
-        staffs it and writes its description. Everyone else in the club reads it.
-        """
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        is_superuser = bool(user.get("is_superuser"))
-        can_staff = is_club_admin(user, club_id)
-        if not can_staff and club_id not in {c["id"] for c in visible_clubs_for(user)}:
-            return RedirectResponse("/", status_code=303)
-
-        club = get_club(club_id)
-        if not club:
-            return RedirectResponse("/clubs", status_code=303)
-
-        # Get all users and their roles in this club
-        all_users = get_all_users()
-        club_members = []
-        for u in all_users:
-            role = get_user_club_role(u["id"], club_id)
-            club_members.append(
-                {
-                    "user_id": u["id"],
-                    "username": u["username"],
-                    "email": u.get("email"),
-                    "is_superuser": u.get("is_superuser"),
-                    "role": role,
-                }
-            )
-
-        # Get leagues for this club (for superuser management)
-        leagues_for_club = get_leagues_for_club(club_id)
-        all_leagues = get_all_leagues(club_ids=None)
-
-        return Html(
-            render_head(f"{club['name']} - Football Manager"),
-            Body(
-                render_navbar(user, sess, req.url.path if req else "/"),
-                Div(cls="container")(
-                    Div(cls="section-header")(
-                        H2(club["name"], style="margin: 0;"),
-                        (
-                            A(
-                                "Edit Club",
-                                href=f"/edit_club/{club_id}",
-                                cls="btn-success",
-                            )
-                            if can_staff
-                            else ""
-                        ),
-                    ),
-                    # No description, no card: an empty white box says nothing
-                    # that the absence of one does not.
+    return Html(
+        render_head("Clubs - Football Manager"),
+        Body(
+            render_navbar(user, sess, req.url.path if req else "/"),
+            Div(cls="container")(
+                Div(cls="section-header")(
+                    H2(f"Clubs ({len(clubs)})", style="margin: 0;"),
                     (
-                        Div(cls="container-white")(P(club["description"]))
-                        if club.get("description")
-                        else ""
-                    ),
-                    Div(cls="container-white", style="margin-top: 20px;")(
-                        H3("Club Members"),
-                        render_club_members(
-                            club_id, club_members, user, can_manage=can_staff
-                        ),
-                    ),
-                    Div(cls="container-white", style="margin-top: 20px;")(
-                        H3("Leagues"),
-                        # Which leagues a club plays in is not the club admin's
-                        # to decide -- it affects the leagues too.
-                        render_club_leagues(
-                            club_id,
-                            leagues_for_club,
-                            all_leagues,
-                            user,
-                            can_manage=is_superuser,
-                        ),
-                    ),
-                    (
-                        Div(cls="danger-zone")(
-                            confirm_delete_link("club", club_id, "Delete Club")
-                        )
+                        A("Create Club", href="/create_club", cls="btn-success")
                         if is_superuser
                         else ""
                     ),
                 ),
+                render_clubs_list(clubs, user),
             ),
+        ),
+    )
+
+
+def create_club_page(req: Request = None, error: str = None, sess=None):
+    """The form for creating a club."""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not user.get("is_superuser"):
+        return RedirectResponse("/", status_code=303)
+
+    return Html(
+        render_head("Create Club - Football Manager"),
+        Body(
+            render_navbar(user, sess, req.url.path if req else "/"),
+            Div(cls="container")(
+                H2("Create Club"),
+                render_create_club_form(error),
+            ),
+        ),
+    )
+
+
+async def route_create_club(req: Request, sess=None):
+    """Create a new club (superuser only)"""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not user.get("is_superuser"):
+        return RedirectResponse(
+            "/clubs?error=Only+superusers+can+create+clubs", status_code=303
         )
 
-    @rt("/edit_club/{club_id}")
-    def edit_club_page(club_id: int, req: Request = None, sess=None):
-        """Edit a club's name and description.
+    try:
+        form = await req.form()
+        name = form.get("name", "").strip()
+        description = form.get("description", "").strip()
 
-        The club's own admin gets the description only: the name is how everyone
-        else refers to this club, so renaming it is a superuser's call.
-        """
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
+        # Validate club name
+        is_valid, error_msg = validate_non_empty_string(name, "Club name")
+        if not is_valid:
+            raise ValidationError("name", error_msg)
 
-        if not is_club_admin(user, club_id):
-            return RedirectResponse("/", status_code=303)
-        may_rename = bool(user.get("is_superuser"))
+        club_id = create_club(name, description)
+        return handle_db_result(
+            club_id,
+            "/clubs",
+            error_redirect="/clubs",
+            error_message="Club name already exists",
+            check_none=True,
+        )
+    except ValidationError as e:
+        return handle_route_error(e, "/clubs")
+    except Exception as e:
+        return handle_route_error(e, "/clubs")
 
-        club = get_club(club_id)
-        if not club:
-            return RedirectResponse("/clubs", status_code=303)
 
-        return Html(
-            render_head(f"Edit {club['name']} - Football Manager"),
-            Body(
-                render_navbar(user, sess, req.url.path if req else "/"),
-                Div(cls="container")(
-                    H2(f"Edit {club['name']}"),
-                    Div(cls="container-white")(
-                        Form(
-                            (
-                                Div(cls="input-group", style="margin-bottom: 15px;")(
-                                    Label(
-                                        "Club Name:",
-                                        style="display: block; margin-bottom: 5px;",
-                                    ),
-                                    Input(
-                                        type="text",
-                                        name="name",
-                                        value=club.get("name", ""),
-                                        required=True,
-                                        style="width: 100%; padding: 8px;",
-                                    ),
-                                )
-                                if may_rename
-                                else ""
-                            ),
+def club_detail_page(club_id: int, req: Request = None, sess=None):
+    """A club: what it is, who is in it, which leagues it plays in.
+
+    Three levels of it. A superuser can do everything. The club's own admin
+    staffs it and writes its description. Everyone else in the club reads it.
+    """
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    is_superuser = bool(user.get("is_superuser"))
+    can_staff = is_club_admin(user, club_id)
+    if not can_staff and club_id not in {c["id"] for c in visible_clubs_for(user)}:
+        return RedirectResponse("/", status_code=303)
+
+    club = get_club(club_id)
+    if not club:
+        return RedirectResponse("/clubs", status_code=303)
+
+    # Get all users and their roles in this club
+    all_users = get_all_users()
+    club_members = []
+    for u in all_users:
+        role = get_user_club_role(u["id"], club_id)
+        club_members.append(
+            {
+                "user_id": u["id"],
+                "username": u["username"],
+                "email": u.get("email"),
+                "is_superuser": u.get("is_superuser"),
+                "role": role,
+            }
+        )
+
+    # Get leagues for this club (for superuser management)
+    leagues_for_club = get_leagues_for_club(club_id)
+    all_leagues = get_all_leagues(club_ids=None)
+
+    return Html(
+        render_head(f"{club['name']} - Football Manager"),
+        Body(
+            render_navbar(user, sess, req.url.path if req else "/"),
+            Div(cls="container")(
+                Div(cls="section-header")(
+                    H2(club["name"], style="margin: 0;"),
+                    (
+                        A(
+                            "Edit Club",
+                            href=f"/edit_club/{club_id}",
+                            cls="btn-success",
+                        )
+                        if can_staff
+                        else ""
+                    ),
+                ),
+                # No description, no card: an empty white box says nothing
+                # that the absence of one does not.
+                (
+                    Div(cls="container-white")(P(club["description"]))
+                    if club.get("description")
+                    else ""
+                ),
+                Div(cls="container-white", style="margin-top: 20px;")(
+                    H3("Club Members"),
+                    render_club_members(
+                        club_id, club_members, user, can_manage=can_staff
+                    ),
+                ),
+                Div(cls="container-white", style="margin-top: 20px;")(
+                    H3("Leagues"),
+                    # Which leagues a club plays in is not the club admin's
+                    # to decide -- it affects the leagues too.
+                    render_club_leagues(
+                        club_id,
+                        leagues_for_club,
+                        all_leagues,
+                        user,
+                        can_manage=is_superuser,
+                    ),
+                ),
+                (
+                    Div(cls="danger-zone")(
+                        confirm_delete_link("club", club_id, "Delete Club")
+                    )
+                    if is_superuser
+                    else ""
+                ),
+            ),
+        ),
+    )
+
+
+def edit_club_page(club_id: int, req: Request = None, sess=None):
+    """Edit a club's name and description.
+
+    The club's own admin gets the description only: the name is how everyone
+    else refers to this club, so renaming it is a superuser's call.
+    """
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not is_club_admin(user, club_id):
+        return RedirectResponse("/", status_code=303)
+    may_rename = bool(user.get("is_superuser"))
+
+    club = get_club(club_id)
+    if not club:
+        return RedirectResponse("/clubs", status_code=303)
+
+    return Html(
+        render_head(f"Edit {club['name']} - Football Manager"),
+        Body(
+            render_navbar(user, sess, req.url.path if req else "/"),
+            Div(cls="container")(
+                H2(f"Edit {club['name']}"),
+                Div(cls="container-white")(
+                    Form(
+                        (
                             Div(cls="input-group", style="margin-bottom: 15px;")(
                                 Label(
-                                    "Description:",
+                                    "Club Name:",
                                     style="display: block; margin-bottom: 5px;",
                                 ),
-                                Textarea(
-                                    name="description",
-                                    value=club.get("description", ""),
-                                    style="width: 100%; padding: 8px; min-height: 60px;",
+                                Input(
+                                    type="text",
+                                    name="name",
+                                    value=club.get("name", ""),
+                                    required=True,
+                                    style="width: 100%; padding: 8px;",
                                 ),
-                            ),
-                            Div(cls="btn-group")(
-                                Button("Update Club", type="submit", cls="btn-success"),
-                                A(
-                                    Button("Cancel", cls="btn-secondary"),
-                                    href=f"/club/{club_id}",
-                                ),
-                            ),
-                            method="post",
-                            action=f"/update_club/{club_id}",
+                            )
+                            if may_rename
+                            else ""
                         ),
+                        Div(cls="input-group", style="margin-bottom: 15px;")(
+                            Label(
+                                "Description:",
+                                style="display: block; margin-bottom: 5px;",
+                            ),
+                            Textarea(
+                                name="description",
+                                value=club.get("description", ""),
+                                style="width: 100%; padding: 8px; min-height: 60px;",
+                            ),
+                        ),
+                        Div(cls="btn-group")(
+                            Button("Update Club", type="submit", cls="btn-success"),
+                            A(
+                                Button("Cancel", cls="btn-secondary"),
+                                href=f"/club/{club_id}",
+                            ),
+                        ),
+                        method="post",
+                        action=f"/update_club/{club_id}",
                     ),
                 ),
             ),
-        )
+        ),
+    )
 
-    @rt("/update_club/{club_id}", methods=["POST"])
-    async def route_update_club(club_id: int, req: Request, sess=None):
-        """Update a club's name and description."""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
 
-        if not is_club_admin(user, club_id):
-            return RedirectResponse("/", status_code=303)
+async def route_update_club(club_id: int, req: Request, sess=None):
+    """Update a club's name and description."""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
 
-        club = get_club(club_id)
-        if not club:
-            return RedirectResponse("/clubs", status_code=303)
+    if not is_club_admin(user, club_id):
+        return RedirectResponse("/", status_code=303)
 
-        form = await req.form()
-        description = form.get("description", "").strip()
-
-        # A club admin's form has no name field, and a posted one is ignored
-        # rather than trusted: the edit page is not the only way to reach here.
-        if user.get("is_superuser"):
-            name = form.get("name", "").strip()
-            if not name:
-                return RedirectResponse(
-                    f"/edit_club/{club_id}?error=Club+name+is+required", status_code=303
-                )
-        else:
-            name = club["name"]
-
-        update_club(club_id, name=name, description=description)
-        return RedirectResponse(f"/club/{club_id}", status_code=303)
-
-    @rt("/delete_club/{club_id}", methods=["POST"])
-    def route_delete_club(club_id: int, req: Request = None, sess=None):
-        """Delete club (superuser only)"""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        if not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
-
-        # Same check the confirmation page makes; see blocked_by_players.
-        if blocked_by_players(club_id):
-            return RedirectResponse(f"/confirm-delete/club/{club_id}", status_code=303)
-
-        delete_club(club_id)
+    club = get_club(club_id)
+    if not club:
         return RedirectResponse("/clubs", status_code=303)
 
-    @rt("/assign_user_to_club/{club_id}", methods=["POST"])
-    async def route_assign_user_to_club(club_id: int, req: Request, sess=None):
-        """Add a member to a club. Superusers, or the club's own admin."""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
+    form = await req.form()
+    description = form.get("description", "").strip()
 
-        if not is_club_admin(user, club_id):
-            return RedirectResponse("/", status_code=303)
-
-        form = await req.form()
-        user_id_str = form.get("user_id", "").strip()
-        role = form.get("role", USER_ROLES["VIEWER"]).strip()
-
-        # Validate user_id
-        user_id, error_msg = validate_required_int(user_id_str, "User ID")
-        if error_msg:
+    # A club admin's form has no name field, and a posted one is ignored
+    # rather than trusted: the edit page is not the only way to reach here.
+    if user.get("is_superuser"):
+        name = form.get("name", "").strip()
+        if not name:
             return RedirectResponse(
-                f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
+                f"/edit_club/{club_id}?error=Club+name+is+required", status_code=303
             )
+    else:
+        name = club["name"]
 
-        # Checked against what this user may hand out, not the full list: a club
-        # admin cannot mint another admin by posting the form themselves.
-        is_valid, error_msg = validate_in_list(role, assignable_roles(user), "Role")
-        if not is_valid:
-            return RedirectResponse(
-                f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
-            )
+    update_club(club_id, name=name, description=description)
+    return RedirectResponse(f"/club/{club_id}", status_code=303)
 
-        if not may_restaff(user, club_id, user_id):
-            return RedirectResponse(
-                f"/club/{club_id}?error=Not+allowed+to+add+this+user", status_code=303
-            )
 
-        try:
-            success = add_user_to_club(user_id, club_id, role)
-            return handle_db_result(
-                success,
-                f"/club/{club_id}",
-                error_message="User already in club or invalid user",
-                check_false=True,
-            )
-        except Exception as e:
-            return handle_route_error(e, f"/club/{club_id}")
+def route_delete_club(club_id: int, req: Request = None, sess=None):
+    """Delete club (superuser only)"""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
 
-    @rt("/remove_user_from_club/{club_id}/{user_id}", methods=["POST"])
-    def route_remove_user_from_club(
-        club_id: int, user_id: int, req: Request = None, sess=None
-    ):
-        """Remove a member from a club. Superusers, or the club's own admin."""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
+    if not user.get("is_superuser"):
+        return RedirectResponse("/", status_code=303)
 
-        if not may_restaff(user, club_id, user_id):
-            return RedirectResponse(f"/club/{club_id}", status_code=303)
+    # Same check the confirmation page makes; see blocked_by_players.
+    if blocked_by_players(club_id):
+        return RedirectResponse(f"/confirm-delete/club/{club_id}", status_code=303)
 
-        from db.connection import get_db
+    delete_club(club_id)
+    return RedirectResponse("/clubs", status_code=303)
 
-        conn = get_db()
-        conn.execute(
-            "DELETE FROM user_clubs WHERE user_id = ? AND club_id = ?",
-            (user_id, club_id),
+
+async def route_assign_user_to_club(club_id: int, req: Request, sess=None):
+    """Add a member to a club. Superusers, or the club's own admin."""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not is_club_admin(user, club_id):
+        return RedirectResponse("/", status_code=303)
+
+    form = await req.form()
+    user_id_str = form.get("user_id", "").strip()
+    role = form.get("role", USER_ROLES["VIEWER"]).strip()
+
+    # Validate user_id
+    user_id, error_msg = validate_required_int(user_id_str, "User ID")
+    if error_msg:
+        return RedirectResponse(
+            f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
         )
-        conn.commit()
-        conn.close()
 
-        return RedirectResponse(f"/club/{club_id}", status_code=303)
-
-    @rt("/update_user_club_role/{club_id}/{user_id}", methods=["POST"])
-    async def route_update_user_club_role(
-        club_id: int, user_id: int, req: Request, sess=None
-    ):
-        """Change a member's role. Superusers, or the club's own admin."""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        if not may_restaff(user, club_id, user_id):
-            return RedirectResponse(f"/club/{club_id}", status_code=303)
-
-        form = await req.form()
-        role = form.get("role", "").strip()
-
-        # See route_assign_user_to_club: the list is what this user may hand out.
-        is_valid, error_msg = validate_in_list(role, assignable_roles(user), "Role")
-        if not is_valid:
-            return RedirectResponse(
-                f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
-            )
-
-        conn = get_db()
-        conn.execute(
-            "UPDATE user_clubs SET role = ? WHERE user_id = ? AND club_id = ?",
-            (role, user_id, club_id),
+    # Checked against what this user may hand out, not the full list: a club
+    # admin cannot mint another admin by posting the form themselves.
+    is_valid, error_msg = validate_in_list(role, assignable_roles(user), "Role")
+    if not is_valid:
+        return RedirectResponse(
+            f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
         )
-        conn.commit()
-        conn.close()
 
+    if not may_restaff(user, club_id, user_id):
+        return RedirectResponse(
+            f"/club/{club_id}?error=Not+allowed+to+add+this+user", status_code=303
+        )
+
+    try:
+        success = add_user_to_club(user_id, club_id, role)
+        return handle_db_result(
+            success,
+            f"/club/{club_id}",
+            error_message="User already in club or invalid user",
+            check_false=True,
+        )
+    except Exception as e:
+        return handle_route_error(e, f"/club/{club_id}")
+
+
+def route_remove_user_from_club(
+    club_id: int, user_id: int, req: Request = None, sess=None
+):
+    """Remove a member from a club. Superusers, or the club's own admin."""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not may_restaff(user, club_id, user_id):
         return RedirectResponse(f"/club/{club_id}", status_code=303)
 
-    @rt("/add_club_to_league_from_club/{club_id}", methods=["POST"])
-    async def route_add_club_to_league_from_club(club_id: int, req: Request, sess=None):
-        """Add a club to a league (superuser only) - from club page"""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
+    from db.connection import get_db
 
-        if not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM user_clubs WHERE user_id = ? AND club_id = ?",
+        (user_id, club_id),
+    )
+    conn.commit()
+    conn.close()
 
-        form = await req.form()
-        league_id_str = form.get("league_id", "").strip()
+    return RedirectResponse(f"/club/{club_id}", status_code=303)
 
-        if not league_id_str:
-            return RedirectResponse(
-                f"/club/{club_id}?error=League+ID+required", status_code=303
-            )
 
-        try:
-            league_id = int(league_id_str)
-            add_club_to_league(club_id, league_id)
-            return RedirectResponse(f"/club/{club_id}", status_code=303)
-        except ValueError:
-            return RedirectResponse(
-                f"/club/{club_id}?error=Invalid+league+ID", status_code=303
-            )
+async def route_update_user_club_role(
+    club_id: int, user_id: int, req: Request, sess=None
+):
+    """Change a member's role. Superusers, or the club's own admin."""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
 
-    @rt("/remove_club_from_league_from_club/{club_id}/{league_id}", methods=["POST"])
-    def route_remove_club_from_league_from_club(
-        club_id: int, league_id: int, req: Request = None, sess=None
-    ):
-        """Remove a club from a league (superuser only) - from club page"""
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
-
-        if not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
-
-        remove_club_from_league(club_id, league_id)
+    if not may_restaff(user, club_id, user_id):
         return RedirectResponse(f"/club/{club_id}", status_code=303)
+
+    form = await req.form()
+    role = form.get("role", "").strip()
+
+    # See route_assign_user_to_club: the list is what this user may hand out.
+    is_valid, error_msg = validate_in_list(role, assignable_roles(user), "Role")
+    if not is_valid:
+        return RedirectResponse(
+            f"/club/{club_id}?error={error_msg.replace(' ', '+')}", status_code=303
+        )
+
+    conn = get_db()
+    conn.execute(
+        "UPDATE user_clubs SET role = ? WHERE user_id = ? AND club_id = ?",
+        (role, user_id, club_id),
+    )
+    conn.commit()
+    conn.close()
+
+    return RedirectResponse(f"/club/{club_id}", status_code=303)
+
+
+async def route_add_club_to_league_from_club(club_id: int, req: Request, sess=None):
+    """Add a club to a league (superuser only) - from club page"""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not user.get("is_superuser"):
+        return RedirectResponse("/", status_code=303)
+
+    form = await req.form()
+    league_id_str = form.get("league_id", "").strip()
+
+    if not league_id_str:
+        return RedirectResponse(
+            f"/club/{club_id}?error=League+ID+required", status_code=303
+        )
+
+    try:
+        league_id = int(league_id_str)
+        add_club_to_league(club_id, league_id)
+        return RedirectResponse(f"/club/{club_id}", status_code=303)
+    except ValueError:
+        return RedirectResponse(
+            f"/club/{club_id}?error=Invalid+league+ID", status_code=303
+        )
+
+
+def route_remove_club_from_league_from_club(
+    club_id: int, league_id: int, req: Request = None, sess=None
+):
+    """Remove a club from a league (superuser only) - from club page"""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    if not user.get("is_superuser"):
+        return RedirectResponse("/", status_code=303)
+
+    remove_club_from_league(club_id, league_id)
+    return RedirectResponse(f"/club/{club_id}", status_code=303)
+
+
+def register_club_routes(rt):
+    """Register all club management routes"""
+
+    rt("/clubs")(clubs_page)
+    rt("/create_club")(create_club_page)
+    rt("/create_club", methods=["POST"])(route_create_club)
+    rt("/club/{club_id}")(club_detail_page)
+    rt("/edit_club/{club_id}")(edit_club_page)
+    rt("/update_club/{club_id}", methods=["POST"])(route_update_club)
+    rt("/delete_club/{club_id}", methods=["POST"])(route_delete_club)
+    rt("/assign_user_to_club/{club_id}", methods=["POST"])(route_assign_user_to_club)
+    rt("/remove_user_from_club/{club_id}/{user_id}", methods=["POST"])(
+        route_remove_user_from_club
+    )
+    rt("/update_user_club_role/{club_id}/{user_id}", methods=["POST"])(
+        route_update_user_club_role
+    )
+    rt("/add_club_to_league_from_club/{club_id}", methods=["POST"])(
+        route_add_club_to_league_from_club
+    )
+    rt("/remove_club_from_league_from_club/{club_id}/{league_id}", methods=["POST"])(
+        route_remove_club_from_league_from_club
+    )
 
 
 def render_clubs_list(clubs, user=None):

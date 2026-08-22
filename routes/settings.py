@@ -47,37 +47,40 @@ def _get_backup_info():
     }
 
 
+def settings_page(req: Request = None, sess=None):
+    """Settings page (superuser only)"""
+    user = get_current_user(req, sess)
+    if not user or not user.get("is_superuser"):
+        return RedirectResponse("/", status_code=303)
+
+    smart_import_enabled = get_setting("smart_import_enabled", "false") == "true"
+    backup_info = _get_backup_info()
+    return render_settings_page(
+        user, sess, smart_import_enabled, backup_info=backup_info
+    )
+
+
+async def toggle_smart_import(req: Request = None, sess=None):
+    """Toggle smart import setting"""
+    user = get_current_user(req, sess)
+    if not user or not user.get("is_superuser"):
+        return RedirectResponse("/", status_code=303)
+
+    form = await req.form()
+    csrf_token = form.get("csrf_token", "")
+    if not validate_csrf_token(sess, csrf_token):
+        return RedirectResponse("/settings", status_code=303)
+
+    # Checkbox: present in form data when checked, absent when unchecked
+    enabled = "enabled" in form
+    set_setting("smart_import_enabled", "true" if enabled else "false")
+
+    has_api_key = bool(os.environ.get("GEMINI_API_KEY"))
+    return render_smart_import_toggle(sess, enabled, has_api_key)
+
+
 def register_settings_routes(rt):
     """Register settings routes"""
 
-    @rt("/settings")
-    def settings_page(req: Request = None, sess=None):
-        """Settings page (superuser only)"""
-        user = get_current_user(req, sess)
-        if not user or not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
-
-        smart_import_enabled = get_setting("smart_import_enabled", "false") == "true"
-        backup_info = _get_backup_info()
-        return render_settings_page(
-            user, sess, smart_import_enabled, backup_info=backup_info
-        )
-
-    @rt("/settings/smart_import", methods=["POST"])
-    async def toggle_smart_import(req: Request = None, sess=None):
-        """Toggle smart import setting"""
-        user = get_current_user(req, sess)
-        if not user or not user.get("is_superuser"):
-            return RedirectResponse("/", status_code=303)
-
-        form = await req.form()
-        csrf_token = form.get("csrf_token", "")
-        if not validate_csrf_token(sess, csrf_token):
-            return RedirectResponse("/settings", status_code=303)
-
-        # Checkbox: present in form data when checked, absent when unchecked
-        enabled = "enabled" in form
-        set_setting("smart_import_enabled", "true" if enabled else "false")
-
-        has_api_key = bool(os.environ.get("GEMINI_API_KEY"))
-        return render_smart_import_toggle(sess, enabled, has_api_key)
+    rt("/settings")(settings_page)
+    rt("/settings/smart_import", methods=["POST"])(toggle_smart_import)

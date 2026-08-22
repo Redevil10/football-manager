@@ -16,12 +16,15 @@ posts to them, and they still re-check permission themselves.
 """
 
 from fasthtml.common import H2, A, Body, Button, Div, Form, Html, P
+from starlette.requests import Request
+from starlette.responses import RedirectResponse
 
 from core.auth import (
     can_user_edit_match,
     get_current_user,
     get_user_club_ids_from_request,
 )
+from core.exceptions import NotFoundError
 from db.club_leagues import get_clubs_in_league, get_leagues_for_club
 from db.clubs import get_club
 from db.leagues import get_league
@@ -218,94 +221,87 @@ TARGETS = {
 }
 
 
-def register_delete_confirm_routes(rt):
-    """Register the shared delete confirmation page."""
-    from starlette.requests import Request
-    from starlette.responses import RedirectResponse
+def route_confirm_delete(kind: str, item_id: int, req: Request = None, sess=None):
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
 
-    from core.exceptions import NotFoundError
+    build = TARGETS.get(kind)
+    if not build:
+        raise NotFoundError(kind, resource_id=item_id)
 
-    @rt("/confirm-delete/{kind}/{item_id}")
-    def route_confirm_delete(kind: str, item_id: int, req: Request = None, sess=None):
-        user = get_current_user(req, sess)
-        if not user:
-            return RedirectResponse("/login", status_code=303)
+    target = build(item_id, user, req, sess)
+    if not target:
+        raise NotFoundError(kind, resource_id=item_id)
+    if not target["allowed"]:
+        return RedirectResponse(target["cancel"], status_code=303)
 
-        build = TARGETS.get(kind)
-        if not build:
-            raise NotFoundError(kind, resource_id=item_id)
+    # Most things here can only be deleted. A player with match history is
+    # archived instead, which is reversible and so says so.
+    verb = target.get("verb", "Delete")
+    reversible = target.get("reversible", False)
+    # Something still depends on this that the delete would strand. Say what
+    # and why, and offer no button -- an explanation beats a SQLite
+    # "FOREIGN KEY constraint failed" that nobody can act on.
+    blocked = target.get("blocked")
 
-        target = build(item_id, user, req, sess)
-        if not target:
-            raise NotFoundError(kind, resource_id=item_id)
-        if not target["allowed"]:
-            return RedirectResponse(target["cancel"], status_code=303)
-
-        # Most things here can only be deleted. A player with match history is
-        # archived instead, which is reversible and so says so.
-        verb = target.get("verb", "Delete")
-        reversible = target.get("reversible", False)
-        # Something still depends on this that the delete would strand. Say what
-        # and why, and offer no button -- an explanation beats a SQLite
-        # "FOREIGN KEY constraint failed" that nobody can act on.
-        blocked = target.get("blocked")
-
-        return Html(
-            render_head(f"{verb} {target['noun']} - Football Manager"),
-            Body(
-                render_navbar(user, sess, req.url.path if req else "/"),
-                Div(cls="container")(
-                    Div(cls="container-white confirm-delete")(
-                        H2(f"{verb} this {target['noun']}?"),
-                        P(target["name"], cls="confirm-delete-name"),
-                        (
-                            P(target["context"], cls="confirm-delete-context")
-                            if target["context"]
-                            else ""
-                        ),
-                        *[
-                            P(line, cls="confirm-delete-context")
-                            for line in target["references"]
-                        ],
-                        (
-                            Div(blocked, cls="notice")
-                            if blocked
-                            else P(
-                                "You can bring them back later."
+    return Html(
+        render_head(f"{verb} {target['noun']} - Football Manager"),
+        Body(
+            render_navbar(user, sess, req.url.path if req else "/"),
+            Div(cls="container")(
+                Div(cls="container-white confirm-delete")(
+                    H2(f"{verb} this {target['noun']}?"),
+                    P(target["name"], cls="confirm-delete-name"),
+                    (
+                        P(target["context"], cls="confirm-delete-context")
+                        if target["context"]
+                        else ""
+                    ),
+                    *[
+                        P(line, cls="confirm-delete-context")
+                        for line in target["references"]
+                    ],
+                    (
+                        Div(blocked, cls="notice")
+                        if blocked
+                        else P(
+                            "You can bring them back later."
+                            if reversible
+                            else "This cannot be undone.",
+                            cls=(
+                                "confirm-delete-note"
                                 if reversible
-                                else "This cannot be undone.",
-                                cls=(
-                                    "confirm-delete-note"
-                                    if reversible
-                                    else "confirm-delete-warning"
-                                ),
+                                else "confirm-delete-warning"
+                            ),
+                        )
+                    ),
+                    Div(cls="btn-group")(
+                        A(
+                            "Back" if blocked else "Cancel",
+                            href=target["cancel"],
+                            cls="btn-outline",
+                        ),
+                        (
+                            ""
+                            if blocked
+                            else Form(method="POST", action=target["action"])(
+                                Button(
+                                    f"{verb} {target['noun']}",
+                                    type="submit",
+                                    cls=(
+                                        "btn-secondary" if reversible else "btn-danger"
+                                    ),
+                                )
                             )
                         ),
-                        Div(cls="btn-group")(
-                            A(
-                                "Back" if blocked else "Cancel",
-                                href=target["cancel"],
-                                cls="btn-outline",
-                            ),
-                            (
-                                ""
-                                if blocked
-                                else Form(method="POST", action=target["action"])(
-                                    Button(
-                                        f"{verb} {target['noun']}",
-                                        type="submit",
-                                        cls=(
-                                            "btn-secondary"
-                                            if reversible
-                                            else "btn-danger"
-                                        ),
-                                    )
-                                )
-                            ),
-                        ),
-                    )
-                ),
+                    ),
+                )
             ),
-        )
+        ),
+    )
 
-    return rt
+
+def register_delete_confirm_routes(rt):
+    """Register the shared delete confirmation page."""
+    rt("/confirm-delete/{kind}/{item_id}")(route_confirm_delete)
