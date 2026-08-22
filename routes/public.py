@@ -16,10 +16,12 @@ from db import (
     get_match,
     get_match_events,
     get_match_players,
+    get_match_recordings,
     get_match_signup_players,
     get_match_teams,
     get_matches_by_league,
     get_public_leagues,
+    get_teams_for_matches,
 )
 from render import render_match_detail
 from render.public import (
@@ -50,7 +52,11 @@ def public_league_page(league_id: int):
         return _not_found()
 
     matches = get_matches_by_league(league_id)
-    return render_public_league(league, matches)
+    return render_public_league(
+        league,
+        matches,
+        teams_by_match_id=get_teams_for_matches([m["id"] for m in matches]),
+    )
 
 
 def public_match_page(match_id: int, display: str = "pitch"):
@@ -95,6 +101,7 @@ def public_match_page(match_id: int, display: str = "pitch"):
         user=None,
         display_mode=display,
         read_only=True,
+        recordings=get_match_recordings(match_id),
     )
     return render_public_page(
         f"{match.get('date', 'Match')} - Football Manager",

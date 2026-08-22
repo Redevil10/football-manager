@@ -79,19 +79,27 @@ def render_head(title, *extra):
     )
 
 
-def match_fixture(match):
+def match_fixture(match, teams=None):
     """The two sides of a match and the score between them, as separate parts.
 
     A table wants these in their own columns, and the one-line match name wants
-    them run together; both come from here so the teams are fetched once and
-    described the same way.
+    them run together; both come from here so the teams are described the same
+    way.
+
+    Args:
+        match: The match dict.
+        teams: Its ``match_teams`` rows, when the caller already has them.
+            A table rendering many rows should pass these -- fetched here it is
+            one query per row. Left out, the teams are looked up for this match
+            alone, which is what the single-match callers want.
 
     Returns:
         (home, score, away): names always strings; ``score`` is "3 : 2" once the
         match has been played and both sides have a score, otherwise None.
     """
-    match_id = match.get("id") if match else None
-    teams = get_match_teams(match_id) if match_id else []
+    if teams is None:
+        match_id = match.get("id") if match else None
+        teams = get_match_teams(match_id) if match_id else []
 
     home_name, away_name = "Home Team", "Away Team"
     home_score = away_score = None
@@ -207,27 +215,6 @@ def format_match_meta(match, include_date=False):
         if part
     ]
     return " · ".join(parts)
-
-
-def get_match_score_display(match_id):
-    """Get match score display string for a match"""
-    teams = get_match_teams(match_id)
-    if not teams:
-        return ""
-
-    team1_score = None
-    team2_score = None
-    for team in teams:
-        if team.get("team_number") == 1:
-            team1_score = team.get("score", 0)
-        elif team.get("team_number") == 2:
-            team2_score = team.get("score", 0)
-
-    if team1_score is not None and team2_score is not None:
-        return f"Score: {team1_score} - {team2_score}"
-    elif team1_score is not None:
-        return f"Score: {team1_score}"
-    return ""
 
 
 def _belongs_to_a_club(user):

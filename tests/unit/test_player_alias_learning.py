@@ -11,7 +11,8 @@ from unittest.mock import patch
 import pytest
 from fasthtml.common import to_xml
 
-from db.players import add_player_alias, find_player_by_name_or_alias, split_aliases
+from core.text import split_aliases
+from db.players import add_player_alias, find_player_by_name_or_alias
 from render.matches import render_import_confirmation
 
 

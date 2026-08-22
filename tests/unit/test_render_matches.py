@@ -386,7 +386,6 @@ class TestRenderCaptainSelection:
 class TestRenderMatchDetail:
     """Tests for render_match_detail function"""
 
-    @patch("render.matches.get_match_recordings")
     @patch("render.matches.format_match_name")
     @patch("render.matches.can_user_edit_match")
     @patch("render.matches.calculate_overall_score")
@@ -397,14 +396,12 @@ class TestRenderMatchDetail:
         mock_calculate,
         mock_can_edit,
         mock_format_name,
-        mock_get_recordings,
     ):
         """Test rendering match detail with match data"""
         mock_format_name.return_value = "2024-01-15 Team A VS Team B"
         mock_can_edit.return_value = False
         mock_calculate.return_value = 85.5
         mock_is_completed.return_value = False
-        mock_get_recordings.return_value = []
 
         match = {
             "id": 1,
@@ -416,7 +413,9 @@ class TestRenderMatchDetail:
         match_players_dict = {}
         events = []
 
-        result = render_match_detail(match, teams, match_players_dict, events, None)
+        result = render_match_detail(
+            match, teams, match_players_dict, events, None, recordings=[]
+        )
 
         assert result is not None
 
@@ -483,18 +482,6 @@ class TestRenderMatchRecordings:
         assert "Delete" in xml
         assert "/delete_match_recording/1/10" in xml
         assert "Add Links" in xml
-
-    @patch("render.matches.get_match_recordings")
-    def test_fetches_recordings_when_not_provided(self, mock_get_recordings):
-        """When recordings is None, they are fetched from the DB layer"""
-        mock_get_recordings.return_value = [
-            {"id": 5, "url": "https://youtu.be/fetched", "label": None}
-        ]
-        result = render_match_recordings(7, can_edit=False)
-        xml = to_xml(result)
-
-        mock_get_recordings.assert_called_once_with(7)
-        assert "https://youtu.be/fetched" in xml
 
 
 class TestRenderTeams:

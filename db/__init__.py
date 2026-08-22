@@ -52,10 +52,12 @@ from db.match_teams import (
     create_match_team,
     delete_match_team,
     get_match_teams,
+    get_teams_for_matches,
     update_match_team,
     update_team_captain,
 )
 from db.matches import (
+    count_matches_by_league,
     create_match,
     delete_match,
     get_all_matches,
@@ -133,6 +135,7 @@ __all__ = [
     "get_public_leagues",
     "get_or_create_friendly_league",
     # Matches
+    "count_matches_by_league",
     "get_match_info",
     "save_match_info",
     "get_matches_by_league",
@@ -151,6 +154,7 @@ __all__ = [
     "delete_match",
     # Match Teams
     "get_match_teams",
+    "get_teams_for_matches",
     "create_match_team",
     "update_match_team",
     "update_team_captain",

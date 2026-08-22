@@ -4,20 +4,25 @@ from urllib.parse import unquote
 
 from fasthtml.common import *
 
-from db import get_matches_by_league
-from db.club_leagues import count_clubs_by_league
 from render.common import render_csrf_input
 
 
-def render_leagues_list(leagues, user=None):
+def render_leagues_list(leagues, user=None, *, club_counts, match_counts):
     """Render the leagues as a table.
 
     Same shape as the clubs, players and users lists: the name opens the
     league, and deleting one lives on that page rather than being a control on
     every row here.
+
+    Args:
+        leagues: League dicts to list.
+        user: The viewer, for the "New League" control.
+        club_counts, match_counts: league id -> count, from
+            count_clubs_by_league() and count_matches_by_league(). Passed in
+            rather than looked up here: rendering does not query, and counting
+            per row cost a round trip per league.
     """
     # Counted in one grouped query, not once per row.
-    club_counts = count_clubs_by_league()
     if not leagues:
         return Div(cls="container-white")(
             P("No leagues yet.", cls="empty-state"),
@@ -40,7 +45,7 @@ def render_leagues_list(leagues, user=None):
                     style="color: var(--muted);",
                 ),
                 Td(
-                    str(len(get_matches_by_league(league["id"]))),
+                    str(match_counts.get(league["id"], 0)),
                     style="color: var(--muted);",
                 ),
                 Td(

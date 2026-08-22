@@ -2,6 +2,7 @@
 
 import json
 
+from core.text import split_aliases
 from db.clubs import create_club
 from db.connection import get_db
 from db.players import (
@@ -15,7 +16,6 @@ from db.players import (
     get_all_players,
     parse_player_attributes,
     reset_teams,
-    split_aliases,
     swap_players,
     update_player_attrs,
     update_player_height_weight,

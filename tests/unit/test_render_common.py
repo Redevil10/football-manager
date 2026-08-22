@@ -7,7 +7,6 @@ from render.common import (
     can_user_delete,
     can_user_edit,
     format_match_name,
-    get_match_score_display,
     is_match_completed,
     render_attr_input,
     render_match_info,
@@ -168,45 +167,6 @@ class TestIsMatchCompleted:
         result = is_match_completed(match)
 
         assert result is False
-
-
-class TestGetMatchScoreDisplay:
-    """Tests for get_match_score_display function"""
-
-    @patch("render.common.get_match_teams")
-    def test_get_match_score_display_both_scores(self, mock_get_teams):
-        """Test getting score display with both scores"""
-        mock_get_teams.return_value = [
-            {"team_number": 1, "score": 3},
-            {"team_number": 2, "score": 2},
-        ]
-
-        result = get_match_score_display(1)
-
-        assert "3" in result
-        assert "2" in result
-        assert "Score:" in result
-
-    @patch("render.common.get_match_teams")
-    def test_get_match_score_display_one_score(self, mock_get_teams):
-        """Test getting score display with one score"""
-        mock_get_teams.return_value = [
-            {"team_number": 1, "score": 3},
-        ]
-
-        result = get_match_score_display(1)
-
-        assert "3" in result
-        assert "Score:" in result
-
-    @patch("render.common.get_match_teams")
-    def test_get_match_score_display_no_teams(self, mock_get_teams):
-        """Test getting score display with no teams"""
-        mock_get_teams.return_value = []
-
-        result = get_match_score_display(1)
-
-        assert result == ""
 
 
 class TestRenderNavbar:

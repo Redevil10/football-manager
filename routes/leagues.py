@@ -11,6 +11,7 @@ from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import PermissionError, ValidationError
 from core.validation import validate_non_empty_string, validate_required_int
 from db import (
+    count_matches_by_league,
     create_league,
     delete_league,
     get_all_clubs,
@@ -21,6 +22,7 @@ from db import (
 )
 from db.club_leagues import (
     add_club_to_league,
+    count_clubs_by_league,
     get_clubs_in_league,
     remove_club_from_league,
 )
@@ -143,7 +145,12 @@ def leagues_page(req: Request = None, sess=None):
                         else ""
                     ),
                 ),
-                render_leagues_list(leagues, user),
+                render_leagues_list(
+                    leagues,
+                    user,
+                    club_counts=count_clubs_by_league(),
+                    match_counts=count_matches_by_league(),
+                ),
             ),
         ),
     )

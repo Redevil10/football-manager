@@ -209,3 +209,28 @@ def delete_match_team(team_id: int) -> bool:
     except DatabaseError:
         logger.error(f"Failed to delete match team {team_id}", exc_info=True)
         return False
+
+
+def get_teams_for_matches(match_ids: list[int]) -> dict[int, list[dict]]:
+    """Every listed match's teams, keyed by match id, in one query.
+
+    The match tables render a fixture per row, and each fixture needs both
+    sides -- looked up per row that is a round trip per match. Matches with no
+    teams are absent, so callers should read it with a default of [].
+
+    Args:
+        match_ids: Match ids to fetch teams for. An empty list returns {}.
+    """
+    if not match_ids:
+        return {}
+    placeholders = ",".join("?" * len(match_ids))
+    with db_read() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM match_teams WHERE match_id IN ({placeholders}) "
+            "ORDER BY match_id, team_number",
+            tuple(match_ids),
+        ).fetchall()
+    teams: dict[int, list[dict]] = {}
+    for row in rows:
+        teams.setdefault(row["match_id"], []).append(dict(row))
+    return teams

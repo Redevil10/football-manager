@@ -1,7 +1,5 @@
 """Unit tests for league rendering functions"""
 
-from unittest.mock import patch
-
 from fasthtml.common import to_xml
 
 from render.leagues import (
@@ -12,11 +10,15 @@ from render.leagues import (
 
 
 class TestRenderLeaguesList:
-    """Tests for render_leagues_list function"""
+    """Tests for render_leagues_list function.
+
+    The counts arrive as parameters now -- rendering does not query -- so these
+    pass them in rather than patching a database call.
+    """
 
     def test_render_leagues_list_empty(self):
         """Test rendering empty leagues list"""
-        result = render_leagues_list([])
+        result = render_leagues_list([], club_counts={}, match_counts={})
 
         assert result is not None
 
@@ -27,20 +29,18 @@ class TestRenderLeaguesList:
             {"id": 2, "name": "League 2", "description": "Test League 2"},
         ]
 
-        with patch("render.leagues.get_matches_by_league") as mock_get_matches:
-            mock_get_matches.return_value = []
-            result = render_leagues_list(leagues)
+        result = render_leagues_list(leagues, club_counts={}, match_counts={})
 
-            assert result is not None
+        assert result is not None
 
-    @patch("render.leagues.get_matches_by_league")
-    def test_the_list_carries_no_per_row_actions(self, mock_get_matches):
+    def test_the_list_carries_no_per_row_actions(self):
         """The name opens the league; everything else lives on that page."""
-        mock_get_matches.return_value = []
-
         html = to_xml(
             render_leagues_list(
-                [{"id": 1, "name": "League 1"}], {"id": 1, "is_superuser": True}
+                [{"id": 1, "name": "League 1"}],
+                {"id": 1, "is_superuser": True},
+                club_counts={},
+                match_counts={},
             )
         )
 
@@ -49,20 +49,19 @@ class TestRenderLeaguesList:
         assert "/delete_league/" not in html
         assert "confirm-delete" not in html
 
-    @patch("render.leagues.get_matches_by_league")
-    def test_render_leagues_list_with_matches(self, mock_get_matches):
-        """Test rendering leagues list with match counts"""
-        mock_get_matches.return_value = [
-            {"id": 1, "date": "2024-01-15"},
-            {"id": 2, "date": "2024-01-20"},
-        ]
+    def test_the_counts_it_is_given_are_the_ones_shown(self):
+        """A league missing from either mapping reads as 0, not as an error."""
+        html = to_xml(
+            render_leagues_list(
+                [{"id": 1, "name": "League 1"}, {"id": 2, "name": "League 2"}],
+                club_counts={1: 3},
+                match_counts={1: 7},
+            )
+        )
 
-        leagues = [{"id": 1, "name": "League 1"}]
-
-        result = render_leagues_list(leagues)
-
-        assert result is not None
-        mock_get_matches.assert_called()
+        assert ">7<" in html and ">3<" in html
+        # League 2 appears in neither mapping.
+        assert html.count(">0<") >= 2
 
 
 class TestRenderLeagueHeader:

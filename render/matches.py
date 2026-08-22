@@ -3,7 +3,6 @@
 from fasthtml.common import *
 
 from core.auth import can_user_edit_match
-from db.match_recordings import get_match_recordings
 from logic import calculate_overall_score
 from render.common import (
     confirm_delete_link,
@@ -12,6 +11,8 @@ from render.common import (
     is_match_completed,
     match_fixture,
     render_csrf_input,
+    render_head,
+    render_navbar,
 )
 from render.interactive_pitch import render_interactive_pitch
 from render.players import render_match_available_players, render_player_table
@@ -215,7 +216,7 @@ def render_recent_matches(matches, per_league=3):
     return Div(H2("Recent Matches", style="margin-top: 30px;"), *sections)
 
 
-def render_match_table(matches, base="/match"):
+def render_match_table(matches, base="/match", teams_by_match_id=None):
     """A set of matches as one table: date, both sides, the score, when, where.
 
     The two sides and the score get a column each rather than being run together
@@ -226,10 +227,16 @@ def render_match_table(matches, base="/match"):
         matches: Match dicts, already in the order they should appear.
         base: Where a row links. "/public/match" for the anonymous view, which
             is otherwise the same table.
+        teams_by_match_id: match id -> its match_teams rows, from
+            get_teams_for_matches(). Without it each row looks its own up,
+            which is a query per row.
     """
+    # One query for every row's teams rather than one per row.
+    teams_by_match = teams_by_match_id or {}
+
     rows = []
     for m in matches:
-        home, score, away = match_fixture(m)
+        home, score, away = match_fixture(m, teams_by_match.get(m["id"], []))
         rows.append(
             Tr(
                 # The date opens the match, the way the name does in every other
@@ -260,13 +267,20 @@ def render_match_table(matches, base="/match"):
     )
 
 
-def render_all_matches(matches, user=None):
+def render_all_matches(matches, user=None, teams_by_match_id=None):
     """Render every match as a table, one table per league.
 
     Same shape as the players, users, leagues and clubs lists.
 
     Deleting a match lives on the match's own page, behind the confirmation
     page, as with every other entity -- it is not a control on every row here.
+
+    Args:
+        matches: Match dicts, newest first.
+        user: The viewer.
+        teams_by_match_id: match id -> its match_teams rows, from
+            get_teams_for_matches(). Rendering does not fetch it, and looking
+            it up per row costs a query per match.
     """
     if not matches:
         return Div(cls="container-white")(
@@ -281,7 +295,7 @@ def render_all_matches(matches, user=None):
         *[
             Div(cls="container-white")(
                 P(league_name, cls="match-league"),
-                render_match_table(league_matches),
+                render_match_table(league_matches, teams_by_match_id=teams_by_match_id),
             )
             for league_name, league_matches in by_league.items()
         ]
@@ -705,12 +719,13 @@ def render_captain_selection(match_id, teams, match_players_dict, is_completed=F
     ]
 
 
-def render_match_recordings(match_id, recordings=None, can_edit=False):
+def render_match_recordings(match_id, recordings, can_edit=False):
     """Render the match recordings (video links) section.
 
     Args:
         match_id: ID of the match
-        recordings: List of recording dicts (fetched if None)
+        recordings: List of recording dicts. Passed in rather than fetched
+            here -- rendering does not reach into the database.
         can_edit: Whether the current user can add/delete recordings
             (managers/admins). Viewers see read-only links.
 
@@ -719,9 +734,6 @@ def render_match_recordings(match_id, recordings=None, can_edit=False):
         swapping, or None when there is nothing to show and nothing the viewer
         could add -- an empty card is noise on a read-only page.
     """
-    if recordings is None:
-        recordings = get_match_recordings(match_id)
-
     if not recordings and not can_edit:
         return None
 
@@ -824,6 +836,8 @@ def render_match_detail(
     match_players_dict,
     events,
     all_players=None,
+    *,
+    recordings,
     match_player_ids=None,
     signup_players=None,
     user=None,
@@ -1025,7 +1039,9 @@ def render_match_detail(
     # Recordings and events are both filled in after the match, if at all, so
     # they sit below the line-up rather than above it, and stay collapsed until
     # they have something in them.
-    recordings_section = render_match_recordings(match["id"], can_edit=can_edit)
+    recordings_section = render_match_recordings(
+        match["id"], recordings, can_edit=can_edit
+    )
     if recordings_section is not None:
         content.append(recordings_section)
 
@@ -1306,4 +1322,725 @@ def render_teams(players):
             render_team(team2, 2),
         ),
         # No drag-and-drop script for home page
+    )
+
+
+def render_create_match_page(
+    user,
+    sess,
+    req,
+    other_leagues,
+    friendly_league_id,
+    selected_league_id,
+    default_date,
+    default_start_time,
+    default_end_time,
+    default_location,
+):
+    """The create-match form.
+
+    Args:
+        user, sess, req: the caller, for the navbar.
+        other_leagues: leagues to offer besides Friendly.
+        friendly_league_id: id of the Friendly league, preselected by default.
+        selected_league_id: league to preselect, as a string ("" for none).
+        default_*: values to prefill, carried over from the last match.
+    """
+    return Html(
+        render_head("Create Match"),
+        Body(
+            render_navbar(user, sess, req.url.path if req else "/"),
+            Div(cls="container")(
+                H2("Create Match"),
+                Div(cls="container-white")(
+                    Form(
+                        Div(style="margin-bottom: 15px;")(
+                            Label(
+                                "League:",
+                                style="display: block; margin-bottom: 5px;",
+                            ),
+                            Select(
+                                Option(
+                                    "-- Select League --",
+                                    value="",
+                                    selected=(selected_league_id == ""),
+                                ),
+                                *(
+                                    [
+                                        Option(
+                                            "Friendly (Default)",
+                                            value=str(friendly_league_id),
+                                            selected=(
+                                                selected_league_id
+                                                == str(friendly_league_id)
+                                            ),
+                                        )
+                                    ]
+                                    if friendly_league_id
+                                    else []
+                                ),
+                                *[
+                                    Option(
+                                        league["name"],
+                                        value=str(league["id"]),
+                                        selected=(
+                                            selected_league_id == str(league["id"])
+                                        ),
+                                    )
+                                    for league in other_leagues
+                                ],
+                                name="league_id",
+                                id="league_select",
+                                style="width: 100%; padding: 8px;",
+                                **{"onchange": "prefillMatchInfo()"},
+                            ),
+                        ),
+                        # When and where: short fields that read as one
+                        # group, so they share a row instead of each taking
+                        # a full line of its own.
+                        Div(cls="form-grid")(
+                            Div(style="margin-bottom: 15px;")(
+                                Label(
+                                    "Date:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Div(
+                                    style="display: flex; gap: 10px; align-items: center;"
+                                )(
+                                    Input(
+                                        type="date",
+                                        name="date",
+                                        id="date",
+                                        value=default_date,
+                                        required=True,
+                                        style="flex: 1; padding: 8px;",
+                                    ),
+                                    Button(
+                                        "+7 Days",
+                                        type="button",
+                                        id="add_7_days_btn",
+                                        cls="btn-secondary",
+                                        style="padding: 8px 15px; white-space: nowrap;",
+                                        **{"onclick": "add7Days()"},
+                                    ),
+                                ),
+                            ),
+                            Div(style="margin-bottom: 15px;")(
+                                Label(
+                                    "Start Time:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="time",
+                                    name="start_time",
+                                    id="start_time",
+                                    value=default_start_time,
+                                    required=True,
+                                    style="width: 100%; padding: 8px;",
+                                    step="60",
+                                ),
+                            ),
+                            Div(style="margin-bottom: 15px;")(
+                                Label(
+                                    "End Time:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="time",
+                                    name="end_time",
+                                    id="end_time",
+                                    value=default_end_time,
+                                    style="width: 100%; padding: 8px;",
+                                    step="60",
+                                ),
+                            ),
+                            Div(style="margin-bottom: 15px;")(
+                                Label(
+                                    "Location:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="text",
+                                    name="location",
+                                    id="location",
+                                    value=default_location,
+                                    required=True,
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                            ),
+                            Div(style="margin-bottom: 15px;")(
+                                Label(
+                                    "Max Players Per Team:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="number",
+                                    name="max_players_per_team",
+                                    id="max_players_per_team",
+                                    min="1",
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                            ),
+                        ),
+                        Hr(),
+                        Div(style="margin-bottom: 15px;")(
+                            Div(
+                                style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;"
+                            )(
+                                H3("Home Team", style="margin: 0; flex: 1;"),
+                                Div(
+                                    style="display: flex; align-items: center; gap: 5px;"
+                                )(
+                                    Input(
+                                        type="checkbox",
+                                        name="allocate_team1",
+                                        id="allocate_team1",
+                                        checked=True,
+                                        value="1",
+                                    ),
+                                    Label(
+                                        "Allocate Team",
+                                        for_="allocate_team1",
+                                        style="margin: 0; font-weight: normal;",
+                                    ),
+                                ),
+                            ),
+                            # Two short fields that belong together -- same row.
+                            Div(cls="form-grid")(
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Team Name:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="team1_name",
+                                        id="team1_name",
+                                        placeholder="Home Team",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
+                                ),
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Jersey Color:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="team1_color",
+                                        id="team1_color",
+                                        placeholder="e.g., Blue, Red, White",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
+                                ),
+                            ),
+                        ),
+                        Hr(),
+                        Div(style="margin-bottom: 15px;")(
+                            Div(
+                                style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;"
+                            )(
+                                H3("Away Team", style="margin: 0; flex: 1;"),
+                                Div(
+                                    style="display: flex; align-items: center; gap: 5px;"
+                                )(
+                                    Input(
+                                        type="checkbox",
+                                        name="allocate_team2",
+                                        id="allocate_team2",
+                                        checked=True,
+                                        value="1",
+                                    ),
+                                    Label(
+                                        "Allocate Team",
+                                        for_="allocate_team2",
+                                        style="margin: 0; font-weight: normal;",
+                                    ),
+                                ),
+                            ),
+                            # Two short fields that belong together -- same row.
+                            Div(cls="form-grid")(
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Team Name:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="team2_name",
+                                        id="team2_name",
+                                        placeholder="Away Team",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
+                                ),
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Jersey Color:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="team2_color",
+                                        id="team2_color",
+                                        placeholder="e.g., Blue, Red, White",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
+                                ),
+                            ),
+                        ),
+                        Div(cls="btn-group")(
+                            Button(
+                                "Create Match",
+                                type="submit",
+                                cls="btn-success",
+                                id="create_match_btn",
+                            ),
+                            Button(
+                                "Cancel",
+                                type="button",
+                                cls="btn-secondary",
+                                **{
+                                    "onclick": "window.location.href='/matches'; return false;"
+                                },
+                            ),
+                        ),
+                        **{
+                            "method": "post",
+                            "action": "/create_match",
+                            "enctype": "multipart/form-data",
+                            "onsubmit": "console.log('Form submitting...'); return true;",
+                        },
+                    ),
+                ),
+                Script(
+                    """
+
+                    async function prefillMatchInfo() {
+                        const leagueId = document.getElementById('league_select').value;
+                        // Don't call API if no league is selected or if it's the placeholder option
+                        if (!leagueId || leagueId === "" || leagueId === "-- Select League --") {
+                            return;
+                        }
+
+                        try {
+                            const response = await fetch(`/api/get_last_match/${leagueId}`);
+                            if (response.ok) {
+                                const data = await response.json();
+                                // Check if data exists and has any fields (not empty object)
+                                if (data && Object.keys(data).length > 0) {
+                                    if (data.date) {
+                                        document.getElementById('date').value = data.date;
+                                        // Show +7 Days button when date is prefilled
+                                        document.getElementById('add_7_days_btn').style.display = 'inline-block';
+                                    }
+                                    if (data.start_time) document.getElementById('start_time').value = data.start_time;
+                                    if (data.end_time) document.getElementById('end_time').value = data.end_time;
+                                    if (data.location) document.getElementById('location').value = data.location;
+                                    // Handle max_players_per_team (can be null/undefined)
+                                    if (data.max_players_per_team !== null && data.max_players_per_team !== undefined) {
+                                        document.getElementById('max_players_per_team').value = data.max_players_per_team;
+                                    }
+                                    // Handle team1_name (can be empty string)
+                                    if (data.team1_name !== null && data.team1_name !== undefined) {
+                                        document.getElementById('team1_name').value = data.team1_name;
+                                    }
+                                    // Handle team1_color (can be empty string)
+                                    if (data.team1_color !== null && data.team1_color !== undefined) {
+                                        document.getElementById('team1_color').value = data.team1_color;
+                                    }
+                                    // Handle team2_name (can be empty string)
+                                    if (data.team2_name !== null && data.team2_name !== undefined) {
+                                        document.getElementById('team2_name').value = data.team2_name;
+                                    }
+                                    // Handle team2_color (can be empty string)
+                                    if (data.team2_color !== null && data.team2_color !== undefined) {
+                                        document.getElementById('team2_color').value = data.team2_color;
+                                    }
+                                }
+                                // If data is empty (no previous match), silently continue - this is normal for first match
+                            } else {
+                                // If response is not ok, log but don't show error to user
+                                console.log('No previous match found for this league (this is normal for first match)');
+                            }
+                        } catch (error) {
+                            // Silently handle errors - don't show to user as this is expected for leagues without matches
+                            console.log('No previous match data available (this is normal for first match)');
+                        }
+                    }
+
+                    function add7Days() {
+                        const dateInput = document.getElementById('date');
+                        if (dateInput.value) {
+                            const currentDate = new Date(dateInput.value);
+                            currentDate.setDate(currentDate.getDate() + 7);
+                            // Format date as YYYY-MM-DD
+                            const year = currentDate.getFullYear();
+                            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+                            const day = String(currentDate.getDate()).padStart(2, '0');
+                            dateInput.value = `${year}-${month}-${day}`;
+                        }
+                    }
+
+                    // Hide +7 Days button initially and prefill if league is selected
+                    document.addEventListener('DOMContentLoaded', function() {
+                        document.getElementById('add_7_days_btn').style.display = 'none';
+                        // Auto-prefill if a league is already selected
+                        const leagueSelect = document.getElementById('league_select');
+                        if (leagueSelect && leagueSelect.value) {
+                            prefillMatchInfo();
+                        }
+                    });
+                """
+                ),
+            ),
+        ),
+    )
+
+
+def render_edit_match_page(
+    user,
+    sess,
+    req,
+    match,
+    match_id,
+    teams,
+    other_leagues,
+    friendly_league_id,
+    current_league_id,
+    allocate_team1_checked,
+    allocate_team2_checked,
+):
+    """The edit-match form, including both teams and their scores.
+
+    Args:
+        user, sess, req: the caller, for the navbar.
+        match, match_id, teams: the match being edited.
+        other_leagues, friendly_league_id, current_league_id: the league picker.
+        allocate_team*_checked: whether each side's "allocate" box starts ticked.
+    """
+    return Html(
+        render_head(f"Edit {format_match_name(match)}"),
+        Body(
+            render_navbar(user, sess, req.url.path if req else "/"),
+            Div(cls="container")(
+                H2(f"Edit {format_match_name(match)}"),
+                Div(cls="container-white")(
+                    Form(
+                        render_csrf_input(),
+                        Div(style="margin-bottom: 15px;")(
+                            Label(
+                                "League:",
+                                style="display: block; margin-bottom: 5px;",
+                            ),
+                            Select(
+                                *(
+                                    [
+                                        Option(
+                                            "Friendly (Default)",
+                                            value=str(friendly_league_id),
+                                            selected=(
+                                                current_league_id == friendly_league_id
+                                            ),
+                                        )
+                                    ]
+                                    if friendly_league_id
+                                    else []
+                                ),
+                                *[
+                                    Option(
+                                        league["name"],
+                                        value=str(league["id"]),
+                                        selected=(current_league_id == league["id"]),
+                                    )
+                                    for league in other_leagues
+                                ],
+                                name="league_id",
+                                id="league_select",
+                                style="width: 100%; padding: 8px;",
+                            ),
+                        ),
+                        # Same grouping as the create form: the short
+                        # when/where fields share a row.
+                        Div(cls="form-grid")(
+                            Div(style="margin-bottom: 15px;")(
+                                Label(
+                                    "Date:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="date",
+                                    name="date",
+                                    value=match.get("date", ""),
+                                    required=True,
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                            ),
+                            Div(style="margin-bottom: 15px;")(
+                                Label(
+                                    "Start Time:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="time",
+                                    name="start_time",
+                                    value=match.get("start_time", ""),
+                                    required=True,
+                                    style="width: 100%; padding: 8px;",
+                                    step="60",
+                                ),
+                            ),
+                            Div(style="margin-bottom: 15px;")(
+                                Label(
+                                    "End Time:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="time",
+                                    name="end_time",
+                                    value=match.get("end_time", ""),
+                                    style="width: 100%; padding: 8px;",
+                                    step="60",
+                                ),
+                            ),
+                            Div(style="margin-bottom: 15px;")(
+                                Label(
+                                    "Location:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="text",
+                                    name="location",
+                                    value=match.get("location", ""),
+                                    required=True,
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                            ),
+                            Div(style="margin-bottom: 15px;")(
+                                Label(
+                                    "Max Players Per Team:",
+                                    style="display: block; margin-bottom: 5px;",
+                                ),
+                                Input(
+                                    type="number",
+                                    name="max_players_per_team",
+                                    value=match.get("max_players_per_team", "") or "",
+                                    style="width: 100%; padding: 8px;",
+                                ),
+                            ),
+                        ),
+                        Hr(),
+                        # Home Team section - always show
+                        Div(style="margin-bottom: 15px;")(
+                            Div(
+                                style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;"
+                            )(
+                                H3("Home Team", style="margin: 0; flex: 1;"),
+                                Div(
+                                    style="display: flex; align-items: center; gap: 5px;"
+                                )(
+                                    Input(
+                                        type="checkbox",
+                                        name="allocate_team1",
+                                        id="allocate_team1_edit",
+                                        checked=allocate_team1_checked,
+                                        value="1",
+                                    ),
+                                    Label(
+                                        "Allocate Team",
+                                        for_="allocate_team1_edit",
+                                        style="margin: 0; font-weight: normal;",
+                                    ),
+                                ),
+                            ),
+                            *[
+                                Input(
+                                    type="hidden",
+                                    name="team1_id",
+                                    value=str(team["id"]),
+                                )
+                                for team in teams
+                                if team["team_number"] == 1
+                            ],
+                            # Two short fields that belong together -- same row.
+                            Div(cls="form-grid")(
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Team Name:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="team1_name",
+                                        value=next(
+                                            (
+                                                t.get("team_name", "")
+                                                for t in teams
+                                                if t["team_number"] == 1
+                                            ),
+                                            "Home Team",
+                                        ),
+                                        placeholder="Home Team",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
+                                ),
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Jersey Color:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="team1_color",
+                                        value=next(
+                                            (
+                                                t.get("jersey_color", "")
+                                                for t in teams
+                                                if t["team_number"] == 1
+                                            ),
+                                            "",
+                                        ),
+                                        placeholder="e.g., Blue, Red, White",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
+                                ),
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Score:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="number",
+                                        name="team1_score",
+                                        value=str(
+                                            next(
+                                                (
+                                                    t.get("score", 0)
+                                                    for t in teams
+                                                    if t["team_number"] == 1
+                                                ),
+                                                0,
+                                            )
+                                        ),
+                                        min="0",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
+                                ),
+                            ),
+                        ),
+                        Hr(),
+                        # Away Team section - always show
+                        Div(style="margin-bottom: 15px;")(
+                            Div(
+                                style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;"
+                            )(
+                                H3("Away Team", style="margin: 0; flex: 1;"),
+                                Div(
+                                    style="display: flex; align-items: center; gap: 5px;"
+                                )(
+                                    Input(
+                                        type="checkbox",
+                                        name="allocate_team2",
+                                        id="allocate_team2_edit",
+                                        checked=allocate_team2_checked,
+                                        value="1",
+                                    ),
+                                    Label(
+                                        "Allocate Team",
+                                        for_="allocate_team2_edit",
+                                        style="margin: 0; font-weight: normal;",
+                                    ),
+                                ),
+                            ),
+                            *[
+                                Input(
+                                    type="hidden",
+                                    name="team2_id",
+                                    value=str(team["id"]),
+                                )
+                                for team in teams
+                                if team["team_number"] == 2
+                            ],
+                            # Two short fields that belong together -- same row.
+                            Div(cls="form-grid")(
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Team Name:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="team2_name",
+                                        value=next(
+                                            (
+                                                t.get("team_name", "")
+                                                for t in teams
+                                                if t["team_number"] == 2
+                                            ),
+                                            "Away Team",
+                                        ),
+                                        placeholder="Away Team",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
+                                ),
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Jersey Color:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="text",
+                                        name="team2_color",
+                                        value=next(
+                                            (
+                                                t.get("jersey_color", "")
+                                                for t in teams
+                                                if t["team_number"] == 2
+                                            ),
+                                            "",
+                                        ),
+                                        placeholder="e.g., Blue, Red, White",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
+                                ),
+                                Div(style="margin-bottom: 15px;")(
+                                    Label(
+                                        "Score:",
+                                        style="display: block; margin-bottom: 5px;",
+                                    ),
+                                    Input(
+                                        type="number",
+                                        name="team2_score",
+                                        value=str(
+                                            next(
+                                                (
+                                                    t.get("score", 0)
+                                                    for t in teams
+                                                    if t["team_number"] == 2
+                                                ),
+                                                0,
+                                            )
+                                        ),
+                                        min="0",
+                                        style="width: 100%; padding: 8px;",
+                                    ),
+                                ),
+                            ),
+                        ),
+                        Div(cls="btn-group")(
+                            Button("Save Changes", type="submit", cls="btn-success"),
+                            Button(
+                                "Cancel",
+                                type="button",
+                                cls="btn-secondary",
+                                **{
+                                    "onclick": f"window.location.href='/match/{match_id}'; return false;"
+                                },
+                            ),
+                        ),
+                        method="post",
+                        action=f"/update_match/{match_id}",
+                    ),
+                ),
+            ),
+        ),
     )

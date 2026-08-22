@@ -109,7 +109,7 @@ def render_public_not_found():
     )
 
 
-def render_public_league(league, matches):
+def render_public_league(league, matches, teams_by_match_id=None):
     """Render a league's match list for anonymous visitors (read-only).
 
     The same table the signed-in /matches page uses, only with the rows pointing
@@ -124,7 +124,11 @@ def render_public_league(league, matches):
     if matches:
         content.append(
             Div(cls="container-white")(
-                render_match_table(matches, base="/public/match")
+                render_match_table(
+                    matches,
+                    base="/public/match",
+                    teams_by_match_id=teams_by_match_id,
+                )
             )
         )
     else:

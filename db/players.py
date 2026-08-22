@@ -7,6 +7,7 @@ from typing import Optional
 
 from core.config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
 from core.exceptions import DatabaseError, IntegrityError
+from core.text import split_aliases
 from db.transactions import db_read, db_transaction
 
 logger = logging.getLogger(__name__)
@@ -111,24 +112,6 @@ def get_all_players(
         result.append(parse_player_attributes(p))
 
     return result
-
-
-def split_aliases(alias: Optional[str]) -> list[str]:
-    """Split the alias field into the individual names it holds.
-
-    One player often answers to several names -- a nickname, a spelling in
-    another script, what the group chat calls them -- so the column holds them
-    semicolon-separated. Blanks and stray spacing are dropped.
-
-    Args:
-        alias: Raw alias column, e.g. "Ken; 小谢".
-
-    Returns:
-        list[str]: The names, in the order written.
-    """
-    if not alias:
-        return []
-    return [part.strip() for part in alias.split(";") if part.strip()]
 
 
 def find_player_by_name_or_alias(

@@ -6,7 +6,6 @@ from urllib.parse import quote
 from fasthtml.common import *
 
 from core.auth import (
-    can_user_edit_match,
     check_club_permission,
     get_current_user,
     get_user_accessible_club_ids,
@@ -30,8 +29,6 @@ from db import (
     get_all_players,
     reset_teams,
     set_player_active,
-    swap_match_players,
-    swap_players,
     update_player_attrs,
     update_player_height_weight,
     update_player_name,
@@ -831,48 +828,6 @@ def route_reset(req: Request = None, sess=None):
     return render_teams(sorted_players)
 
 
-@csrf_protect
-def confirm_swap_page(player1_id: int, player2_id: int, req: Request = None, sess=None):
-    """Confirm swap"""
-    user = get_current_user(req, sess)
-    if not user:
-        return RedirectResponse("/login", status_code=303)
-
-    # Check authorization - only managers can swap players
-    if not user.get("is_superuser"):
-        club_ids = get_user_club_ids_from_request(req, sess)
-        has_manager_permission = any(
-            check_club_permission(user, cid, USER_ROLES["MANAGER"]) for cid in club_ids
-        )
-        if not has_manager_permission:
-            return RedirectResponse("/", status_code=303)
-
-    swap_players(player1_id, player2_id)
-    return RedirectResponse("/", status_code=303)
-
-
-@csrf_protect
-def confirm_swap_match_page(
-    match_id: int,
-    match_player1_id: int,
-    match_player2_id: int,
-    req: Request = None,
-    sess=None,
-    display: str = "classic",
-):
-    """Confirm swap for match players"""
-    user = get_current_user(req, sess)
-    if not user:
-        return RedirectResponse("/login", status_code=303)
-
-    # Check authorization - only managers can swap match players
-    if not can_user_edit_match(user, match_id):
-        return RedirectResponse(f"/match/{match_id}?display={display}", status_code=303)
-
-    swap_match_players(match_player1_id, match_player2_id)
-    return RedirectResponse(f"/match/{match_id}?display={display}", status_code=303)
-
-
 def register_player_routes(rt):
     """Register player-related routes"""
 
@@ -895,11 +850,3 @@ def register_player_routes(rt):
     rt("/restore_player/{player_id}", methods=["POST"])(route_restore_player)
     rt("/allocate", methods=["POST"])(route_allocate)
     rt("/reset", methods=["POST"])(route_reset)
-    # POST-only: both of these perform the swap outright, so a GET that any
-    # <img> could fire must not reach them. Neither is linked from the UI --
-    # see the note on the handlers.
-    rt("/confirm_swap/{player1_id}/{player2_id}", methods=["POST"])(confirm_swap_page)
-    rt(
-        "/confirm_swap_match/{match_id}/{match_player1_id}/{match_player2_id}",
-        methods=["POST"],
-    )(confirm_swap_match_page)

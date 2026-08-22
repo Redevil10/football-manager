@@ -10,7 +10,7 @@ from core.config import (
     SCORE_RANGES,
     TECHNICAL_ATTRS,
 )
-from db.players import split_aliases
+from core.text import split_aliases
 from logic import (
     calculate_gk_score,
     calculate_mental_score,

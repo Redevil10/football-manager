@@ -554,3 +554,22 @@ def delete_match(match_id: int) -> bool:
     except DatabaseError:
         logger.error(f"Failed to delete match {match_id}", exc_info=True)
         return False
+
+
+def count_matches_by_league() -> dict[int, int]:
+    """How many matches each league has, keyed by league id.
+
+    One grouped query rather than a count per league -- the leagues list would
+    otherwise issue a round trip per row it renders. Mirrors
+    :func:`db.club_leagues.count_clubs_by_league`.
+
+    Returns:
+        dict[int, int]: league id -> match count. Leagues with no matches are
+            absent, so callers should read it with a default of 0.
+    """
+    with db_read() as conn:
+        rows = conn.execute(
+            "SELECT league_id, COUNT(*) AS n FROM matches "
+            "WHERE league_id IS NOT NULL GROUP BY league_id"
+        ).fetchall()
+    return {row["league_id"]: row["n"] for row in rows}
