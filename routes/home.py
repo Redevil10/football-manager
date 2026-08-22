@@ -10,7 +10,7 @@ from render import render_navbar, render_next_matches_by_league, render_recent_m
 from render.common import render_head
 
 
-def register_home_routes(rt, STYLE):
+def register_home_routes(rt):
     """Register home page routes"""
 
     @rt("/")
@@ -55,7 +55,7 @@ def register_home_routes(rt, STYLE):
         recent_matches = get_recent_matches_by_league(club_ids=club_ids)
 
         return Html(
-            render_head("Football Manager", STYLE),
+            render_head("Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(

@@ -1,4 +1,4 @@
-# error_handling.py - Error handling utilities for route handlers
+# error_responses.py - Turning exceptions into HTTP redirect responses
 
 """Error handling utilities for converting exceptions to HTTP responses."""
 

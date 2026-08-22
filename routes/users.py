@@ -6,7 +6,7 @@ from fasthtml.common import *
 
 from core.auth import get_current_user, get_user_accessible_club_ids
 from core.config import USER_ROLES, VALID_ROLES
-from core.error_handling import handle_db_result, handle_route_error
+from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
 from core.validation import validate_in_list
 from db.users import (
@@ -245,7 +245,7 @@ def render_users_list(users, current_user=None):
     )
 
 
-def register_user_routes(rt, STYLE):
+def register_user_routes(rt):
     """Register all user management routes"""
 
     @rt("/users")
@@ -274,7 +274,7 @@ def register_user_routes(rt, STYLE):
         can_create = user.get("is_superuser") or user_role == USER_ROLES["ADMIN"]
 
         return Html(
-            render_head("User - Football Manager", STYLE),
+            render_head("User - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -340,7 +340,7 @@ def register_user_routes(rt, STYLE):
         is_own_profile = user.get("id") == user_id
 
         return Html(
-            render_head(f"User: {target_user['username']} - Football Manager", STYLE),
+            render_head(f"User: {target_user['username']} - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -606,9 +606,7 @@ def register_user_routes(rt, STYLE):
                 error_msg = query.get("error", [None])[0]
 
         return Html(
-            render_head(
-                f"Edit User: {target_user['username']} - Football Manager", STYLE
-            ),
+            render_head(f"Edit User: {target_user['username']} - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container", style="max-width: 600px;")(

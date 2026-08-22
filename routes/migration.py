@@ -10,7 +10,7 @@ from render import render_navbar
 from render.common import render_head
 
 
-def register_migration_routes(rt, STYLE):
+def register_migration_routes(rt):
     """Register routes"""
 
     @rt("/migration")
@@ -27,7 +27,7 @@ def register_migration_routes(rt, STYLE):
             return RedirectResponse("/", status_code=303)
 
         return Html(
-            render_head("Database Migration - Football Manager", STYLE),
+            render_head("Database Migration - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(

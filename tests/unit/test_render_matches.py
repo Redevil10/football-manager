@@ -13,6 +13,7 @@ from render.matches import (
     render_next_match,
     render_next_matches_by_league,
     render_recent_matches,
+    render_team_lineup_table,
     render_teams,
 )
 
@@ -263,6 +264,71 @@ class TestRenderMatchTeams:
         result = render_match_teams(1, teams, match_players_dict, is_completed=True)
 
         assert result is not None
+
+
+class TestRenderTeamLineupTable:
+    """Tests for render_team_lineup_table.
+
+    The read-only cases matter most: the anonymous public view calls this with
+    read_only=True and must never render an individual player's rating.
+    """
+
+    LINEUP = [
+        {"player_id": 7, "name": "Keeper", "position": "Goalkeeper", "is_starter": 1},
+        {"player_id": 8, "name": "Striker", "position": "Forward", "is_starter": 1},
+        {"player_id": 9, "name": "Bench", "position": "Midfielder", "is_starter": 0},
+    ]
+
+    @patch("render.matches.calculate_overall_score")
+    def test_starters_come_before_substitutes_in_team_sheet_order(self, mock_score):
+        mock_score.return_value = 50
+        html = to_xml(render_team_lineup_table(self.LINEUP, "Team A", "#0066cc"))
+
+        # Goalkeeper before Forward, and the bench behind its own header.
+        assert html.index("Keeper") < html.index("Striker") < html.index("SUBSTITUTES")
+        assert html.index("SUBSTITUTES") < html.index("Bench")
+
+    @patch("render.matches.calculate_overall_score")
+    def test_read_only_hides_player_ratings_and_profile_links(self, mock_score):
+        mock_score.return_value = 50
+        html = to_xml(
+            render_team_lineup_table(
+                self.LINEUP, "Team A", "#0066cc", show_scores=True, read_only=True
+            )
+        )
+
+        assert 'class="player-score"' not in html
+        assert "/player/" not in html
+        # The team total is deliberately still shown -- see test_public_routes.
+        assert "Overall:" in html
+
+    @patch("render.matches.calculate_overall_score")
+    def test_scores_shown_when_not_read_only(self, mock_score):
+        mock_score.return_value = 50
+        html = to_xml(
+            render_team_lineup_table(
+                self.LINEUP, "Team A", "#0066cc", show_scores=True, match_id=3
+            )
+        )
+
+        assert 'class="player-score"' in html
+        assert "/player/7?back=/match/3" in html
+
+    @patch("render.matches.calculate_overall_score")
+    def test_captain_is_marked(self, mock_score):
+        mock_score.return_value = 50
+        lineup = [{**self.LINEUP[0], "is_captain": True}]
+        html = to_xml(render_team_lineup_table(lineup, "Team A", "#0066cc"))
+
+        assert "Keeper (C)" in html
+
+    @patch("render.matches.calculate_overall_score")
+    def test_no_substitutes_section_without_substitutes(self, mock_score):
+        mock_score.return_value = 50
+        starters = [p for p in self.LINEUP if p["is_starter"]]
+        html = to_xml(render_team_lineup_table(starters, "Team A", "#0066cc"))
+
+        assert "SUBSTITUTES" not in html
 
 
 class TestRenderCaptainSelection:

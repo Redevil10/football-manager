@@ -13,8 +13,22 @@ from render.common import (
     match_fixture,
 )
 from render.interactive_pitch import render_interactive_pitch
-from render.pitch import render_player_table as render_player_table_pitch
 from render.players import render_match_available_players, render_player_table
+
+POSITION_ABBREVIATIONS = {
+    "Goalkeeper": "GK",
+    "Defender": "DF",
+    "Midfielder": "MF",
+    "Forward": "FW",
+}
+
+# Line-ups read in the order a team sheet does, not alphabetically.
+POSITION_ORDER = {"Goalkeeper": 0, "Defender": 1, "Midfielder": 2, "Forward": 3}
+
+
+def get_position_abbreviation(position: str) -> str:
+    """Standard two-letter abbreviation for a position (GK/DF/MF/FW)."""
+    return POSITION_ABBREVIATIONS.get(position, position[:2].upper())
 
 
 def render_next_match(match, teams, match_players_dict):
@@ -294,6 +308,106 @@ def can_user_create_match(user):
     )
 
 
+def render_team_lineup_table(
+    players: list,
+    team_name: str,
+    team_color: str,
+    show_scores: bool = False,
+    match_id: int = None,
+    read_only: bool = False,
+) -> Div:
+    """Render one team's line-up as a numbered table: starters, then substitutes.
+
+    Sits under the pitch and says in words what the formation shows in shape.
+
+    ``show_scores`` covers the team total in the header. Individual ratings are
+    withheld additionally when ``read_only`` is set, which is what the anonymous
+    public view passes -- it may see the team total but never a player's rating.
+    """
+    show_player_scores = show_scores and not read_only
+
+    starters = [p for p in players if p.get("is_starter", 1)]
+    substitutes = [p for p in players if not p.get("is_starter", 1)]
+
+    team_score = sum(calculate_overall_score(p) for p in starters)
+
+    def by_position(player):
+        return (POSITION_ORDER.get(player["position"], 4), player["name"])
+
+    starters.sort(key=by_position)
+    substitutes.sort(key=by_position)
+
+    def player_row(number, player, row_cls):
+        name = player["name"]
+        if player.get("is_captain", False):
+            name = f"{name} (C)"
+
+        # player_id is the players table id, not the match_players row id.
+        player_id = player.get("player_id")
+        if player_id and not read_only:
+            href = f"/player/{player_id}"
+            if match_id:
+                href += f"?back=/match/{match_id}"
+            name_cell = A(
+                name,
+                href=href,
+                style="text-decoration: none; color: #0066cc; cursor: pointer;",
+                onmouseover="this.style.textDecoration='underline'",
+                onmouseout="this.style.textDecoration='none'",
+            )
+        else:
+            name_cell = name
+
+        cells = [
+            Td(str(number), cls="player-number"),
+            Td(name_cell, cls="player-name"),
+            Td(get_position_abbreviation(player["position"]), cls="player-position"),
+        ]
+        if show_player_scores:
+            cells.append(Td(f"{calculate_overall_score(player)}", cls="player-score"))
+        return Tr(*cells, cls=row_cls)
+
+    rows = [player_row(i, p, "starter-row") for i, p in enumerate(starters, 1)]
+
+    if substitutes:
+        rows.append(
+            Tr(
+                Td(
+                    Span("SUBSTITUTES", cls="substitutes-header"),
+                    colspan=4 if show_player_scores else 3,
+                    cls="substitutes-section",
+                )
+            )
+        )
+        rows.extend(
+            player_row(i, p, "substitute-row")
+            for i, p in enumerate(substitutes, len(starters) + 1)
+        )
+
+    headers = [
+        Th("#", cls="col-number"),
+        Th("Player", cls="col-name"),
+        Th("Pos", cls="col-position"),
+    ]
+    if show_player_scores:
+        headers.append(Th("Score", cls="col-score"))
+
+    header_content = Div(
+        cls="team-table-header", style=f"border-left: 4px solid {team_color}"
+    )(
+        Span(team_name, style="font-weight: bold;"),
+        Span(f" (Overall: {int(team_score)})", style="color: #666; font-size: 0.9em;")
+        if show_scores
+        else "",
+    )
+
+    return Div(
+        header_content,
+        Table(Thead(Tr(*headers)), Tbody(*rows), cls="player-table"),
+        cls="team-table-container",
+    )
+
+
 def render_match_teams(
     match_id,
     teams,
@@ -500,7 +614,7 @@ def render_match_teams(
     return Div(
         pitch,
         Div(cls="teams-grid-table", style="margin-top: 30px;")(
-            render_player_table_pitch(
+            render_team_lineup_table(
                 team1_players,
                 team1_dict.get("team_name", "Team 1"),
                 team1_dict.get("jersey_color", "#0066cc"),
@@ -510,7 +624,7 @@ def render_match_teams(
             )
             if team1
             else Div(),
-            render_player_table_pitch(
+            render_team_lineup_table(
                 team2_players,
                 team2_dict.get("team_name", "Team 2"),
                 team2_dict.get("jersey_color", "#dc3545"),

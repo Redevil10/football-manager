@@ -14,7 +14,7 @@ from core.auth import (
     get_user_club_ids_from_request,
 )
 from core.config import USER_ROLES
-from core.error_handling import handle_route_error
+from core.error_responses import handle_route_error
 from core.exceptions import DatabaseError
 from core.validation import parse_int, validate_non_empty_string, validate_url
 from db import (
@@ -137,7 +137,7 @@ def parse_recording_links(
     return parsed
 
 
-def register_match_routes(rt, STYLE):
+def register_match_routes(rt):
     """Register match-related routes"""
 
     @rt("/matches")
@@ -150,7 +150,7 @@ def register_match_routes(rt, STYLE):
         club_ids = get_user_club_ids_from_request(req, sess)
         matches = get_all_matches(club_ids)
         return Html(
-            render_head("All Matches - Football Manager", STYLE),
+            render_head("All Matches - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -208,7 +208,7 @@ def register_match_routes(rt, STYLE):
         default_location = ""
 
         return Html(
-            render_head("Create Match", STYLE),
+            render_head("Create Match"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -839,7 +839,7 @@ def register_match_routes(rt, STYLE):
             )
 
         return Html(
-            render_head(f"{format_match_name(match)} - Football Manager", STYLE),
+            render_head(f"{format_match_name(match)} - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -1116,7 +1116,7 @@ def register_match_routes(rt, STYLE):
         ]
 
         return Html(
-            render_head(f"Edit {format_match_name(match)}", STYLE),
+            render_head(f"Edit {format_match_name(match)}"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -1618,7 +1618,7 @@ def register_match_routes(rt, STYLE):
         available_players = [p for p in all_players if p["id"] not in team_player_ids]
 
         return Html(
-            render_head(f"Edit Team Roster - {format_match_name(match)}", STYLE),
+            render_head(f"Edit Team Roster - {format_match_name(match)}"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -1963,7 +1963,7 @@ def register_match_routes(rt, STYLE):
         available_players = [p for p in all_players if p["id"] in match_player_ids]
 
         return Html(
-            render_head(f"Add Event - {format_match_name(match)}", STYLE),
+            render_head(f"Add Event - {format_match_name(match)}"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -2147,7 +2147,7 @@ def register_match_routes(rt, STYLE):
             return RedirectResponse("/matches", status_code=303)
 
         return Html(
-            render_head(f"Import Players - {format_match_name(match)}", STYLE),
+            render_head(f"Import Players - {format_match_name(match)}"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -2222,9 +2222,7 @@ def register_match_routes(rt, STYLE):
                 if results:
                     match = get_match(match_id)
                     return Html(
-                        render_head(
-                            f"Confirm Import - {format_match_name(match)}", STYLE
-                        ),
+                        render_head(f"Confirm Import - {format_match_name(match)}"),
                         Body(
                             render_navbar(user, sess, req.url.path if req else "/"),
                             Div(cls="container")(
@@ -2266,7 +2264,7 @@ def register_match_routes(rt, STYLE):
             if results:
                 match = get_match(match_id)
                 return Html(
-                    render_head(f"Confirm Import - {format_match_name(match)}", STYLE),
+                    render_head(f"Confirm Import - {format_match_name(match)}"),
                     Body(
                         render_navbar(user, sess, req.url.path if req else "/"),
                         Div(cls="container")(
@@ -2404,7 +2402,7 @@ def register_match_routes(rt, STYLE):
 
         if not available_players:
             return Html(
-                render_head(f"Add Player - {format_match_name(match)}", STYLE),
+                render_head(f"Add Player - {format_match_name(match)}"),
                 Body(
                     render_navbar(user, sess, req.url.path if req else "/"),
                     Div(cls="container")(
@@ -2424,7 +2422,7 @@ def register_match_routes(rt, STYLE):
             )
 
         return Html(
-            render_head(f"Add Player - {format_match_name(match)}", STYLE),
+            render_head(f"Add Player - {format_match_name(match)}"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(

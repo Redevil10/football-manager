@@ -4,9 +4,8 @@ import logging
 from typing import Optional
 
 from core.exceptions import DatabaseError, IntegrityError
-from db.connection import get_db
-from db.error_handling import db_transaction
 from db.players import parse_player_attributes
+from db.transactions import db_read, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -21,26 +20,25 @@ def get_match_players(match_id: int, team_id: Optional[int] = None) -> list[dict
     Returns:
         list[dict]: List of player dictionaries with parsed attributes
     """
-    conn = get_db()
-    if team_id:
-        players = conn.execute(
-            """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs, p.physical_attrs, p.gk_attrs
-               FROM match_players mp
-               JOIN players p ON mp.player_id = p.id
-               WHERE mp.match_id = ? AND mp.team_id = ?
-               ORDER BY mp.is_starter DESC, mp.position, p.name""",
-            (match_id, team_id),
-        ).fetchall()
-    else:
-        players = conn.execute(
-            """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs, p.physical_attrs, p.gk_attrs
-               FROM match_players mp
-               JOIN players p ON mp.player_id = p.id
-               WHERE mp.match_id = ?
-               ORDER BY mp.team_id, mp.is_starter DESC, mp.position, p.name""",
-            (match_id,),
-        ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        if team_id:
+            players = conn.execute(
+                """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs, p.physical_attrs, p.gk_attrs
+                   FROM match_players mp
+                   JOIN players p ON mp.player_id = p.id
+                   WHERE mp.match_id = ? AND mp.team_id = ?
+                   ORDER BY mp.is_starter DESC, mp.position, p.name""",
+                (match_id, team_id),
+            ).fetchall()
+        else:
+            players = conn.execute(
+                """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs, p.physical_attrs, p.gk_attrs
+                   FROM match_players mp
+                   JOIN players p ON mp.player_id = p.id
+                   WHERE mp.match_id = ?
+                   ORDER BY mp.team_id, mp.is_starter DESC, mp.position, p.name""",
+                (match_id,),
+            ).fetchall()
 
     result = []
     for p in players:
@@ -57,16 +55,15 @@ def get_match_signup_players(match_id: int) -> list[dict]:
     Returns:
         list[dict]: List of signup player dictionaries with parsed attributes
     """
-    conn = get_db()
-    players = conn.execute(
-        """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs, p.physical_attrs, p.gk_attrs
-           FROM match_players mp
-           JOIN players p ON mp.player_id = p.id
-           WHERE mp.match_id = ? AND mp.team_id IS NULL
-           ORDER BY p.name""",
-        (match_id,),
-    ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        players = conn.execute(
+            """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs, p.physical_attrs, p.gk_attrs
+               FROM match_players mp
+               JOIN players p ON mp.player_id = p.id
+               WHERE mp.match_id = ? AND mp.team_id IS NULL
+               ORDER BY p.name""",
+            (match_id,),
+        ).fetchall()
 
     result = []
     for p in players:
@@ -99,8 +96,7 @@ def get_teammate_pairs(
     if not before_date:
         return []
 
-    conn = get_db()
-    try:
+    with db_read() as conn:
         rows = conn.execute(
             """WITH recent_matches AS (
                    SELECT id, date FROM matches
@@ -122,9 +118,6 @@ def get_teammate_pairs(
                ORDER BY rm.date DESC, rm.id DESC""",
             (match_id, before_date, league_id, lookback),
         ).fetchall()
-    finally:
-        conn.close()
-
     return [dict(row) for row in rows]
 
 

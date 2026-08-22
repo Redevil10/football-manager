@@ -32,18 +32,18 @@ from render.public import (
 logger = logging.getLogger(__name__)
 
 
-def register_public_routes(rt, STYLE):
+def register_public_routes(rt):
     """Register anonymous read-only public routes."""
 
     def _not_found():
         # Same response for missing and non-public leagues (don't leak existence)
-        return HTMLResponse(to_xml(render_public_not_found(STYLE)), status_code=404)
+        return HTMLResponse(to_xml(render_public_not_found()), status_code=404)
 
     @rt("/public")
     def public_leagues_index():
         """Discoverable list of all publicly shared leagues (no login)."""
         leagues = get_public_leagues()
-        return render_public_leagues_index(leagues, STYLE)
+        return render_public_leagues_index(leagues)
 
     @rt("/public/league/{league_id}")
     def public_league_page(league_id: int):
@@ -53,7 +53,7 @@ def register_public_routes(rt, STYLE):
             return _not_found()
 
         matches = get_matches_by_league(league_id)
-        return render_public_league(league, matches, STYLE)
+        return render_public_league(league, matches)
 
     @rt("/public/match/{match_id}")
     def public_match_page(match_id: int, display: str = "pitch"):
@@ -101,6 +101,5 @@ def register_public_routes(rt, STYLE):
         )
         return render_public_page(
             f"{match.get('date', 'Match')} - Football Manager",
-            STYLE,
             Div(id="match-content")(detail),
         )

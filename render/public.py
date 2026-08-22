@@ -34,10 +34,10 @@ def _public_header():
     )(*children)
 
 
-def render_public_page(title, STYLE, *body):
+def render_public_page(title, *body):
     """Wrap public content in a full HTML document without the app navbar."""
     return Html(
-        render_head(title, STYLE),
+        render_head(title),
         Body(
             _public_header(),
             Div(cls="container")(*body),
@@ -45,7 +45,7 @@ def render_public_page(title, STYLE, *body):
     )
 
 
-def render_public_leagues_index(leagues, STYLE):
+def render_public_leagues_index(leagues):
     """Render the list of publicly shared leagues for anonymous visitors.
 
     Each league links to its read-only match list at /public/league/{id}.
@@ -67,7 +67,7 @@ def render_public_leagues_index(leagues, STYLE):
                 )
             )
         )
-        return render_public_page("Public Leagues - Football Manager", STYLE, *content)
+        return render_public_page("Public Leagues - Football Manager", *content)
 
     for league in leagues:
         content.append(
@@ -88,10 +88,10 @@ def render_public_leagues_index(leagues, STYLE):
             )
         )
 
-    return render_public_page("Public Leagues - Football Manager", STYLE, *content)
+    return render_public_page("Public Leagues - Football Manager", *content)
 
 
-def render_public_not_found(STYLE):
+def render_public_not_found():
     """Identical page for 'league does not exist' and 'league not public'.
 
     Returning the same response for both avoids leaking whether a private
@@ -99,7 +99,6 @@ def render_public_not_found(STYLE):
     """
     return render_public_page(
         "Not available - Football Manager",
-        STYLE,
         Div(cls="container-white", style="text-align: center;")(
             H2("This page isn't available"),
             P(
@@ -110,7 +109,7 @@ def render_public_not_found(STYLE):
     )
 
 
-def render_public_league(league, matches, STYLE):
+def render_public_league(league, matches):
     """Render a league's match list for anonymous visitors (read-only).
 
     The same table the signed-in /matches page uses, only with the rows pointing
@@ -133,4 +132,4 @@ def render_public_league(league, matches, STYLE):
             Div(cls="container-white")(P("No matches yet.", cls="empty-state"))
         )
 
-    return render_public_page(f"{league['name']} - Football Manager", STYLE, *content)
+    return render_public_page(f"{league['name']} - Football Manager", *content)

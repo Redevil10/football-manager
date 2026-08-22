@@ -7,8 +7,7 @@ from typing import Optional
 
 from core.config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
 from core.exceptions import DatabaseError, IntegrityError
-from db.connection import get_db
-from db.error_handling import db_transaction
+from db.transactions import db_read, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -102,11 +101,10 @@ def get_all_players(
         where.append("p.active IS NOT 0")
 
     clause = f" WHERE {' AND '.join(where)}" if where else ""
-    conn = get_db()
-    players = conn.execute(
-        f"{select}{clause} ORDER BY p.created_at DESC", tuple(params)
-    ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        players = conn.execute(
+            f"{select}{clause} ORDER BY p.created_at DESC", tuple(params)
+        ).fetchall()
 
     result = []
     for p in players:
@@ -158,8 +156,7 @@ def find_player_by_name_or_alias(
         return None
 
     # `IS NOT 0`: see get_all_players.
-    conn = get_db()
-    try:
+    with db_read() as conn:
         if club_ids is not None and len(club_ids) > 0:
             placeholders = ",".join("?" * len(club_ids))
             rows = conn.execute(
@@ -171,9 +168,6 @@ def find_player_by_name_or_alias(
             rows = conn.execute(
                 "SELECT * FROM players WHERE active IS NOT 0"
             ).fetchall()
-    finally:
-        conn.close()
-
     # Name first: a player's own name outranks someone else's nickname for it.
     for row in rows:
         if (row["name"] or "").strip().casefold() == wanted:
@@ -461,8 +455,7 @@ def count_player_appearances(player_id: int) -> int:
     counting only team sheets would call a scorer unrecorded and delete them,
     and the goal would then name nobody.
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         return conn.execute(
             """SELECT COUNT(*) FROM (
                    SELECT match_id FROM match_players WHERE player_id = ?
@@ -471,8 +464,6 @@ def count_player_appearances(player_id: int) -> int:
                )""",
             (player_id, player_id),
         ).fetchone()[0]
-    finally:
-        conn.close()
 
 
 def count_players_in_club(club_id: int) -> int:
@@ -483,13 +474,10 @@ def count_players_in_club(club_id: int) -> int:
     rows survive pointing at a club that is gone, and every list filters by
     club, which means nobody can reach them again.
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         return conn.execute(
             "SELECT COUNT(*) FROM players WHERE club_id = ?", (club_id,)
         ).fetchone()[0]
-    finally:
-        conn.close()
 
 
 def set_player_active(player_id: int, active: bool) -> bool:

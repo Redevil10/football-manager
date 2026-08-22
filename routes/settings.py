@@ -47,7 +47,7 @@ def _get_backup_info():
     }
 
 
-def register_settings_routes(rt, STYLE):
+def register_settings_routes(rt):
     """Register settings routes"""
 
     @rt("/settings")
@@ -60,7 +60,7 @@ def register_settings_routes(rt, STYLE):
         smart_import_enabled = get_setting("smart_import_enabled", "false") == "true"
         backup_info = _get_backup_info()
         return render_settings_page(
-            user, sess, smart_import_enabled, STYLE, backup_info=backup_info
+            user, sess, smart_import_enabled, backup_info=backup_info
         )
 
     @rt("/settings/smart_import", methods=["POST"])

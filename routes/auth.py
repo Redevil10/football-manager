@@ -14,7 +14,7 @@ from core.auth import (
     verify_password,
 )
 from core.config import USER_ROLES, VALID_ROLES
-from core.error_handling import handle_route_error
+from core.error_responses import handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
 from core.validation import (
     validate_in_list,
@@ -33,7 +33,7 @@ from render.common import render_head
 logger = logging.getLogger(__name__)
 
 
-def register_auth_routes(rt, STYLE):
+def register_auth_routes(rt):
     """Register authentication-related routes"""
 
     @rt("/login", methods=["POST"])
@@ -77,7 +77,7 @@ def register_auth_routes(rt, STYLE):
                 error_msg = query.get("error", [None])[0]
 
         return Html(
-            render_head("Login - Football Manager", STYLE),
+            render_head("Login - Football Manager"),
             Body(
                 Div(cls="auth-page")(
                     Div(cls="login-card")(
@@ -407,7 +407,7 @@ def register_auth_routes(rt, STYLE):
         from render.common import render_navbar
 
         return Html(
-            render_head("Register - Football Manager", STYLE),
+            render_head("Register - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container", style="max-width: 400px; margin: 100px auto;")(
@@ -651,7 +651,7 @@ def register_auth_routes(rt, STYLE):
             all_users = get_all_users()
 
         return Html(
-            render_head("Change Password - Football Manager", STYLE),
+            render_head("Change Password - Football Manager"),
             Body(
                 Div(cls="container", style="max-width: 400px; margin: 100px auto;")(
                     H2("Change Password"),

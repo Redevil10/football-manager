@@ -5,7 +5,6 @@ from core.validation import (
     validate_in_list,
     validate_int_range,
     validate_non_empty_string,
-    validate_required_fields,
     validate_required_int,
     validate_url,
 )
@@ -47,50 +46,6 @@ class TestValidateNonEmptyString:
     def test_custom_field_name(self):
         """Test that custom field names appear in error messages"""
         is_valid, error_msg = validate_non_empty_string("", "username")
-        assert is_valid is False
-        assert "username" in error_msg.lower()
-
-
-class TestValidateRequiredFields:
-    """Test validate_required_fields function"""
-
-    def test_all_fields_present(self):
-        """Test that all required fields present pass validation"""
-        form_data = {
-            "username": "test",
-            "password": "secret",
-            "email": "test@example.com",
-        }
-        is_valid, error_msg = validate_required_fields(
-            form_data, ["username", "password", "email"]
-        )
-        assert is_valid is True
-        assert error_msg is None
-
-    def test_missing_field(self):
-        """Test that missing required fields fail validation"""
-        form_data = {"username": "test", "password": "secret"}
-        is_valid, error_msg = validate_required_fields(
-            form_data, ["username", "password", "email"]
-        )
-        assert is_valid is False
-        assert "email" in error_msg.lower()
-
-    def test_empty_field(self):
-        """Test that empty required fields fail validation"""
-        form_data = {"username": "test", "password": "", "email": "test@example.com"}
-        is_valid, error_msg = validate_required_fields(
-            form_data, ["username", "password", "email"]
-        )
-        assert is_valid is False
-        assert "password" in error_msg.lower()
-
-    def test_whitespace_only_field(self):
-        """Test that whitespace-only fields fail validation"""
-        form_data = {"username": "   ", "password": "secret"}
-        is_valid, error_msg = validate_required_fields(
-            form_data, ["username", "password"]
-        )
         assert is_valid is False
         assert "username" in error_msg.lower()
 

@@ -53,16 +53,18 @@ def db():
 
     # find_player_by_name_or_alias opens its own connection and closes it, so
     # that one is handed a no-op close as well.
-    class KeepOpen:
-        def __getattr__(self, name):
-            return getattr(conn, name)
+    class NoCloseRead:
+        """db_read() over the shared in-memory connection, left open."""
 
-        def close(self):
-            pass
+        def __enter__(self):
+            return conn
+
+        def __exit__(self, *exc):
+            return False
 
     with (
         patch("db.players.db_transaction", NoCloseTransaction),
-        patch("db.players.get_db", KeepOpen),
+        patch("db.players.db_read", NoCloseRead),
     ):
         yield conn
     conn.close()

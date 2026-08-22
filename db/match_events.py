@@ -4,8 +4,7 @@ import logging
 from typing import Optional
 
 from core.exceptions import DatabaseError
-from db.connection import get_db
-from db.error_handling import db_transaction
+from db.transactions import db_read, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -19,17 +18,16 @@ def get_match_events(match_id: int) -> list[dict]:
     Returns:
         list[dict]: List of event dictionaries
     """
-    conn = get_db()
-    events = conn.execute(
-        """SELECT e.*, p.name as player_name, mt.team_name
-           FROM match_events e
-           LEFT JOIN players p ON e.player_id = p.id
-           LEFT JOIN match_teams mt ON e.team_id = mt.id
-           WHERE e.match_id = ?
-           ORDER BY e.minute""",
-        (match_id,),
-    ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        events = conn.execute(
+            """SELECT e.*, p.name as player_name, mt.team_name
+               FROM match_events e
+               LEFT JOIN players p ON e.player_id = p.id
+               LEFT JOIN match_teams mt ON e.team_id = mt.id
+               WHERE e.match_id = ?
+               ORDER BY e.minute""",
+            (match_id,),
+        ).fetchall()
     return [dict(event) for event in events]
 
 

@@ -4,8 +4,7 @@ import logging
 from typing import Optional
 
 from core.exceptions import DatabaseError
-from db.connection import get_db
-from db.error_handling import db_transaction
+from db.transactions import db_read, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +18,7 @@ def get_match_recordings(match_id: int) -> list[dict]:
     Returns:
         list[dict]: List of recording dictionaries
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         recordings = conn.execute(
             """SELECT * FROM match_recordings
                WHERE match_id = ?
@@ -28,8 +26,6 @@ def get_match_recordings(match_id: int) -> list[dict]:
             (match_id,),
         ).fetchall()
         return [dict(recording) for recording in recordings]
-    finally:
-        conn.close()
 
 
 def add_match_recording(
@@ -101,11 +97,8 @@ def get_match_recording(recording_id: int) -> Optional[dict]:
     Returns:
         Optional[dict]: Recording dictionary if found, None otherwise
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         recording = conn.execute(
             "SELECT * FROM match_recordings WHERE id = ?", (recording_id,)
         ).fetchone()
         return dict(recording) if recording else None
-    finally:
-        conn.close()

@@ -33,29 +33,6 @@ def validate_non_empty_string(
     return True, None
 
 
-def validate_required_fields(
-    form_data: dict, required_fields: list[str]
-) -> Tuple[bool, Optional[str]]:
-    """Validate that all required fields are present and non-empty.
-
-    Args:
-        form_data: Dictionary of form data
-        required_fields: List of required field names
-
-    Returns:
-        Tuple[bool, Optional[str]]: (is_valid, error_message)
-        - If valid: (True, None)
-        - If invalid: (False, error_message)
-    """
-    for field in required_fields:
-        value = form_data.get(field)
-        is_valid, error_msg = validate_non_empty_string(value, field)
-        if not is_valid:
-            return False, error_msg
-
-    return True, None
-
-
 def parse_int(
     value: Optional[str], field_name: str = "field", default: Optional[int] = None
 ) -> Tuple[Optional[int], Optional[str]]:

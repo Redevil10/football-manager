@@ -4,8 +4,7 @@ import logging
 from typing import Any, Optional
 
 from core.exceptions import DatabaseError
-from db.connection import get_db
-from db.error_handling import db_transaction
+from db.transactions import db_read, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +22,11 @@ def get_match_teams(match_id: int) -> list[dict]:
     Returns:
         list[dict]: List of team dictionaries
     """
-    conn = get_db()
-    teams = conn.execute(
-        "SELECT * FROM match_teams WHERE match_id = ? ORDER BY team_number",
-        (match_id,),
-    ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        teams = conn.execute(
+            "SELECT * FROM match_teams WHERE match_id = ? ORDER BY team_number",
+            (match_id,),
+        ).fetchall()
     return [dict(team) for team in teams]
 
 

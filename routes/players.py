@@ -19,7 +19,7 @@ from core.config import (
     TECHNICAL_ATTRS,
     USER_ROLES,
 )
-from core.error_handling import handle_db_result, handle_route_error
+from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
 from core.validation import validate_non_empty_string
 from db import (
@@ -86,7 +86,7 @@ def _can_add_player(user):
     )
 
 
-def register_player_routes(rt, STYLE):
+def register_player_routes(rt):
     """Register player-related routes"""
 
     @rt("/players")
@@ -107,7 +107,7 @@ def register_player_routes(rt, STYLE):
         can_add_player = _can_add_player(user)
 
         return Html(
-            render_head("All Players - Football Manager", STYLE),
+            render_head("All Players - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -150,7 +150,7 @@ def register_player_routes(rt, STYLE):
             return RedirectResponse("/login", status_code=303)
 
         return Html(
-            render_head("Import Players - Football Manager", STYLE),
+            render_head("Import Players - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -189,7 +189,7 @@ def register_player_routes(rt, STYLE):
 
         if not player:
             return Html(
-                render_head("Player Not Found", STYLE),
+                render_head("Player Not Found"),
                 Body(
                     render_navbar(user, sess, req.url.path if req else "/"),
                     Div(cls="container")(P("Player not found")),
@@ -205,7 +205,7 @@ def register_player_routes(rt, STYLE):
             back_href = "/players"
 
         return Html(
-            render_head(f"{player['name']} - Football Manager", STYLE),
+            render_head(f"{player['name']} - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -255,7 +255,7 @@ def register_player_routes(rt, STYLE):
             return RedirectResponse("/players", status_code=303)
 
         return Html(
-            render_head("Add Player - Football Manager", STYLE),
+            render_head("Add Player - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(

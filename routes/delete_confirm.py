@@ -218,7 +218,7 @@ TARGETS = {
 }
 
 
-def register_delete_confirm_routes(rt, STYLE):
+def register_delete_confirm_routes(rt):
     """Register the shared delete confirmation page."""
     from starlette.requests import Request
     from starlette.responses import RedirectResponse
@@ -251,7 +251,7 @@ def register_delete_confirm_routes(rt, STYLE):
         blocked = target.get("blocked")
 
         return Html(
-            render_head(f"{verb} {target['noun']} - Football Manager", STYLE),
+            render_head(f"{verb} {target['noun']} - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(

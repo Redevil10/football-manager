@@ -6,8 +6,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from core.exceptions import DatabaseError, IntegrityError
-from db.connection import get_db
-from db.error_handling import db_transaction
+from db.transactions import db_read, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -71,11 +70,10 @@ def get_user_by_username(username: str) -> Optional[dict]:
     Returns:
         dict: User dictionary if found, None otherwise
     """
-    conn = get_db()
-    user = conn.execute(
-        "SELECT * FROM users WHERE username = ?", (username,)
-    ).fetchone()
-    conn.close()
+    with db_read() as conn:
+        user = conn.execute(
+            "SELECT * FROM users WHERE username = ?", (username,)
+        ).fetchone()
     return dict(user) if user else None
 
 
@@ -88,9 +86,8 @@ def get_user_by_id(user_id: int) -> Optional[dict]:
     Returns:
         dict: User dictionary if found, None otherwise
     """
-    conn = get_db()
-    user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    conn.close()
+    with db_read() as conn:
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     return dict(user) if user else None
 
 
@@ -103,15 +100,14 @@ def get_user_clubs(user_id: int) -> list[dict]:
     Returns:
         list[dict]: List of club dictionaries with role information
     """
-    conn = get_db()
-    clubs = conn.execute(
-        """SELECT c.*, uc.role
-           FROM clubs c
-           JOIN user_clubs uc ON c.id = uc.club_id
-           WHERE uc.user_id = ?""",
-        (user_id,),
-    ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        clubs = conn.execute(
+            """SELECT c.*, uc.role
+               FROM clubs c
+               JOIN user_clubs uc ON c.id = uc.club_id
+               WHERE uc.user_id = ?""",
+            (user_id,),
+        ).fetchall()
     return [dict(club) for club in clubs]
 
 
@@ -124,11 +120,10 @@ def get_user_club_ids(user_id: int) -> list[int]:
     Returns:
         list[int]: List of club IDs
     """
-    conn = get_db()
-    club_ids = conn.execute(
-        "SELECT club_id FROM user_clubs WHERE user_id = ?", (user_id,)
-    ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        club_ids = conn.execute(
+            "SELECT club_id FROM user_clubs WHERE user_id = ?", (user_id,)
+        ).fetchall()
     return [row["club_id"] for row in club_ids]
 
 
@@ -138,13 +133,10 @@ def count_members_in_club(club_id: int) -> int:
     Used by the delete guard: a club's membership rows are not removed with it,
     so they would be left pointing at a club that is gone.
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         return conn.execute(
             "SELECT COUNT(*) FROM user_clubs WHERE club_id = ?", (club_id,)
         ).fetchone()[0]
-    finally:
-        conn.close()
 
 
 def add_user_to_club(user_id: int, club_id: int, role: str) -> bool:
@@ -187,12 +179,11 @@ def get_user_club_role(user_id: int, club_id: int) -> Optional[str]:
     Returns:
         str: Role if found, None otherwise
     """
-    conn = get_db()
-    result = conn.execute(
-        "SELECT role FROM user_clubs WHERE user_id = ? AND club_id = ?",
-        (user_id, club_id),
-    ).fetchone()
-    conn.close()
+    with db_read() as conn:
+        result = conn.execute(
+            "SELECT role FROM user_clubs WHERE user_id = ? AND club_id = ?",
+            (user_id, club_id),
+        ).fetchone()
     return result["role"] if result else None
 
 
@@ -262,16 +253,15 @@ def get_all_users() -> list[dict]:
     Returns:
         list[dict]: List of all user dictionaries
     """
-    conn = get_db()
-    # Self-join: created_by points at another row in this same table.
-    users = conn.execute(
-        """SELECT u.id, u.username, u.email, u.is_superuser, u.created_at,
-                  u.last_login, u.created_by, c.username AS created_by_username
-             FROM users u
-             LEFT JOIN users c ON u.created_by = c.id
-            ORDER BY u.created_at DESC"""
-    ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        # Self-join: created_by points at another row in this same table.
+        users = conn.execute(
+            """SELECT u.id, u.username, u.email, u.is_superuser, u.created_at,
+                      u.last_login, u.created_by, c.username AS created_by_username
+                 FROM users u
+                 LEFT JOIN users c ON u.created_by = c.id
+                ORDER BY u.created_at DESC"""
+        ).fetchall()
     return [dict(user) for user in users]
 
 
@@ -337,17 +327,16 @@ def get_users_by_club_ids(club_ids: list[int]) -> list[dict]:
     if not club_ids:
         return []
 
-    conn = get_db()
-    placeholders = ",".join("?" * len(club_ids))
-    users = conn.execute(
-        f"""SELECT DISTINCT u.id, u.username, u.email, u.is_superuser, u.created_at, u.last_login
-           FROM users u
-           JOIN user_clubs uc ON u.id = uc.user_id
-           WHERE uc.club_id IN ({placeholders})
-           ORDER BY u.created_at DESC""",
-        tuple(club_ids),
-    ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        placeholders = ",".join("?" * len(club_ids))
+        users = conn.execute(
+            f"""SELECT DISTINCT u.id, u.username, u.email, u.is_superuser, u.created_at, u.last_login
+               FROM users u
+               JOIN user_clubs uc ON u.id = uc.user_id
+               WHERE uc.club_id IN ({placeholders})
+               ORDER BY u.created_at DESC""",
+            tuple(club_ids),
+        ).fetchall()
     return [dict(user) for user in users]
 
 
@@ -438,8 +427,7 @@ def get_club_staff() -> dict[int, dict[str, list[str]]]:
         dict[int, dict[str, list[str]]]: club id -> {"admin": [...],
             "manager": [...]}, each list of usernames in alphabetical order.
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         rows = conn.execute(
             """SELECT uc.club_id, uc.role, u.username
                  FROM user_clubs uc
@@ -447,9 +435,6 @@ def get_club_staff() -> dict[int, dict[str, list[str]]]:
                 WHERE uc.role IN ('admin', 'manager')
                 ORDER BY u.username"""
         ).fetchall()
-    finally:
-        conn.close()
-
     staff: dict[int, dict[str, list[str]]] = {}
     for row in rows:
         club = staff.setdefault(row["club_id"], {"admin": [], "manager": []})

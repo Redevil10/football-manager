@@ -5,6 +5,7 @@ from datetime import date, datetime
 from fasthtml.common import *
 
 from core.auth import check_club_permission, get_csrf_token, get_current_club_info
+from core.styles import STYLE
 from db import get_match_teams
 
 # Clicking a button that HTMX then swaps away used to fling the page elsewhere.
@@ -26,12 +27,14 @@ document.addEventListener('htmx:beforeSwap', function(event) {
 """
 
 
-def render_head(title, STYLE, *extra):
+def render_head(title, *extra):
     """Return a shared Head(...) element with viewport and HTMX.
+
+    The stylesheet is the app's single one, so it is taken from core.styles
+    rather than threaded down through every route as an argument.
 
     Args:
         title: Page title string.
-        STYLE: CSS style string.
         *extra: Additional elements to include (e.g. extra Script tags).
     """
     return Head(

@@ -4,8 +4,7 @@ import logging
 from typing import Optional
 
 from core.exceptions import DatabaseError, IntegrityError
-from db.connection import get_db
-from db.error_handling import db_transaction
+from db.transactions import db_read, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +49,8 @@ def get_club(club_id: int) -> Optional[dict]:
     Returns:
         dict: Club dictionary if found, None otherwise
     """
-    conn = get_db()
-    club = conn.execute("SELECT * FROM clubs WHERE id = ?", (club_id,)).fetchone()
-    conn.close()
+    with db_read() as conn:
+        club = conn.execute("SELECT * FROM clubs WHERE id = ?", (club_id,)).fetchone()
     return dict(club) if club else None
 
 
@@ -65,9 +63,8 @@ def get_club_by_name(name: str) -> Optional[dict]:
     Returns:
         dict: Club dictionary if found, None otherwise
     """
-    conn = get_db()
-    club = conn.execute("SELECT * FROM clubs WHERE name = ?", (name,)).fetchone()
-    conn.close()
+    with db_read() as conn:
+        club = conn.execute("SELECT * FROM clubs WHERE name = ?", (name,)).fetchone()
     return dict(club) if club else None
 
 
@@ -77,9 +74,8 @@ def get_all_clubs() -> list[dict]:
     Returns:
         list[dict]: List of all club dictionaries
     """
-    conn = get_db()
-    clubs = conn.execute("SELECT * FROM clubs ORDER BY created_at DESC").fetchall()
-    conn.close()
+    with db_read() as conn:
+        clubs = conn.execute("SELECT * FROM clubs ORDER BY created_at DESC").fetchall()
     return [dict(club) for club in clubs]
 
 

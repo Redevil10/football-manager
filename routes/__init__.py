@@ -1,13 +1,14 @@
 # routes/__init__.py - Route registration
 
 import logging
+import os
 import secrets
 
 from fasthtml.common import fast_app
 from fasthtml_hf import setup_hf_backup
 
-from core.config import *
-from core.styles import STYLE
+# Importing db pulls in core.config, whose import creates the data/ directory
+# that init_db() below writes into.
 from db import init_db
 
 logger = logging.getLogger(__name__)
@@ -132,16 +133,16 @@ from routes.settings import register_settings_routes  # noqa: E402
 from routes.users import register_user_routes  # noqa: E402
 
 # Register all routes
-register_auth_routes(rt, STYLE)
-register_club_routes(rt, STYLE)
-register_delete_confirm_routes(rt, STYLE)
-register_home_routes(rt, STYLE)
-register_player_routes(rt, STYLE)
-register_public_routes(rt, STYLE)
-register_league_routes(rt, STYLE)
-register_match_routes(rt, STYLE)
-register_migration_routes(rt, STYLE)
-register_settings_routes(rt, STYLE)
-register_user_routes(rt, STYLE)
+register_auth_routes(rt)
+register_club_routes(rt)
+register_delete_confirm_routes(rt)
+register_home_routes(rt)
+register_player_routes(rt)
+register_public_routes(rt)
+register_league_routes(rt)
+register_match_routes(rt)
+register_migration_routes(rt)
+register_settings_routes(rt)
+register_user_routes(rt)
 
 __all__ = ["app", "rt"]

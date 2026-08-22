@@ -15,7 +15,7 @@ from unittest.mock import patch
 from fasthtml.common import RedirectResponse
 
 from core.auth import hash_password
-from core.error_handling import handle_db_result, handle_route_error
+from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import (
     DatabaseError,
     IntegrityError,

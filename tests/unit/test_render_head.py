@@ -12,32 +12,32 @@ class TestRenderHead:
 
     def test_render_head_includes_viewport_meta(self):
         """render_head should include a viewport meta tag for mobile"""
-        head = render_head("Test", "body{}")
+        head = render_head("Test")
         html = to_xml(head)
         assert 'name="viewport"' in html
         assert "width=device-width" in html
 
     def test_render_head_includes_charset(self):
         """render_head should include a charset meta tag"""
-        head = render_head("Test", "body{}")
+        head = render_head("Test")
         html = to_xml(head)
         assert 'charset="UTF-8"' in html or 'charset="utf-8"' in html.lower()
 
     def test_render_head_includes_title(self):
         """render_head should include the page title"""
-        head = render_head("My Page Title", "body{}")
+        head = render_head("My Page Title")
         html = to_xml(head)
         assert "My Page Title" in html
 
     def test_render_head_includes_htmx(self):
         """render_head should include the HTMX script"""
-        head = render_head("Test", "body{}")
+        head = render_head("Test")
         html = to_xml(head)
         assert "https://unpkg.com/htmx.org" in html
 
     def test_render_head_points_the_tab_icon_at_the_logo(self):
         """One asset serves as both logo and tab icon, so they cannot drift."""
-        head = render_head("Test", "body{}")
+        head = render_head("Test")
         html = to_xml(head)
         assert 'rel="icon"' in html
         assert "/static/logo.svg" in html
@@ -45,6 +45,6 @@ class TestRenderHead:
     def test_render_head_with_extra_scripts(self):
         """render_head should include extra elements passed via *extra"""
         extra = Script(src="https://cdn.jsdelivr.net/npm/chart.js")
-        head = render_head("Test", "body{}", extra)
+        head = render_head("Test", extra)
         html = to_xml(head)
         assert "chart.js" in html

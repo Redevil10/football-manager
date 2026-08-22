@@ -6,7 +6,7 @@ from fasthtml.common import *  # noqa: F403, F405
 
 from core.auth import get_current_user
 from core.config import USER_ROLES, VALID_ROLES
-from core.error_handling import handle_db_result, handle_route_error
+from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import ValidationError
 from core.validation import (
     validate_in_list,
@@ -110,7 +110,7 @@ def assignable_roles(user):
     return [USER_ROLES["VIEWER"], USER_ROLES["MANAGER"]]
 
 
-def register_club_routes(rt, STYLE):
+def register_club_routes(rt):
     """Register all club management routes"""
 
     @rt("/clubs")
@@ -131,7 +131,7 @@ def register_club_routes(rt, STYLE):
             return RedirectResponse("/", status_code=303)
 
         return Html(
-            render_head("Clubs - Football Manager", STYLE),
+            render_head("Clubs - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -159,7 +159,7 @@ def register_club_routes(rt, STYLE):
             return RedirectResponse("/", status_code=303)
 
         return Html(
-            render_head("Create Club - Football Manager", STYLE),
+            render_head("Create Club - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -244,7 +244,7 @@ def register_club_routes(rt, STYLE):
         all_leagues = get_all_leagues(club_ids=None)
 
         return Html(
-            render_head(f"{club['name']} - Football Manager", STYLE),
+            render_head(f"{club['name']} - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
@@ -316,7 +316,7 @@ def register_club_routes(rt, STYLE):
             return RedirectResponse("/clubs", status_code=303)
 
         return Html(
-            render_head(f"Edit {club['name']} - Football Manager", STYLE),
+            render_head(f"Edit {club['name']} - Football Manager"),
             Body(
                 render_navbar(user, sess, req.url.path if req else "/"),
                 Div(cls="container")(
