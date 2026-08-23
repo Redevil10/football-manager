@@ -590,54 +590,6 @@ def update_player_height_weight(
         return False
 
 
-def swap_players(player1_id: int, player2_id: int) -> bool:
-    """Swap two players' teams and positions.
-
-    Args:
-        player1_id: ID of the first player
-        player2_id: ID of the second player
-
-    Returns:
-        bool: True on success, False on error (player not found, etc.)
-    """
-    try:
-        with db_transaction("swap_players") as conn:
-            # Get both players
-            p1 = conn.execute(
-                "SELECT team, position FROM players WHERE id = ?", (player1_id,)
-            ).fetchone()
-            p2 = conn.execute(
-                "SELECT team, position FROM players WHERE id = ?", (player2_id,)
-            ).fetchone()
-
-            if not p1:
-                logger.warning(f"Swap players: Player {player1_id} not found")
-                return False
-            if not p2:
-                logger.warning(f"Swap players: Player {player2_id} not found")
-                return False
-
-            # Swap their team and position
-            conn.execute(
-                "UPDATE players SET team = ?, position = ? WHERE id = ?",
-                (p2[0], p2[1], player1_id),
-            )
-            conn.execute(
-                "UPDATE players SET team = ?, position = ? WHERE id = ?",
-                (p1[0], p1[1], player2_id),
-            )
-            conn.commit()
-            logger.debug(
-                f"Swapped teams/positions for players {player1_id} and {player2_id}"
-            )
-            return True
-    except DatabaseError:
-        logger.error(
-            f"Failed to swap players {player1_id} and {player2_id}", exc_info=True
-        )
-        return False
-
-
 def reset_teams() -> bool:
     """Reset all team assignments.
 

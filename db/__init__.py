@@ -85,7 +85,6 @@ from db.players import (
     get_all_players,
     reset_teams,
     set_player_active,
-    swap_players,
     update_player_attrs,
     update_player_height_weight,
     update_player_name,
@@ -123,7 +122,6 @@ __all__ = [
     "update_player_attrs",
     "update_player_name",
     "update_player_height_weight",
-    "swap_players",
     "reset_teams",
     # Leagues
     "get_all_leagues",
