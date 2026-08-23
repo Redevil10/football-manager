@@ -32,22 +32,22 @@ from db import (
     update_player_name,
 )
 from db.players import add_player
-from logic import (
+from logic.allocation import allocate_teams
+from logic.import_logic import import_players
+from logic.players import add_player_with_score
+from logic.scoring import (
     adjust_category_attributes_by_single_attr,
-    allocate_teams,
     calculate_gk_score,
     calculate_mental_score,
     calculate_physical_score,
     calculate_player_overall,
     calculate_technical_score,
-    import_players,
     set_gk_score,
     set_mental_score,
     set_overall_score,
     set_physical_score,
     set_technical_score,
 )
-from logic.players import add_player_with_score
 from render import (
     render_add_player_form,
     render_archived_players,
@@ -772,15 +772,12 @@ def route_allocate(req: Request = None, sess=None):
     if not user:
         return RedirectResponse("/login", status_code=303)
 
-    # Check authorization - only managers can allocate teams
-    # Check if user is superuser or has manager role for any club
+    # Superuser only. This rewrites every player in the database -- allocate_teams()
+    # and reset_teams() both work off get_all_players() with no club filter --
+    # so a manager of any one club could rewrite every other club's teams.
+    # Nothing in the UI links here; the per-match routes are what the app uses.
     if not user.get("is_superuser"):
-        club_ids = get_user_club_ids_from_request(req, sess)
-        has_manager_permission = any(
-            check_club_permission(user, cid, USER_ROLES["MANAGER"]) for cid in club_ids
-        )
-        if not has_manager_permission:
-            return RedirectResponse("/", status_code=303)
+        return RedirectResponse("/", status_code=303)
 
     try:
         success, message = allocate_teams()
@@ -815,15 +812,12 @@ def route_reset(req: Request = None, sess=None):
     if not user:
         return RedirectResponse("/login", status_code=303)
 
-    # Check authorization - only managers can reset teams
-    # Check if user is superuser or has manager role for any club
+    # Superuser only. This rewrites every player in the database -- allocate_teams()
+    # and reset_teams() both work off get_all_players() with no club filter --
+    # so a manager of any one club could rewrite every other club's teams.
+    # Nothing in the UI links here; the per-match routes are what the app uses.
     if not user.get("is_superuser"):
-        club_ids = get_user_club_ids_from_request(req, sess)
-        has_manager_permission = any(
-            check_club_permission(user, cid, USER_ROLES["MANAGER"]) for cid in club_ids
-        )
-        if not has_manager_permission:
-            return RedirectResponse("/", status_code=303)
+        return RedirectResponse("/", status_code=303)
 
     reset_teams()
     players = get_all_players()

@@ -206,12 +206,13 @@ class TestGetAllPlayers:
         conn.commit()
         conn.close()
 
-        result = get_all_players(club_ids=[])
+        # An empty club list means the caller reaches no clubs, so no players.
+        # This used to assert the opposite -- describing the leak as if it were
+        # the design -- which is how a clubless account could read every squad.
+        assert get_all_players(club_ids=[]) == []
 
-        # Empty club_ids list is treated the same as None - returns all players
-        # (The implementation checks len(club_ids) > 0, so empty list falls through to else branch)
-        assert len(result) >= 1
-        assert any(p["name"] == "Player 1" for p in result)
+        # None still means "no filter", for a superuser.
+        assert any(p["name"] == "Player 1" for p in get_all_players(club_ids=None))
 
 
 class TestFindPlayerByNameOrAlias:

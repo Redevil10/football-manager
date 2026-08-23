@@ -108,7 +108,11 @@ def get_all_matches(club_ids: Optional[List[int]] = None) -> List[Dict[str, Any]
         List[Dict[str, Any]]: List of match dictionaries with league_name
     """
     with db_read() as conn:
-        if club_ids is not None and len(club_ids) > 0:
+        if club_ids is not None and len(club_ids) == 0:
+            # Reaches no clubs, so reaches no matches. Falling through to the
+            # unfiltered branch handed a clubless account every private match.
+            return []
+        if club_ids is not None:
             # Get leagues that the clubs participate in
             league_ids = get_league_ids_for_clubs(club_ids)
             if league_ids:
@@ -320,7 +324,9 @@ def get_recent_matches(
     past_params = (today, today, now)
 
     with db_read() as conn:
-        if club_ids is not None and len(club_ids) > 0:
+        if club_ids is not None and len(club_ids) == 0:
+            return []  # reaches no clubs -- see get_all_matches
+        if club_ids is not None:
             # Limit to leagues that the clubs participate in.
             league_ids = get_league_ids_for_clubs(club_ids)
             if not league_ids:
@@ -371,8 +377,9 @@ def get_match(
 
         match_dict = dict(match)
 
-        # If club_ids provided, check if any of the clubs participate in this league
-        if club_ids is not None and len(club_ids) > 0 and match_dict.get("league_id"):
+        # If club_ids provided, check if any of the clubs participate in this
+        # league. An empty list reaches nothing, so the check must still run.
+        if club_ids is not None and match_dict.get("league_id"):
             league_id = match_dict["league_id"]
             has_access = any(is_club_in_league(cid, league_id) for cid in club_ids)
             if not has_access:

@@ -88,9 +88,14 @@ def get_all_players(
     select = """SELECT p.*, u.username AS created_by_username
                   FROM players p
                   LEFT JOIN users u ON p.created_by = u.id"""
+    if club_ids is not None and len(club_ids) == 0:
+        # Reaches no clubs, so reaches no players. Without this the query ran
+        # with no WHERE and handed a clubless account every club's squad.
+        return []
+
     where = []
     params: list = []
-    if club_ids is not None and len(club_ids) > 0:
+    if club_ids is not None:
         where.append(f"p.club_id IN ({','.join('?' * len(club_ids))})")
         params.extend(club_ids)
     if not include_archived:
@@ -139,8 +144,11 @@ def find_player_by_name_or_alias(
         return None
 
     # `IS NOT 0`: see get_all_players.
+    if club_ids is not None and len(club_ids) == 0:
+        return None  # reaches no clubs -- see get_all_players
+
     with db_read() as conn:
-        if club_ids is not None and len(club_ids) > 0:
+        if club_ids is not None:
             placeholders = ",".join("?" * len(club_ids))
             rows = conn.execute(
                 f"""SELECT * FROM players

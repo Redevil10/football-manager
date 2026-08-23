@@ -45,13 +45,13 @@ from db import (
     update_match_team,
     update_team_captain,
 )
-from db.club_leagues import add_club_to_league, is_club_in_league
+from db.club_leagues import is_club_in_league
 from db.users import get_user_club_ids
-from logic import (
-    allocate_match_teams,
-    calculate_player_overall,
+from logic.allocation import allocate_match_teams
+from logic.import_logic import parse_signup_text
+from logic.scoring import calculate_player_overall
+from logic.smart_import import (
     is_smart_import_available,
-    parse_signup_text,
     smart_parse_signup,
 )
 from render import (
@@ -351,14 +351,21 @@ async def route_create_match(req: Request, sess=None):
             )
 
             if not club_in_league:
-                # For Friendly league, automatically add the first manager club
+                # Friendly is the app's shared default, so joining it on the
+                # caller's behalf is expected.
                 league = get_league(league_id)
                 if league and league.get("name", "").lower() == "friendly":
                     # Use get_or_create_friendly_league which handles adding the club
                     league_id = get_or_create_friendly_league(manager_club_ids[0])
                 else:
-                    # For other leagues, add the first manager club to the league
-                    add_club_to_league(manager_club_ids[0], league_id)
+                    # Any other league is somebody else's. This used to add the
+                    # caller's club to whatever league id the form named, which
+                    # let a manager join a private league by hand and bypassed
+                    # the superuser-only membership routes entirely.
+                    return RedirectResponse(
+                        "/create_match?error=Your+club+is+not+in+that+league",
+                        status_code=303,
+                    )
 
         date = form.get("date", "").strip()
         start_time = form.get("start_time", "").strip()
@@ -481,7 +488,13 @@ def match_detail_page(
     if not user:
         return RedirectResponse("/login", status_code=303)
 
-    match = get_match(match_id)
+    # Signed in is not enough: without a club scope any account could walk the
+    # match ids and read another club's line-ups, events, recordings and where
+    # they play. A superuser passes None, which means no filter.
+    club_ids = (
+        None if user.get("is_superuser") else get_user_club_ids_from_request(req, sess)
+    )
+    match = get_match(match_id, club_ids)
     if not match:
         return RedirectResponse("/leagues", status_code=303)
 
@@ -850,6 +863,17 @@ async def route_update_match(match_id: int, req: Request, sess=None):
 
     # Calculate num_teams for backward compatibility (can be removed later)
     num_teams = sum([allocate_team1, allocate_team2])
+    # Permission was checked against the league the match is in now; the form
+    # can name a different one. Without this a manager could move a match into
+    # a private league none of their clubs belongs to.
+    if not user.get("is_superuser"):
+        reachable = get_user_club_ids_from_request(req, sess)
+        if get_league(league_id, reachable) is None:
+            return RedirectResponse(
+                f"/edit_match/{match_id}?error=You+cannot+move+a+match+into+that+league",
+                status_code=303,
+            )
+
     try:
         update_match(
             match_id,
@@ -1344,6 +1368,7 @@ def add_match_event_page(match_id: int, req: Request = None, sess=None):
                 H2(f"Add Event - {format_match_name(match)}"),
                 Div(cls="container-white")(
                     Form(
+                        render_csrf_input(),
                         Div(style="margin-bottom: 15px;")(
                             Label(
                                 "Event Type:",
@@ -1526,6 +1551,7 @@ def import_match_players_page(match_id: int, req: Request = None, sess=None):
                 H2(f"Import Players for {format_match_name(match)}"),
                 Div(cls="container-white")(
                     Form(
+                        render_csrf_input(),
                         Div(style="margin-bottom: 15px;")(
                             Label(
                                 "Signup Text:",
@@ -1801,6 +1827,7 @@ def add_match_player_manual_page(match_id: int, req: Request = None, sess=None):
                 H2(f"Add Player to {format_match_name(match)}"),
                 Div(cls="container-white")(
                     Form(
+                        render_csrf_input(),
                         Div(style="margin-bottom: 15px;")(
                             Label(
                                 "Select Player:",

@@ -261,3 +261,64 @@ def test_no_mutating_route_is_reachable_by_get():
     assert offenders == [], "state-changing routes reachable by GET:\n  " + "\n  ".join(
         offenders
     )
+
+
+# --- what a browser actually sends ---------------------------------------
+
+
+@pytest.mark.unit
+def test_every_rendered_post_form_carries_the_token(world):  # noqa: F811
+    """A form without the hidden field is a page whose submit button 403s.
+
+    The smoke tests post through CSRFClient, which supplies the token as a
+    header -- something only HTMX does. A plain <form> submit has nothing but
+    the hidden field, so a missing one is invisible to those tests and breaks
+    the page for a real person. /create_match shipped exactly that way: its
+    Form had no explicit method=, so the pass that inserted the fields skipped
+    it, and FastHTML defaults a Form to POST.
+    """
+    import re
+
+    from routes import app
+
+    client = CSRFClient(app)
+    resp = client.post(
+        "/login",
+        data={"username": "boss", "password": PASSWORD},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    pages = [
+        "/create_match",
+        "/add_player",
+        "/create_club",
+        "/create_league",
+        f"/match/{world['match_id']}",
+        f"/edit_match/{world['match_id']}",
+        f"/player/{world['newcomer']}",
+        f"/league/{world['league_id']}",
+        f"/club/{world['club_id']}",
+        "/players",
+        "/matches",
+        "/leagues",
+        "/clubs",
+        "/settings",
+    ]
+
+    missing = []
+    for path in pages:
+        page = client.get(path)
+        if page.status_code != 200:
+            continue
+        for form in re.findall(
+            r'<form[^>]*method="post"[^>]*>(.*?)</form>', page.text, re.S | re.I
+        ):
+            if 'name="csrf_token"' not in form:
+                opening = form[:120].replace("\n", " ")
+                missing.append(f"{path}: {opening}")
+
+    assert missing == [], (
+        "POST forms rendered without a CSRF field -- their submit button "
+        "returns 403 in a browser:\n  " + "\n  ".join(missing)
+    )

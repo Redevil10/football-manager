@@ -11,6 +11,9 @@ behaviour, so they fail the moment an edge is added back.
 
 import ast
 import pathlib
+import subprocess
+import sys
+import textwrap
 
 import pytest
 
@@ -83,34 +86,78 @@ def test_the_layer_graph_has_no_cycles():
 
 @pytest.mark.unit
 def test_the_balancing_algorithm_needs_no_database():
-    """logic.balance must import cleanly with the db package unavailable."""
-    import sys
+    """logic.balance imports cleanly with the db package unavailable.
 
-    class BlockDb:
-        def find_module(self, name, path=None):
-            if name == "db" or name.startswith("db."):
-                raise ImportError(f"logic.balance reached for {name}")
-            return None
+    Runs in a fresh interpreter on purpose. An in-process guard proves nothing:
+    by the time this test runs the suite has already imported db, so the import
+    system answers from sys.modules and never consults the finder. The first
+    version of this test also used find_module, which Python 3.12 removed, so
+    the guard was never called either way and the test passed vacuously.
+    """
+    source = textwrap.dedent(
+        """
+        import sys
 
-    for mod in [m for m in sys.modules if m == "logic.balance"]:
-        del sys.modules[mod]
+        class BlockDb:
+            def find_spec(self, name, path=None, target=None):
+                if name == "db" or name.startswith("db."):
+                    raise ImportError("logic.balance reached for " + name)
+                return None
 
-    guard = BlockDb()
-    sys.meta_path.insert(0, guard)
-    try:
-        import logic.balance as balance
-    finally:
-        sys.meta_path.remove(guard)
+        sys.meta_path.insert(0, BlockDb())
+        import logic.balance
+        assert logic.balance.pick_balanced_split
+        assert logic.balance.select_starters
+        print("ok")
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", source],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
 
-    # And it really is the algorithm, not an empty module.
-    for name in (
-        "repeat_penalty",
-        "random_balanced_split",
-        "generate_split_candidates",
-        "pick_balanced_split",
-        "select_starters",
-    ):
-        assert callable(getattr(balance, name)), f"{name} missing from logic.balance"
+    assert result.returncode == 0, (
+        "importing logic.balance pulled in the database layer:\n"
+        + result.stderr.strip()[-800:]
+    )
+    assert "ok" in result.stdout
+
+
+@pytest.mark.unit
+def test_the_balance_module_imports_nothing_from_db_transitively():
+    """The static half of the same rule, with a clearer failure message."""
+    first_party = set(LAYERS)
+
+    def first_party_imports(module):
+        path = ROOT / (module.replace(".", "/") + ".py")
+        if not path.exists():
+            return set()
+        found = set()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                if node.module.split(".")[0] in first_party:
+                    found.add(node.module)
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.split(".")[0] in first_party:
+                        found.add(alias.name)
+        return found
+
+    seen, stack = set(), ["logic.balance"]
+    while stack:
+        module = stack.pop()
+        if module in seen:
+            continue
+        seen.add(module)
+        stack.extend(first_party_imports(module) - seen)
+
+    reached_db = sorted(m for m in seen if m.split(".")[0] == "db")
+    assert reached_db == [], (
+        f"logic.balance reaches the database layer through {reached_db}; "
+        f"its import closure is {sorted(seen)}"
+    )
 
 
 @pytest.mark.unit

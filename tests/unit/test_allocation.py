@@ -3,6 +3,8 @@
 import itertools
 from unittest.mock import patch
 
+import pytest
+
 from core.config import ALLOCATION_BALANCE_TOLERANCE, CAPTAIN_MIN_SCORE_RATIO
 from logic.allocation import (
     allocate_teams,
@@ -10,6 +12,7 @@ from logic.allocation import (
     build_teammate_weights,
 )
 from logic.balance import (
+    generate_split_candidates,
     pick_balanced_split,
     repeat_penalty,
     select_starters,
@@ -509,3 +512,66 @@ class TestSelectStarters:
         assert sorted(p["id"] for p in starters + subs) == sorted(
             p["id"] for p in squad
         )
+
+
+class TestOddSquadsReachTheBestSplit:
+    """An uneven squad must not lose candidates to the mirror optimisation.
+
+    generate_split_candidates pinned index 0 to team 1 to avoid enumerating
+    each partition twice. That is only sound when the two sides are the same
+    size. With an odd squad the sides differ, every set of size1 is already a
+    distinct allocation, and pinning discarded every split that put player 0 on
+    team 2 -- sometimes the only balanced one.
+    """
+
+    @staticmethod
+    def _diff(scores, team1):
+        a = sum(scores[i] for i in team1)
+        b = sum(scores[i] for i in range(len(scores)) if i not in team1)
+        return abs(a - b)
+
+    def _best_reachable(self, scores, size1):
+        return min(
+            self._diff(scores, c) for c in generate_split_candidates(scores, size1)
+        )
+
+    def _best_possible(self, scores, size1):
+        return min(
+            self._diff(scores, set(c))
+            for c in itertools.combinations(range(len(scores)), size1)
+        )
+
+    def test_the_reported_case(self):
+        """[100, 60, 40] split 2/1 has a perfect answer: {60, 40} against 100."""
+        scores = [100, 60, 40]
+
+        assert self._best_reachable(scores, 2) == 0
+
+    def test_the_perfect_split_is_actually_offered(self):
+        scores = [100, 60, 40]
+
+        candidates = set(generate_split_candidates(scores, 2))
+
+        assert frozenset({1, 2}) in candidates
+
+    @pytest.mark.parametrize(
+        "scores,size1",
+        [
+            ([100, 60, 40], 2),
+            ([100, 60, 40], 1),
+            ([50, 40, 30, 20, 10], 2),
+            ([50, 40, 30, 20, 10], 3),
+            ([90, 80, 70, 60, 50, 40, 30], 3),
+            ([10, 10, 10, 10], 2),  # even split: the pinned path
+            ([7, 5], 1),
+        ],
+    )
+    def test_the_candidates_always_contain_an_optimal_split(self, scores, size1):
+        assert self._best_reachable(scores, size1) == self._best_possible(scores, size1)
+
+    def test_an_even_split_still_enumerates_each_partition_once(self):
+        """The optimisation is kept where it is valid."""
+        candidates = list(generate_split_candidates([4, 3, 2, 1], 2))
+
+        assert len(candidates) == len(set(candidates)) == 3
+        assert all(0 in c for c in candidates)

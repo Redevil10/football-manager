@@ -11,7 +11,7 @@ from core.config import (
     TECHNICAL_ATTRS,
 )
 from core.text import split_aliases
-from logic import (
+from logic.scoring import (
     calculate_gk_score,
     calculate_mental_score,
     calculate_overall_score,

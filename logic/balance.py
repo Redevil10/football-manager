@@ -96,17 +96,30 @@ def generate_split_candidates(scores, size1):
     """Yield candidate team-1 index sets.
 
     Enumerates every split when the search space is small enough, and falls back
-    to randomized restarts for large squads. Index 0 is pinned to team 1 because
-    a split and its mirror image are the same allocation.
+    to randomized restarts for large squads.
+
+    Pinning index 0 to team 1 halves the work, but only when the two sides are
+    the same size: then a set and its complement describe one allocation counted
+    twice, and pinning picks one representative. With an odd squad the sides
+    differ in size, each set of ``size1`` is already a distinct allocation, and
+    pinning silently drops every split that puts player 0 on team 2 -- for
+    scores [100, 60, 40] with size1=2 that discarded {60, 40}, the only
+    perfectly balanced answer.
     """
     total = len(scores)
-    if total == 0 or size1 <= 0:
+    if total == 0 or size1 <= 0 or size1 > total:
         return
 
-    space = math.comb(total - 1, size1 - 1)
+    mirrored = size1 * 2 == total
+    space = math.comb(total - 1, size1 - 1) if mirrored else math.comb(total, size1)
+
     if space <= ALLOCATION_ENUMERATION_LIMIT:
-        for rest in itertools.combinations(range(1, total), size1 - 1):
-            yield frozenset((0,) + rest)
+        if mirrored:
+            for rest in itertools.combinations(range(1, total), size1 - 1):
+                yield frozenset((0,) + rest)
+        else:
+            for combo in itertools.combinations(range(total), size1):
+                yield frozenset(combo)
     else:
         for _ in range(ALLOCATION_RANDOM_RESTARTS):
             yield random_balanced_split(scores, size1)

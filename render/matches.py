@@ -2,7 +2,7 @@
 
 from fasthtml.common import *
 
-from logic import calculate_overall_score
+from logic.scoring import calculate_overall_score
 from render.common import (
     confirm_delete_link,
     format_match_meta,
@@ -231,12 +231,18 @@ def render_match_table(matches, base="/match", teams_by_match_id=None):
             get_teams_for_matches(). Without it each row looks its own up,
             which is a query per row.
     """
-    # One query for every row's teams rather than one per row.
-    teams_by_match = teams_by_match_id or {}
-
     rows = []
     for m in matches:
-        home, score, away = match_fixture(m, teams_by_match.get(m["id"], []))
+        # None and [] mean different things to match_fixture: no mapping at all
+        # falls back to looking this one match up, while a mapping that simply
+        # has no row for it means the match has no teams. Collapsing the two
+        # turned the fallback off and rendered placeholder names instead.
+        teams = (
+            teams_by_match_id.get(m["id"], [])
+            if teams_by_match_id is not None
+            else None
+        )
+        home, score, away = match_fixture(m, teams)
         rows.append(
             Tr(
                 # The date opens the match, the way the name does in every other
@@ -1354,6 +1360,7 @@ def render_create_match_page(
                 H2("Create Match"),
                 Div(cls="container-white")(
                     Form(
+                        render_csrf_input(),
                         Div(style="margin-bottom: 15px;")(
                             Label(
                                 "League:",
