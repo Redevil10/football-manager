@@ -735,7 +735,14 @@ async def route_edit_user(user_id: int, req: Request, sess=None):
         # Update user email only - username is not editable
         success = update_user(user_id, username=None, email=email)
         if not success:
-            raise Exception("Failed to update user")
+            return handle_db_result(
+                success,
+                f"/users/{user_id}?success=User+updated+successfully",
+                error_redirect=f"/users/{user_id}",
+                error_message="Failed to update user",
+                check_none=False,
+                check_false=True,
+            )
 
         # Check permissions for role editing
         is_superuser = user.get("is_superuser")

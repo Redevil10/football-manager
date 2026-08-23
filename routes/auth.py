@@ -6,9 +6,10 @@ import sqlite3
 from fasthtml.common import *  # noqa: F403, F405
 
 from core.config import USER_ROLES, VALID_ROLES
-from core.error_responses import handle_route_error
+from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import (
     EXPECTED_ERRORS,
+    DatabaseError,
     NotFoundError,
     PermissionError,
     ValidationError,
@@ -296,7 +297,14 @@ async def route_register(req: Request, sess=None):
             created_by=user["id"],
         )
 
-        if user_id:
+        if user_id is None:
+            return handle_db_result(
+                user_id,
+                "/users?success=User+created+successfully",
+                error_redirect="/register",
+                error_message="User creation failed - username may already exist",
+            )
+        else:
             logger.info(f"User created successfully: {username} (ID: {user_id})")
 
             # Verify user was actually created by querying the database
@@ -336,9 +344,6 @@ async def route_register(req: Request, sess=None):
             return RedirectResponse(
                 "/users?success=User+created+successfully", status_code=303
             )
-        else:
-            # User creation failed - likely duplicate username
-            raise ValueError("User creation failed - username may already exist")
     except (ValidationError, PermissionError, NotFoundError) as e:
         return handle_route_error(e, "/register")
 
