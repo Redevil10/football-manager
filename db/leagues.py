@@ -60,7 +60,11 @@ def get_league(league_id: int, club_ids: Optional[list[int]] = None) -> Optional
 
     Args:
         league_id: ID of the league
-        club_ids: Optional list of club IDs to check access
+        club_ids: Same convention as get_all_leagues -- None means no filtering
+            (a superuser), a list means the league must be reachable from one of
+            those clubs, and an *empty* list means nothing is reachable. That
+            last case used to fall through to "no filter", so a user belonging
+            to no club could open any league, private ones included.
 
     Returns:
         dict: League dictionary if found and accessible, None otherwise
@@ -76,7 +80,7 @@ def get_league(league_id: int, club_ids: Optional[list[int]] = None) -> Optional
     league_dict = dict(league)
 
     # If club_ids provided, check if any of the clubs participate in this league
-    if club_ids is not None and len(club_ids) > 0:
+    if club_ids is not None:
         has_access = any(is_club_in_league(cid, league_id) for cid in club_ids)
         if not has_access:
             return None

@@ -225,8 +225,24 @@ def create_match_page(league_id: str = None, req: Request = None, sess=None):
     )
 
 
-def api_get_last_match(league_id: int):
-    """API endpoint to get last match info for prefilling"""
+def api_get_last_match(league_id: int, req: Request = None, sess=None):
+    """Last match in a league, as JSON, to prefill the create-match form.
+
+    Reached by fetch() from that form, so it needs the same gate the form
+    itself has. Without one this handed any anonymous caller the date, time,
+    location and team names of every league by walking the ids -- private
+    leagues included.
+    """
+    user = get_current_user(req, sess)
+    if not user:
+        return Response(status_code=401)
+
+    # Same scoping as every other league view: not reachable by the caller's
+    # clubs means it does not exist as far as they are concerned.
+    club_ids = get_user_club_ids_from_request(req, sess)
+    if get_league(league_id, club_ids) is None:
+        return Response(status_code=404)
+
     last_match = get_last_match_by_league(league_id)
     if last_match:
         match_id = last_match.get("id")

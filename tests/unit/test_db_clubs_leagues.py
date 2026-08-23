@@ -275,14 +275,20 @@ class TestGetLeague:
         assert result is None
 
     def test_get_league_with_empty_club_ids(self, temp_db):
-        """Test getting league with empty club_ids list"""
+        """An empty club list means nothing is reachable, not "no filter".
+
+        This used to assert the opposite, which is how a user belonging to no
+        club could open any league -- private ones included. get_all_leagues
+        already documented [] as "returns empty"; this now matches it.
+        """
         league_id = create_league("Test League")
 
-        # Should return league even with empty club_ids
-        league = get_league(league_id, club_ids=[])
+        assert get_league(league_id, club_ids=[]) is None
 
-        assert league is not None
-        assert league["id"] == league_id
+    def test_get_league_with_club_ids_that_do_not_reach_it(self, temp_db):
+        league_id = create_league("Test League")
+
+        assert get_league(league_id, club_ids=[999]) is None
 
     def test_get_league_with_none_club_ids(self, temp_db):
         """Test getting league with None club_ids (superuser access)"""

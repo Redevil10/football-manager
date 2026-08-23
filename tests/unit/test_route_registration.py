@@ -101,3 +101,58 @@ def test_the_whole_app_registers_every_route_exactly_once():
     # /public/match is reachable by exactly one route; a stray duplicate
     # registration would shadow one of them unpredictably.
     assert paths.count("/public/match/{match_id}") == 1
+
+
+@pytest.mark.unit
+def test_every_route_either_checks_the_caller_or_is_deliberately_public():
+    """A route with no guard is one typo away from being a data leak.
+
+    The guards are written by hand in every handler, so this walks the
+    registration table instead of trusting that. /api/get_last_match had no
+    guard at all and handed any anonymous caller the date, time, location and
+    team names of every league by walking the ids -- private ones included.
+    """
+    # Open on purpose: the sign-in flow itself, and the read-only public pages
+    # that only ever show a league whose is_public flag is on.
+    PUBLIC = {
+        "/login",
+        "/logout",
+        "/register",
+        "/public",
+        "/public/league/{league_id}",
+        "/public/match/{match_id}",
+        # A bare redirect into /create_match, which does check.
+        "/create_match/{league_id}",
+    }
+
+    unguarded = []
+    for module_name in ROUTE_MODULES:
+        reg = _register_fn(_parse(module_name))
+        if reg is None:
+            continue
+        handlers = {
+            n.name: n
+            for n in _parse(module_name).body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        for node in ast.walk(reg):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Call)
+                and isinstance(node.func.func, ast.Name)
+                and node.func.func.id == "rt"
+                and node.args
+                and isinstance(node.args[0], ast.Name)
+            ):
+                continue
+            path = node.func.args[0].value
+            handler = handlers.get(node.args[0].id)
+            if handler is None or path in PUBLIC:
+                continue
+            if "get_current_user(" not in ast.unparse(handler):
+                unguarded.append(f"{path} -> {module_name}.{handler.name}")
+
+    assert unguarded == [], (
+        "these routes never look at who is calling; add a guard or list the "
+        "path as deliberately public:\n  " + "\n  ".join(unguarded)
+    )
