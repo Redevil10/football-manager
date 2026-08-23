@@ -81,3 +81,23 @@ class PermissionError(Exception):
         else:
             message = f"Permission denied: Cannot {action}"
         super().__init__(message)
+
+
+# The exceptions a route is entitled to expect: the ones this module defines,
+# raised deliberately by the layers below when something about the *request*
+# is wrong -- bad input, a missing row, no permission, the database refusing.
+#
+# Anything outside this tuple is a bug in our own code (a TypeError from a bad
+# call, a typo'd attribute), and a route must let it propagate. Catching
+# Exception in a handler turned those into a friendly message that no test
+# could fail on -- which is exactly how a broken call site once survived a
+# green suite. routes/__init__.py registers one app-level handler that gives
+# the reader a civil page while still letting the error reach the log and the
+# test client.
+EXPECTED_ERRORS = (
+    ValidationError,
+    NotFoundError,
+    PermissionError,
+    IntegrityError,
+    DatabaseError,
+)

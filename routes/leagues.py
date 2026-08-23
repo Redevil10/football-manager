@@ -210,8 +210,6 @@ async def route_create_league(req: Request, sess=None):
         )
     except ValidationError as e:
         return handle_route_error(e, "/leagues")
-    except Exception as e:
-        return handle_route_error(e, "/leagues")
 
 
 def league_detail_page(league_id: int, req: Request = None, sess=None):
@@ -380,8 +378,6 @@ async def route_update_league(league_id: int, req: Request, sess=None):
         return RedirectResponse(f"/league/{league_id}", status_code=303)
     except ValidationError as e:
         return handle_route_error(e, f"/edit_league/{league_id}")
-    except Exception as e:
-        return handle_route_error(e, f"/edit_league/{league_id}")
 
 
 @csrf_protect
@@ -413,8 +409,6 @@ def route_delete_league(league_id: int, req: Request = None, sess=None):
         )
     except PermissionError as e:
         return handle_route_error(e, f"/league/{league_id}")
-    except Exception as e:
-        return handle_route_error(e, "/leagues")
 
 
 @csrf_protect
@@ -445,8 +439,6 @@ async def route_add_club_to_league(league_id: int, req: Request, sess=None):
             check_false=True,
         )
     except ValidationError as e:
-        return handle_route_error(e, f"/league/{league_id}")
-    except Exception as e:
         return handle_route_error(e, f"/league/{league_id}")
 
 

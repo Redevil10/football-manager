@@ -8,7 +8,7 @@ from core.auth import get_current_user
 from core.config import USER_ROLES, VALID_ROLES
 from core.csrf import csrf_protect
 from core.error_responses import handle_db_result, handle_route_error
-from core.exceptions import ValidationError
+from core.exceptions import EXPECTED_ERRORS, ValidationError
 from core.validation import (
     validate_in_list,
     validate_non_empty_string,
@@ -203,8 +203,6 @@ async def route_create_club(req: Request, sess=None):
             check_none=True,
         )
     except ValidationError as e:
-        return handle_route_error(e, "/clubs")
-    except Exception as e:
         return handle_route_error(e, "/clubs")
 
 
@@ -463,7 +461,7 @@ async def route_assign_user_to_club(club_id: int, req: Request, sess=None):
             error_message="User already in club or invalid user",
             check_false=True,
         )
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         return handle_route_error(e, f"/club/{club_id}")
 
 

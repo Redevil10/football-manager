@@ -1,6 +1,7 @@
 # routes/auth.py - Authentication routes
 
 import logging
+import sqlite3
 
 from fasthtml.common import *  # noqa: F403, F405
 
@@ -16,7 +17,12 @@ from core.auth import (
 from core.config import USER_ROLES, VALID_ROLES
 from core.csrf import csrf_protect
 from core.error_responses import handle_route_error
-from core.exceptions import NotFoundError, PermissionError, ValidationError
+from core.exceptions import (
+    EXPECTED_ERRORS,
+    NotFoundError,
+    PermissionError,
+    ValidationError,
+)
 from core.validation import (
     validate_in_list,
     validate_non_empty_string,
@@ -55,9 +61,8 @@ async def route_login(req: Request, sess=None):
             return RedirectResponse(
                 "/login?error=Invalid+username+or+password", status_code=303
             )
-    except Exception as e:
-        error_detail = str(e)
-        logger.error(f"Login error: {error_detail}", exc_info=True)
+    except EXPECTED_ERRORS:
+        logger.error("Login error", exc_info=True)
         return RedirectResponse("/login?error=Login+failed", status_code=303)
 
 
@@ -211,7 +216,7 @@ async def route_register(req: Request, sess=None):
             conn = get_db()
             conn.execute("SELECT 1 FROM users LIMIT 1")
             conn.close()
-        except Exception as table_error:
+        except (sqlite3.Error, DatabaseError) as table_error:
             error_msg = (
                 "Database not initialized. Please run migrations first at /migration"
             )
@@ -335,16 +340,6 @@ async def route_register(req: Request, sess=None):
             # User creation failed - likely duplicate username
             raise ValueError("User creation failed - username may already exist")
     except (ValidationError, PermissionError, NotFoundError) as e:
-        return handle_route_error(e, "/register")
-    except Exception as e:
-        error_detail = str(e)
-        logger.error(f"Registration error: {error_detail}", exc_info=True)
-        # Check if it's a table doesn't exist error
-        if "no such table" in error_detail.lower() or "users" in error_detail.lower():
-            error_msg = "Database not initialized. Please run migrations at /migration"
-            return RedirectResponse(
-                f"/register?error={error_msg.replace(' ', '+')}", status_code=303
-            )
         return handle_route_error(e, "/register")
 
 
@@ -600,12 +595,13 @@ async def route_change_password(req: Request, sess=None):
                 "/change-password?error=Failed+to+update+password", status_code=303
             )
 
-    except Exception as e:
-        error_detail = str(e)
-        logger.error(f"Change password error: {error_detail}", exc_info=True)
+    except EXPECTED_ERRORS:
+        # The exception text used to be pasted into this URL and shown to the
+        # reader; it can carry internals, and it never told them anything they
+        # could act on.
+        logger.error("Change password error", exc_info=True)
         return RedirectResponse(
-            f"/change-password?error=Password+change+failed:+{error_detail.replace(' ', '+')}",
-            status_code=303,
+            "/change-password?error=Password+change+failed", status_code=303
         )
 
 

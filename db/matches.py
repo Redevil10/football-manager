@@ -4,7 +4,7 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from core.exceptions import DatabaseError, IntegrityError
+from core.exceptions import DatabaseError, IntegrityError, ValidationError
 from db.club_leagues import get_league_ids_for_clubs, is_club_in_league
 from db.leagues import get_all_leagues, get_or_create_friendly_league
 from db.transactions import db_read, db_transaction
@@ -409,17 +409,20 @@ def create_match(
     """
     # Input validation
     if not league_id:
-        raise ValueError("league_id is required")
+        raise ValidationError("league_id", "league_id is required")
     if not date:
-        raise ValueError("date is required")
+        raise ValidationError("date", "date is required")
     if not start_time:
-        raise ValueError("start_time is required")
+        raise ValidationError("start_time", "start_time is required")
     if not location:
-        raise ValueError("location is required")
+        raise ValidationError("location", "location is required")
     if num_teams < 1:
-        raise ValueError("num_teams must be at least 1")
+        raise ValidationError("num_teams", "num_teams must be at least 1")
     if max_players_per_team is not None and max_players_per_team < 1:
-        raise ValueError("max_players_per_team must be at least 1 if provided")
+        raise ValidationError(
+            "max_players_per_team",
+            "max_players_per_team must be at least 1 if provided",
+        )
 
     try:
         with db_transaction("create_match") as conn:
@@ -440,10 +443,10 @@ def create_match(
             logger.info(f"Match created successfully with ID: {match_id}")
             return match_id
     except IntegrityError as e:
-        raise ValueError(f"Failed to create match: {e.details}")
+        raise DatabaseError(f"Failed to create match: {e.details}")
     except DatabaseError as e:
         # Convert to ValueError for backward compatibility
-        raise ValueError(f"Failed to create match: {str(e)}")
+        raise DatabaseError(f"Failed to create match: {str(e)}")
 
 
 def update_match(
@@ -473,19 +476,22 @@ def update_match(
     """
     # Input validation
     if not match_id:
-        raise ValueError("match_id is required")
+        raise ValidationError("match_id", "match_id is required")
     if not league_id:
-        raise ValueError("league_id is required")
+        raise ValidationError("league_id", "league_id is required")
     if not date:
-        raise ValueError("date is required")
+        raise ValidationError("date", "date is required")
     if not start_time:
-        raise ValueError("start_time is required")
+        raise ValidationError("start_time", "start_time is required")
     if not location:
-        raise ValueError("location is required")
+        raise ValidationError("location", "location is required")
     if num_teams < 1:
-        raise ValueError("num_teams must be at least 1")
+        raise ValidationError("num_teams", "num_teams must be at least 1")
     if max_players_per_team is not None and max_players_per_team < 1:
-        raise ValueError("max_players_per_team must be at least 1 if provided")
+        raise ValidationError(
+            "max_players_per_team",
+            "max_players_per_team must be at least 1 if provided",
+        )
 
     try:
         with db_transaction("update_match") as conn:

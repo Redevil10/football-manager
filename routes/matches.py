@@ -2,7 +2,6 @@
 
 import json
 import logging
-import traceback
 from urllib.parse import urlencode
 
 from fasthtml.common import *
@@ -16,7 +15,7 @@ from core.auth import (
 from core.config import USER_ROLES
 from core.csrf import csrf_protect
 from core.error_responses import handle_route_error
-from core.exceptions import DatabaseError
+from core.exceptions import EXPECTED_ERRORS, DatabaseError
 from core.validation import parse_int, validate_non_empty_string, validate_url
 from db import (
     add_match_event,
@@ -396,10 +395,7 @@ async def route_create_match(req: Request, sess=None):
             )
             if not match_id:
                 raise DatabaseError("Failed to create match")
-        except (ValueError, DatabaseError) as e:
-            return handle_route_error(e, "/create_match")
-        except Exception as e:
-            traceback.print_exc()
+        except EXPECTED_ERRORS as e:
             return handle_route_error(e, "/create_match")
 
         # Create teams with should_allocate flag
@@ -457,9 +453,8 @@ async def route_create_match(req: Request, sess=None):
 
         return RedirectResponse(f"/match/{match_id}", status_code=303)
 
-    except Exception:
-        traceback.print_exc()
-        return RedirectResponse("/matches", status_code=303)
+    except EXPECTED_ERRORS as e:
+        return handle_route_error(e, "/matches")
 
 
 def match_detail_page(
@@ -578,8 +573,8 @@ def swap_pitch_players(
         # Redirect back to match page with current display mode
         return RedirectResponse(f"/match/{match_id}?display={display}", status_code=303)
 
-    except Exception as e:
-        logger.error(f"Error swapping pitch players: {e}", exc_info=True)
+    except EXPECTED_ERRORS:
+        logger.error("Error swapping pitch players", exc_info=True)
         if is_htmx:
             return Div(cls="container-white")(
                 P(
@@ -656,11 +651,15 @@ def route_allocate_match(match_id: int, req: Request = None, sess=None):
             user=user,
             recordings=get_match_recordings(match_id),
         )
-    except Exception as e:
-        logger.error(f"Error in allocate_match: {e}", exc_info=True)
-        traceback.print_exc()
+    except EXPECTED_ERRORS:
+        logger.error("Error in allocate_match", exc_info=True)
+        # The exception text used to be printed into the page. It can carry
+        # internals and never told the reader anything they could act on.
         return Div(cls="container-white")(
-            P(f"Error: {str(e)}", style="text-align: center; color: #dc3545;")
+            P(
+                "Could not allocate teams. Please try again.",
+                style="text-align: center; color: #dc3545;",
+            )
         )
 
 
@@ -732,10 +731,15 @@ def route_reset_match_teams(match_id: int, req: Request = None, sess=None):
             user=user,
             recordings=get_match_recordings(match_id),
         )
-    except Exception as e:
-        logger.error(f"Error in reset_match_teams: {e}", exc_info=True)
+    except EXPECTED_ERRORS:
+        logger.error("Error in reset_match_teams", exc_info=True)
+        # The exception text used to be printed into the page. It can carry
+        # internals and never told the reader anything they could act on.
         return Div(cls="container-white")(
-            P(f"Error: {str(e)}", style="text-align: center; color: #dc3545;")
+            P(
+                "Could not reset the teams. Please try again.",
+                style="text-align: center; color: #dc3545;",
+            )
         )
 
 
@@ -830,16 +834,22 @@ async def route_update_match(match_id: int, req: Request, sess=None):
 
     # Calculate num_teams for backward compatibility (can be removed later)
     num_teams = sum([allocate_team1, allocate_team2])
-    update_match(
-        match_id,
-        league_id,
-        date,
-        start_time,
-        end_time,
-        location,
-        num_teams,
-        max_players,
-    )
+    try:
+        update_match(
+            match_id,
+            league_id,
+            date,
+            start_time,
+            end_time,
+            location,
+            num_teams,
+            max_players,
+        )
+    except EXPECTED_ERRORS as e:
+        # A form missing its date used to reach update_match and raise straight
+        # out of the handler; the reader got a 500 instead of being told which
+        # field was empty.
+        return handle_route_error(e, f"/edit_match/{match_id}")
 
     # Update or create teams based on allocate checkboxes
     # Home Team (Team 1) - always update/create, set should_allocate based on checkbox
@@ -1849,8 +1859,8 @@ async def route_add_match_player_manual(match_id: int, req: Request, sess=None):
 
         add_match_player(match_id, player_id, team_id=None, position=None, is_starter=0)
 
-    except Exception:
-        traceback.print_exc()
+    except EXPECTED_ERRORS:
+        logger.error("Error adding match player manually", exc_info=True)
 
     return RedirectResponse(f"/match/{match_id}", status_code=303)
 

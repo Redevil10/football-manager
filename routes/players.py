@@ -20,7 +20,12 @@ from core.config import (
 )
 from core.csrf import csrf_protect
 from core.error_responses import handle_db_result, handle_route_error
-from core.exceptions import NotFoundError, PermissionError, ValidationError
+from core.exceptions import (
+    EXPECTED_ERRORS,
+    NotFoundError,
+    PermissionError,
+    ValidationError,
+)
 from core.validation import validate_non_empty_string
 from db import (
     count_player_appearances,
@@ -361,8 +366,6 @@ async def route_add_player(req: Request, sess=None):
         )
     except ValidationError as e:
         return handle_route_error(e, "/add_player")
-    except Exception as e:
-        return handle_route_error(e, "/add_player")
 
 
 @csrf_protect
@@ -405,8 +408,6 @@ async def route_update_player_name(player_id: int, req: Request, sess=None):
         )
     except (ValidationError, NotFoundError, PermissionError) as e:
         return handle_route_error(e, _player_url(player_id))
-    except Exception as e:
-        return handle_route_error(e, _player_url(player_id))
 
 
 @csrf_protect
@@ -443,8 +444,6 @@ async def route_update_player_height_weight(player_id: int, req: Request, sess=N
             check_false=True,
         )
     except (NotFoundError, PermissionError) as e:
-        return handle_route_error(e, _player_url(player_id))
-    except Exception as e:
         return handle_route_error(e, _player_url(player_id))
 
 
@@ -537,8 +536,8 @@ async def route_update_player(player_id: int, req: Request, sess=None):
     try:
         form = await req.form()
         form_data = dict(form)
-    except Exception as e:
-        logger.error(f"Error parsing form data: {e}", exc_info=True)
+    except EXPECTED_ERRORS as e:
+        logger.error("Error parsing form data", exc_info=True)
         return handle_route_error(e, _player_url(player_id))
 
     back = form_data.get("back")
@@ -796,10 +795,15 @@ def route_allocate(req: Request = None, sess=None):
             players, key=lambda x: calculate_player_overall(x), reverse=True
         )[:24]
         return render_teams(sorted_players)
-    except Exception as e:
-        logger.error(f"Error in allocate: {e}", exc_info=True)
+    except EXPECTED_ERRORS:
+        logger.error("Error in allocate", exc_info=True)
+        # The exception text used to be printed into the page. It can carry
+        # internals and never told the reader anything they could act on.
         return Div(cls="container-white")(
-            P(f"Error: {str(e)}", style="text-align: center; color: #dc3545;")
+            P(
+                "Could not allocate teams. Please try again.",
+                style="text-align: center; color: #dc3545;",
+            )
         )
 
 

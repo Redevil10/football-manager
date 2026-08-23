@@ -775,8 +775,6 @@ async def route_edit_user(user_id: int, req: Request, sess=None):
         )
     except (NotFoundError, PermissionError) as e:
         return handle_route_error(e, f"/users/{user_id}")
-    except Exception as e:
-        return handle_route_error(e, f"/users/{user_id}")
 
 
 @csrf_protect
@@ -841,8 +839,6 @@ async def route_change_user_role(user_id: int, club_id: int, req: Request, sess=
             check_false=True,
         )
     except (ValidationError, NotFoundError, PermissionError) as e:
-        return handle_route_error(e, f"/users/{user_id}")
-    except Exception as e:
         return handle_route_error(e, f"/users/{user_id}")
 
 

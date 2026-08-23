@@ -8,6 +8,8 @@ from fasthtml.common import fast_app
 from fasthtml_hf import setup_hf_backup
 
 from core.csrf import CSRFTokenMiddleware
+from core.error_responses import expected_error_page, unexpected_error_page
+from core.exceptions import EXPECTED_ERRORS
 
 # Importing db pulls in core.config, whose import creates the data/ directory
 # that init_db() below writes into.
@@ -95,6 +97,8 @@ try:
 except ImportError:
     pass  # SessionMiddleware not available
 except Exception as e:
+    # Start-up, not a request: a misconfigured middleware should leave the app
+    # bootable rather than take the whole process down.
     logger.warning(f"Error configuring SessionMiddleware: {e}", exc_info=True)
 
 # Setup Hugging Face backup for persistent storage (only on Hugging Face Spaces)
@@ -122,6 +126,14 @@ if os.environ.get("HF_TOKEN"):
     setup_hf_backup(app)
 else:
     logger.debug("HF_TOKEN not found, skipping Hugging Face backup setup")
+
+# Anything a route did not expect lands here: the reader gets a civil page,
+# the log gets the traceback, and Starlette re-raises afterwards so the test
+# client still fails on it. Route handlers therefore do not need -- and must
+# not have -- a catch-all of their own.
+for _expected in EXPECTED_ERRORS:
+    app.add_exception_handler(_expected, expected_error_page)
+app.add_exception_handler(Exception, unexpected_error_page)
 
 # Initialize database (after restore if on HF Spaces)
 init_db()

@@ -20,7 +20,8 @@ def _get_backup_info():
         from fasthtml_hf.backup import get_cfg
 
         interval = get_cfg().interval
-    except Exception:
+    except (ImportError, AttributeError):
+        # fasthtml_hf is only installed on Spaces; fall back to its default.
         interval = 15
 
     last_backup_str = get_setting("last_backup_time")
