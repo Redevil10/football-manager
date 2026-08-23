@@ -44,9 +44,8 @@ def _preprocess_long_password_for_bcrypt(password_bytes: bytes) -> bytes:
     """
     # SHA-256 is only a length-reduction prehash; its output is immediately
     # passed to bcrypt by the caller.
-    sha256_hash = hashlib.sha256(
-        password_bytes
-    ).hexdigest()  # codeql[py/weak-sensitive-data-hashing]
+    # codeql[py/weak-sensitive-data-hashing]
+    sha256_hash = hashlib.sha256(password_bytes).hexdigest()
     return sha256_hash.encode("utf-8")
 
 
