@@ -7,8 +7,8 @@ from db.leagues import create_league
 from db.match_players import add_match_player
 from db.match_teams import create_match_team
 from db.matches import create_match
-from db.players import add_player_with_score
 from logic.allocation import allocate_match_teams
+from logic.players import add_player_with_score
 from routes.matches import parse_recording_links, render_match_teams_section
 
 

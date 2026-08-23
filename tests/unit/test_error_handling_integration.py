@@ -14,8 +14,7 @@ from unittest.mock import patch
 
 from fasthtml.common import RedirectResponse
 
-from core.auth import hash_password
-from core.error_handling import handle_db_result, handle_route_error
+from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import (
     DatabaseError,
     IntegrityError,
@@ -25,6 +24,7 @@ from core.exceptions import (
 )
 from db.clubs import create_club, delete_club, update_club
 from db.users import add_user_to_club, create_user, delete_user
+from services.auth import hash_password
 
 
 class TestErrorHandlingHelpers:

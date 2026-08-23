@@ -8,7 +8,6 @@ Covers:
 """
 
 import pytest
-from starlette.testclient import TestClient
 
 from db.clubs import create_club
 from db.leagues import create_league, get_league, set_league_public
@@ -18,6 +17,7 @@ from db.match_recordings import add_match_recording
 from db.match_teams import create_match_team, update_match_team
 from db.matches import create_match
 from db.players import add_player
+from tests.unit.csrf_client import CSRFClient
 
 
 @pytest.fixture
@@ -59,7 +59,7 @@ def client(seeded):
     """A TestClient bound to the app, querying the temp DB."""
     from routes import app
 
-    return TestClient(app)
+    return CSRFClient(app)
 
 
 # --- DB layer -------------------------------------------------------------
@@ -201,8 +201,8 @@ def test_toggle_requires_login(client, seeded):
 
 
 def test_superuser_can_toggle_and_see_link(client, seeded):
-    from core.auth import hash_password
     from db.users import create_user
+    from services.auth import hash_password
 
     league_id = seeded["league_id"]
     pw_hash, pw_salt = hash_password("secret123")
@@ -237,8 +237,8 @@ def test_superuser_can_toggle_and_see_link(client, seeded):
 
 
 def test_non_superuser_cannot_toggle(client, seeded):
-    from core.auth import hash_password
     from db.users import add_user_to_club, create_user
+    from services.auth import hash_password
 
     league_id = seeded["league_id"]
     pw_hash, pw_salt = hash_password("secret123")

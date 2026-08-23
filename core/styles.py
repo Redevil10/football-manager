@@ -96,6 +96,21 @@ a.btn-danger, a.btn-secondary, a.btn-success, a.btn-outline {
     color: white;
 }
 
+/* Logout is a submit button so it can POST, but it belongs with the nav links.
+   The shared button rule sets uppercase/bold/letter-spacing and .nav-action
+   does not mention them, so they have to be undone here. */
+button.nav-action {
+    text-transform: none;
+    font-weight: 400;
+    letter-spacing: normal;
+    font-family: var(--font-body);
+    cursor: pointer;
+    /* Matches what `.navbar a` gives the neighbouring links -- that rule
+       out-specifies .nav-action for anchors, so a button has to restate it or
+       it sits 2px smaller than everything beside it. */
+    padding: 8px 16px;
+}
+
 .navbar a {
     color: white;
     text-decoration: none;

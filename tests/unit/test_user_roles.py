@@ -1,7 +1,7 @@
 # tests/test_user_roles.py - Unit tests for USER_ROLES constants usage
 
-from core.auth import check_club_permission
 from core.config import ROLE_HIERARCHY, USER_ROLES, VALID_ROLES
+from services.auth import check_club_permission
 
 
 class TestUserRolesConstants:
@@ -56,7 +56,9 @@ class TestCheckClubPermissionWithRoles:
 
         from unittest.mock import patch
 
-        with patch("core.auth.get_user_club_role", return_value=USER_ROLES["MANAGER"]):
+        with patch(
+            "services.auth.get_user_club_role", return_value=USER_ROLES["MANAGER"]
+        ):
             result = check_club_permission(user, club_id)
             assert result is True
 
@@ -67,7 +69,9 @@ class TestCheckClubPermissionWithRoles:
 
         from unittest.mock import patch
 
-        with patch("core.auth.get_user_club_role", return_value=USER_ROLES["VIEWER"]):
+        with patch(
+            "services.auth.get_user_club_role", return_value=USER_ROLES["VIEWER"]
+        ):
             result = check_club_permission(user, club_id, USER_ROLES["VIEWER"])
             assert result is True
 
@@ -78,7 +82,9 @@ class TestCheckClubPermissionWithRoles:
 
         from unittest.mock import patch
 
-        with patch("core.auth.get_user_club_role", return_value=USER_ROLES["MANAGER"]):
+        with patch(
+            "services.auth.get_user_club_role", return_value=USER_ROLES["MANAGER"]
+        ):
             result = check_club_permission(user, club_id, USER_ROLES["MANAGER"])
             assert result is True
 
@@ -89,7 +95,9 @@ class TestCheckClubPermissionWithRoles:
 
         from unittest.mock import patch
 
-        with patch("core.auth.get_user_club_role", return_value=USER_ROLES["ADMIN"]):
+        with patch(
+            "services.auth.get_user_club_role", return_value=USER_ROLES["ADMIN"]
+        ):
             result = check_club_permission(user, club_id, USER_ROLES["ADMIN"])
             assert result is True
 
@@ -100,7 +108,9 @@ class TestCheckClubPermissionWithRoles:
 
         from unittest.mock import patch
 
-        with patch("core.auth.get_user_club_role", return_value=USER_ROLES["ADMIN"]):
+        with patch(
+            "services.auth.get_user_club_role", return_value=USER_ROLES["ADMIN"]
+        ):
             result = check_club_permission(user, club_id, USER_ROLES["MANAGER"])
             assert result is True
 
@@ -111,7 +121,9 @@ class TestCheckClubPermissionWithRoles:
 
         from unittest.mock import patch
 
-        with patch("core.auth.get_user_club_role", return_value=USER_ROLES["MANAGER"]):
+        with patch(
+            "services.auth.get_user_club_role", return_value=USER_ROLES["MANAGER"]
+        ):
             result = check_club_permission(user, club_id, USER_ROLES["ADMIN"])
             assert result is False
 
@@ -122,7 +134,9 @@ class TestCheckClubPermissionWithRoles:
 
         from unittest.mock import patch
 
-        with patch("core.auth.get_user_club_role", return_value=USER_ROLES["VIEWER"]):
+        with patch(
+            "services.auth.get_user_club_role", return_value=USER_ROLES["VIEWER"]
+        ):
             result = check_club_permission(user, club_id, USER_ROLES["MANAGER"])
             assert result is False
 

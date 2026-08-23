@@ -1,14 +1,19 @@
 # routes/__init__.py - Route registration
 
 import logging
+import os
 import secrets
 
 from fasthtml.common import fast_app
 from fasthtml_hf import setup_hf_backup
 
-from core.config import *
-from core.styles import STYLE
+from core.error_responses import expected_error_page, unexpected_error_page
+from core.exceptions import EXPECTED_ERRORS
+
+# Importing db pulls in core.config, whose import creates the data/ directory
+# that init_db() below writes into.
 from db import init_db
+from services.csrf import CSRFTokenMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +78,12 @@ try:
 
         app.add_middleware(HTTPSDetectionMiddleware)
 
+    # Publishes the session's CSRF token for the request. Added *before*
+    # SessionMiddleware because add_middleware prepends: the last one added
+    # ends up outermost, so this one runs inside it and can see the session
+    # it just loaded.
+    app.add_middleware(CSRFTokenMiddleware)
+
     # Add SessionMiddleware with the correct configuration for our environment
     # (HF Spaces needs same_site="none", local dev can use "lax")
     app.add_middleware(
@@ -86,6 +97,8 @@ try:
 except ImportError:
     pass  # SessionMiddleware not available
 except Exception as e:
+    # Start-up, not a request: a misconfigured middleware should leave the app
+    # bootable rather than take the whole process down.
     logger.warning(f"Error configuring SessionMiddleware: {e}", exc_info=True)
 
 # Setup Hugging Face backup for persistent storage (only on Hugging Face Spaces)
@@ -114,6 +127,14 @@ if os.environ.get("HF_TOKEN"):
 else:
     logger.debug("HF_TOKEN not found, skipping Hugging Face backup setup")
 
+# Anything a route did not expect lands here: the reader gets a civil page,
+# the log gets the traceback, and Starlette re-raises afterwards so the test
+# client still fails on it. Route handlers therefore do not need -- and must
+# not have -- a catch-all of their own.
+for _expected in EXPECTED_ERRORS:
+    app.add_exception_handler(_expected, expected_error_page)
+app.add_exception_handler(Exception, unexpected_error_page)
+
 # Initialize database (after restore if on HF Spaces)
 init_db()
 
@@ -132,16 +153,16 @@ from routes.settings import register_settings_routes  # noqa: E402
 from routes.users import register_user_routes  # noqa: E402
 
 # Register all routes
-register_auth_routes(rt, STYLE)
-register_club_routes(rt, STYLE)
-register_delete_confirm_routes(rt, STYLE)
-register_home_routes(rt, STYLE)
-register_player_routes(rt, STYLE)
-register_public_routes(rt, STYLE)
-register_league_routes(rt, STYLE)
-register_match_routes(rt, STYLE)
-register_migration_routes(rt, STYLE)
-register_settings_routes(rt, STYLE)
-register_user_routes(rt, STYLE)
+register_auth_routes(rt)
+register_club_routes(rt)
+register_delete_confirm_routes(rt)
+register_home_routes(rt)
+register_player_routes(rt)
+register_public_routes(rt)
+register_league_routes(rt)
+register_match_routes(rt)
+register_migration_routes(rt)
+register_settings_routes(rt)
+register_user_routes(rt)
 
 __all__ = ["app", "rt"]

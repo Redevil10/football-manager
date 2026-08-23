@@ -4,8 +4,10 @@ from datetime import date, datetime
 
 from fasthtml.common import *
 
-from core.auth import check_club_permission, get_csrf_token, get_current_club_info
+from core.styles import STYLE
 from db import get_match_teams
+from services.auth import check_club_permission, get_current_club_info
+from services.csrf import CSRF_FIELD, CSRF_HEADER, current_csrf_token
 
 # Clicking a button that HTMX then swaps away used to fling the page elsewhere.
 # The button still holds focus when the swap deletes it, so the browser goes
@@ -26,12 +28,30 @@ document.addEventListener('htmx:beforeSwap', function(event) {
 """
 
 
-def render_head(title, STYLE, *extra):
+# HTMX posts do not go through a <form>, so they carry the token in a header
+# instead of a hidden field. Reading it from the meta tag keeps the token in
+# exactly one place in the document.
+CSRF_HEADER_SCRIPT = (
+    """
+document.addEventListener('htmx:configRequest', function(event) {
+    var method = (event.detail.verb || 'get').toUpperCase();
+    if (method === 'GET' || method === 'HEAD') return;
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta) event.detail.headers['%s'] = meta.content;
+});
+"""
+    % CSRF_HEADER
+)
+
+
+def render_head(title, *extra):
     """Return a shared Head(...) element with viewport and HTMX.
+
+    The stylesheet is the app's single one, so it is taken from core.styles
+    rather than threaded down through every route as an argument.
 
     Args:
         title: Page title string.
-        STYLE: CSS style string.
         *extra: Additional elements to include (e.g. extra Script tags).
     """
     return Head(
@@ -47,27 +67,39 @@ def render_head(title, STYLE, *extra):
             rel="stylesheet",
             href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap",
         ),
+        # The request's CSRF token, for HTMX to echo back in a header. Forms
+        # carry their own hidden field via render_csrf_input().
+        Meta(name="csrf-token", content=current_csrf_token()),
         Title(title),
         Style(STYLE),
         Script(src="https://unpkg.com/htmx.org@1.9.10"),
         Script(NotStr(BLUR_BEFORE_SWAP_SCRIPT)),
+        Script(NotStr(CSRF_HEADER_SCRIPT)),
         *extra,
     )
 
 
-def match_fixture(match):
+def match_fixture(match, teams=None):
     """The two sides of a match and the score between them, as separate parts.
 
     A table wants these in their own columns, and the one-line match name wants
-    them run together; both come from here so the teams are fetched once and
-    described the same way.
+    them run together; both come from here so the teams are described the same
+    way.
+
+    Args:
+        match: The match dict.
+        teams: Its ``match_teams`` rows, when the caller already has them.
+            A table rendering many rows should pass these -- fetched here it is
+            one query per row. Left out, the teams are looked up for this match
+            alone, which is what the single-match callers want.
 
     Returns:
         (home, score, away): names always strings; ``score`` is "3 : 2" once the
         match has been played and both sides have a score, otherwise None.
     """
-    match_id = match.get("id") if match else None
-    teams = get_match_teams(match_id) if match_id else []
+    if teams is None:
+        match_id = match.get("id") if match else None
+        teams = get_match_teams(match_id) if match_id else []
 
     home_name, away_name = "Home Team", "Away Team"
     home_score = away_score = None
@@ -185,27 +217,6 @@ def format_match_meta(match, include_date=False):
     return " · ".join(parts)
 
 
-def get_match_score_display(match_id):
-    """Get match score display string for a match"""
-    teams = get_match_teams(match_id)
-    if not teams:
-        return ""
-
-    team1_score = None
-    team2_score = None
-    for team in teams:
-        if team.get("team_number") == 1:
-            team1_score = team.get("score", 0)
-        elif team.get("team_number") == 2:
-            team2_score = team.get("score", 0)
-
-    if team1_score is not None and team2_score is not None:
-        return f"Score: {team1_score} - {team2_score}"
-    elif team1_score is not None:
-        return f"Score: {team1_score}"
-    return ""
-
-
 def _belongs_to_a_club(user):
     """Whether this user is in any club at all.
 
@@ -261,7 +272,14 @@ def render_navbar(user=None, sess=None, current_url="/"):
         if user.get("is_superuser"):
             right_items.append(Span("⭐ Superuser", cls="nav-badge"))
 
-        right_items.append(A("Logout", href="/logout", cls="nav-action"))
+        # A form, not a link: logging out changes state, and a GET that any
+        # <img src="/logout"> could fire would let another site sign you out.
+        right_items.append(
+            Form(method="POST", action="/logout", style="display: inline;")(
+                render_csrf_input(),
+                Button("Logout", type="submit", cls="nav-action"),
+            )
+        )
     else:
         right_items.append(
             A("Login", href="/login", cls="nav-action", style="margin-left: auto;")
@@ -324,6 +342,7 @@ def _render_club_selector(user, sess, current_url="/"):
         )
 
     return Form(
+        render_csrf_input(),
         Select(
             *options,
             name="club_id",
@@ -415,21 +434,18 @@ def confirm_delete_link(kind, item_id, label):
     return A(label, href=f"/confirm-delete/{kind}/{item_id}", cls="btn-delete")
 
 
-def render_csrf_input(sess: dict):
-    """Render a hidden CSRF token input field for forms.
+def render_csrf_input():
+    """Hidden CSRF field for a form that submits with an unsafe method.
+
+    Takes no session argument: the token for the request in flight comes from
+    a context variable that CSRFTokenMiddleware sets, so a form can be built
+    anywhere without the session being passed down to it.
 
     Usage:
         Form(
-            render_csrf_input(sess),
+            render_csrf_input(),
             # other form fields...
             method="POST",
         )
-
-    Args:
-        sess: Session dictionary
-
-    Returns:
-        Hidden input element with CSRF token
     """
-    token = get_csrf_token(sess)
-    return Input(type="hidden", name="csrf_token", value=token)
+    return Input(type="hidden", name=CSRF_FIELD, value=current_csrf_token())

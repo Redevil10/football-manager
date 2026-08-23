@@ -7,6 +7,7 @@ does not exist.
 
 from db.players import get_all_players
 from tests.unit.conftest_roles import sign_in, world  # noqa: F401
+from tests.unit.csrf_client import CSRFClient
 
 
 def player_names(include_archived=False):
@@ -83,11 +84,10 @@ class TestRemovingAPlayer:
         assert "Never Played" in player_names()
 
     def test_nor_anyone_signed_out(self, world):  # noqa: F811
-        from starlette.testclient import TestClient
 
         from routes import app
 
-        resp = TestClient(app).post(
+        resp = CSRFClient(app).post(
             f"/delete_player/{world['newcomer']}", follow_redirects=False
         )
 
@@ -191,8 +191,9 @@ class TestTheImportDoesNotTrustTheForm:
     licence to name any player id in the database."""
 
     def test_a_player_from_another_club_is_skipped(self, world):  # noqa: F811
+        from core.text import split_aliases
         from db.clubs import create_club
-        from db.players import add_player, split_aliases
+        from db.players import add_player
         from db.players import get_all_players as all_players
 
         other_club = create_club("Someone Else FC", "")
@@ -239,8 +240,8 @@ class TestTheImportDoesNotTrustTheForm:
         assert player_names(include_archived=True) == before
 
     def test_a_player_in_reach_still_works(self, world):  # noqa: F811
+        from core.text import split_aliases
         from db.players import get_all_players as all_players
-        from db.players import split_aliases
 
         sign_in("coach").post(
             f"/confirm_import/{world['match_id']}",

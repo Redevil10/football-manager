@@ -1,6 +1,6 @@
 """Unit tests for core error handling utilities"""
 
-from core.error_handling import handle_db_result, handle_route_error
+from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import (
     DatabaseError,
     IntegrityError,

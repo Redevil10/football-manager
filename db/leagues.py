@@ -9,8 +9,7 @@ from db.club_leagues import (
     get_league_ids_for_clubs,
     is_club_in_league,
 )
-from db.connection import get_db
-from db.error_handling import db_transaction
+from db.transactions import db_read, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -22,25 +21,24 @@ def get_all_leagues(club_ids: Optional[list[int]] = None) -> list[dict]:
         club_ids: If None, returns all leagues. If empty list [], returns empty list.
                  If list with IDs, returns leagues for those clubs.
     """
-    conn = get_db()
-    if club_ids is None:
-        # No filter - return all leagues (for superusers)
-        leagues = conn.execute(
-            "SELECT * FROM leagues ORDER BY created_at DESC"
-        ).fetchall()
-    elif len(club_ids) == 0:
-        # Empty list - user has no clubs, return empty
-        leagues = []
-    else:
-        # Get leagues that the clubs participate in
-        league_ids = get_league_ids_for_clubs(club_ids)
-        if league_ids:
-            placeholders = ",".join("?" * len(league_ids))
-            query = f"SELECT * FROM leagues WHERE id IN ({placeholders}) ORDER BY created_at DESC"
-            leagues = conn.execute(query, tuple(league_ids)).fetchall()
-        else:
+    with db_read() as conn:
+        if club_ids is None:
+            # No filter - return all leagues (for superusers)
+            leagues = conn.execute(
+                "SELECT * FROM leagues ORDER BY created_at DESC"
+            ).fetchall()
+        elif len(club_ids) == 0:
+            # Empty list - user has no clubs, return empty
             leagues = []
-    conn.close()
+        else:
+            # Get leagues that the clubs participate in
+            league_ids = get_league_ids_for_clubs(club_ids)
+            if league_ids:
+                placeholders = ",".join("?" * len(league_ids))
+                query = f"SELECT * FROM leagues WHERE id IN ({placeholders}) ORDER BY created_at DESC"
+                leagues = conn.execute(query, tuple(league_ids)).fetchall()
+            else:
+                leagues = []
     return [dict(league) for league in leagues]
 
 
@@ -50,11 +48,10 @@ def get_public_leagues() -> list[dict]:
     Returns:
         list[dict]: Public leagues ordered by name.
     """
-    conn = get_db()
-    leagues = conn.execute(
-        "SELECT * FROM leagues WHERE is_public = 1 ORDER BY name"
-    ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        leagues = conn.execute(
+            "SELECT * FROM leagues WHERE is_public = 1 ORDER BY name"
+        ).fetchall()
     return [dict(league) for league in leagues]
 
 
@@ -63,14 +60,19 @@ def get_league(league_id: int, club_ids: Optional[list[int]] = None) -> Optional
 
     Args:
         league_id: ID of the league
-        club_ids: Optional list of club IDs to check access
+        club_ids: Same convention as get_all_leagues -- None means no filtering
+            (a superuser), a list means the league must be reachable from one of
+            those clubs, and an *empty* list means nothing is reachable. That
+            last case used to fall through to "no filter", so a user belonging
+            to no club could open any league, private ones included.
 
     Returns:
         dict: League dictionary if found and accessible, None otherwise
     """
-    conn = get_db()
-    league = conn.execute("SELECT * FROM leagues WHERE id = ?", (league_id,)).fetchone()
-    conn.close()
+    with db_read() as conn:
+        league = conn.execute(
+            "SELECT * FROM leagues WHERE id = ?", (league_id,)
+        ).fetchone()
 
     if not league:
         return None
@@ -78,7 +80,7 @@ def get_league(league_id: int, club_ids: Optional[list[int]] = None) -> Optional
     league_dict = dict(league)
 
     # If club_ids provided, check if any of the clubs participate in this league
-    if club_ids is not None and len(club_ids) > 0:
+    if club_ids is not None:
         has_access = any(is_club_in_league(cid, league_id) for cid in club_ids)
         if not has_access:
             return None
@@ -95,28 +97,23 @@ def get_or_create_friendly_league(club_id: int) -> int:
     Returns:
         int: League ID of the Friendly league
     """
-    conn = get_db()
-    # Try to find existing Friendly league
-    league = conn.execute("SELECT * FROM leagues WHERE name = 'Friendly'").fetchone()
+    with db_read() as conn:
+        league = conn.execute(
+            "SELECT * FROM leagues WHERE name = 'Friendly'"
+        ).fetchone()
 
-    if league:
+    if league is None:
+        with db_transaction("get_or_create_friendly_league") as conn:
+            cursor = conn.execute(
+                "INSERT INTO leagues (name, description) VALUES (?, ?)",
+                ("Friendly", "Friendly matches"),
+            )
+            league_id = cursor.lastrowid
+            conn.commit()
+    else:
         league_id = dict(league)["id"]
-        # Make sure club is in the league
-        add_club_to_league(club_id, league_id)
-        conn.close()
-        return league_id
 
-    # Create Friendly league if it doesn't exist
-    cursor = conn.execute(
-        "INSERT INTO leagues (name, description) VALUES (?, ?)",
-        ("Friendly", "Friendly matches"),
-    )
-    league_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-
-    # Add club to the league
-
+    # Either way the club has to end up in the league.
     add_club_to_league(club_id, league_id)
 
     return league_id

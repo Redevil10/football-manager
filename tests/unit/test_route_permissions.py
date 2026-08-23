@@ -227,3 +227,35 @@ class TestWhoCanSeeALeague:
         )
 
         assert not get_league(world["league_id"]).get("is_public")
+
+
+class TestTheLastMatchApiIsNotOpen:
+    """/api/get_last_match backs a form field, so it needs the form's gate.
+
+    It had none: an anonymous caller could walk the league ids and read each
+    one's date, time, location and team names -- private leagues included.
+    """
+
+    def test_a_signed_out_caller_is_refused(self, world):  # noqa: F811
+        from starlette.testclient import TestClient
+
+        from routes import app
+
+        resp = TestClient(app).get(f"/api/get_last_match/{world['league_id']}")
+
+        assert resp.status_code == 401
+        assert "location" not in resp.text
+
+    def test_a_member_gets_the_data(self, world):  # noqa: F811
+        resp = sign_in("boss").get(f"/api/get_last_match/{world['league_id']}")
+
+        assert resp.status_code == 200
+
+    def test_a_league_outside_your_clubs_reads_as_missing(self, world):  # noqa: F811
+        """Same answer as a league that does not exist -- no existence leak."""
+        outsider = sign_in("stranger")
+
+        resp = outsider.get(f"/api/get_last_match/{world['league_id']}")
+
+        assert resp.status_code == 404
+        assert "location" not in resp.text

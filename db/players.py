@@ -7,8 +7,8 @@ from typing import Optional
 
 from core.config import GK_ATTRS, MENTAL_ATTRS, PHYSICAL_ATTRS, TECHNICAL_ATTRS
 from core.exceptions import DatabaseError, IntegrityError
-from db.connection import get_db
-from db.error_handling import db_transaction
+from core.text import split_aliases
+from db.transactions import db_read, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -88,9 +88,14 @@ def get_all_players(
     select = """SELECT p.*, u.username AS created_by_username
                   FROM players p
                   LEFT JOIN users u ON p.created_by = u.id"""
+    if club_ids is not None and len(club_ids) == 0:
+        # Reaches no clubs, so reaches no players. Without this the query ran
+        # with no WHERE and handed a clubless account every club's squad.
+        return []
+
     where = []
     params: list = []
-    if club_ids is not None and len(club_ids) > 0:
+    if club_ids is not None:
         where.append(f"p.club_id IN ({','.join('?' * len(club_ids))})")
         params.extend(club_ids)
     if not include_archived:
@@ -102,35 +107,16 @@ def get_all_players(
         where.append("p.active IS NOT 0")
 
     clause = f" WHERE {' AND '.join(where)}" if where else ""
-    conn = get_db()
-    players = conn.execute(
-        f"{select}{clause} ORDER BY p.created_at DESC", tuple(params)
-    ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        players = conn.execute(
+            f"{select}{clause} ORDER BY p.created_at DESC", tuple(params)
+        ).fetchall()
 
     result = []
     for p in players:
         result.append(parse_player_attributes(p))
 
     return result
-
-
-def split_aliases(alias: Optional[str]) -> list[str]:
-    """Split the alias field into the individual names it holds.
-
-    One player often answers to several names -- a nickname, a spelling in
-    another script, what the group chat calls them -- so the column holds them
-    semicolon-separated. Blanks and stray spacing are dropped.
-
-    Args:
-        alias: Raw alias column, e.g. "Ken; 小谢".
-
-    Returns:
-        list[str]: The names, in the order written.
-    """
-    if not alias:
-        return []
-    return [part.strip() for part in alias.split(";") if part.strip()]
 
 
 def find_player_by_name_or_alias(
@@ -158,9 +144,11 @@ def find_player_by_name_or_alias(
         return None
 
     # `IS NOT 0`: see get_all_players.
-    conn = get_db()
-    try:
-        if club_ids is not None and len(club_ids) > 0:
+    if club_ids is not None and len(club_ids) == 0:
+        return None  # reaches no clubs -- see get_all_players
+
+    with db_read() as conn:
+        if club_ids is not None:
             placeholders = ",".join("?" * len(club_ids))
             rows = conn.execute(
                 f"""SELECT * FROM players
@@ -171,9 +159,6 @@ def find_player_by_name_or_alias(
             rows = conn.execute(
                 "SELECT * FROM players WHERE active IS NOT 0"
             ).fetchall()
-    finally:
-        conn.close()
-
     # Name first: a player's own name outranks someone else's nickname for it.
     for row in rows:
         if (row["name"] or "").strip().casefold() == wanted:
@@ -244,20 +229,26 @@ def add_player(
         return None
 
 
-def add_player_with_score(
+def add_player_with_attrs(
     name: str,
     club_id: int,
-    overall_score: int = 100,
+    attrs: dict,
     position_pref: str = "",
     alias: Optional[str] = None,
     created_by: Optional[int] = None,
 ) -> Optional[int]:
-    """Add player with attributes derived from an overall score.
+    """Add a player whose four attribute groups are already worked out.
+
+    Deriving those from a target overall score is scoring logic, so it happens
+    in ``logic.players.add_player_with_score`` and arrives here as data. This
+    module used to import logic.scoring to do it, which closed an import cycle
+    between the two layers.
 
     Args:
         name: Player name
         club_id: ID of the club the player belongs to
-        overall_score: Target overall score (10-200), default 100
+        attrs: {"technical": {...}, "mental": {...}, "physical": {...},
+            "gk": {...}} as produced by logic.scoring.set_overall_score
         position_pref: Preferred position (optional)
         alias: Player alias, semicolon-separated for more than one (optional)
         created_by: ID of the user adding this player (optional)
@@ -266,11 +257,8 @@ def add_player_with_score(
         int: Player ID on success
         None: On error (duplicate player, database error, etc.)
     """
-    from logic.scoring import set_overall_score
-
     try:
-        attrs = set_overall_score(overall_score)
-        with db_transaction("add_player_with_score") as conn:
+        with db_transaction("add_player_with_attrs") as conn:
             technical = json.dumps(attrs["technical"])
             mental = json.dumps(attrs["mental"])
             physical = json.dumps(attrs["physical"])
@@ -292,9 +280,7 @@ def add_player_with_score(
             )
             player_id = cursor.lastrowid
             conn.commit()
-            logger.info(
-                f"Player '{name}' created with score {overall_score}, ID: {player_id}"
-            )
+            logger.info(f"Player '{name}' created, ID: {player_id}")
             return player_id
     except IntegrityError:
         logger.warning(
@@ -461,8 +447,7 @@ def count_player_appearances(player_id: int) -> int:
     counting only team sheets would call a scorer unrecorded and delete them,
     and the goal would then name nobody.
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         return conn.execute(
             """SELECT COUNT(*) FROM (
                    SELECT match_id FROM match_players WHERE player_id = ?
@@ -471,8 +456,6 @@ def count_player_appearances(player_id: int) -> int:
                )""",
             (player_id, player_id),
         ).fetchone()[0]
-    finally:
-        conn.close()
 
 
 def count_players_in_club(club_id: int) -> int:
@@ -483,13 +466,10 @@ def count_players_in_club(club_id: int) -> int:
     rows survive pointing at a club that is gone, and every list filters by
     club, which means nobody can reach them again.
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         return conn.execute(
             "SELECT COUNT(*) FROM players WHERE club_id = ?", (club_id,)
         ).fetchone()[0]
-    finally:
-        conn.close()
 
 
 def set_player_active(player_id: int, active: bool) -> bool:
@@ -614,54 +594,6 @@ def update_player_height_weight(
     except DatabaseError:
         logger.error(
             f"Failed to update player {player_id} height/weight", exc_info=True
-        )
-        return False
-
-
-def swap_players(player1_id: int, player2_id: int) -> bool:
-    """Swap two players' teams and positions.
-
-    Args:
-        player1_id: ID of the first player
-        player2_id: ID of the second player
-
-    Returns:
-        bool: True on success, False on error (player not found, etc.)
-    """
-    try:
-        with db_transaction("swap_players") as conn:
-            # Get both players
-            p1 = conn.execute(
-                "SELECT team, position FROM players WHERE id = ?", (player1_id,)
-            ).fetchone()
-            p2 = conn.execute(
-                "SELECT team, position FROM players WHERE id = ?", (player2_id,)
-            ).fetchone()
-
-            if not p1:
-                logger.warning(f"Swap players: Player {player1_id} not found")
-                return False
-            if not p2:
-                logger.warning(f"Swap players: Player {player2_id} not found")
-                return False
-
-            # Swap their team and position
-            conn.execute(
-                "UPDATE players SET team = ?, position = ? WHERE id = ?",
-                (p2[0], p2[1], player1_id),
-            )
-            conn.execute(
-                "UPDATE players SET team = ?, position = ? WHERE id = ?",
-                (p1[0], p1[1], player2_id),
-            )
-            conn.commit()
-            logger.debug(
-                f"Swapped teams/positions for players {player1_id} and {player2_id}"
-            )
-            return True
-    except DatabaseError:
-        logger.error(
-            f"Failed to swap players {player1_id} and {player2_id}", exc_info=True
         )
         return False
 

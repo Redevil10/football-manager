@@ -1,6 +1,6 @@
 """Unit tests for authentication functions"""
 
-from core.auth import hash_password, verify_password
+from services.auth import hash_password, verify_password
 
 
 class TestHashPassword:

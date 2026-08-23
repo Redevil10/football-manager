@@ -4,11 +4,10 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from core.exceptions import DatabaseError, IntegrityError
+from core.exceptions import DatabaseError, IntegrityError, ValidationError
 from db.club_leagues import get_league_ids_for_clubs, is_club_in_league
-from db.connection import get_db
-from db.error_handling import db_transaction
 from db.leagues import get_all_leagues, get_or_create_friendly_league
+from db.transactions import db_read, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +44,7 @@ def get_match_info() -> Optional[Dict[str, Any]]:
         Optional[Dict[str, Any]]: Match dictionary with 'time' field for backward
             compatibility, or None if no matches exist.
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         match = conn.execute(
             "SELECT * FROM matches ORDER BY date DESC, start_time DESC LIMIT 1"
         ).fetchone()
@@ -56,8 +54,6 @@ def get_match_info() -> Optional[Dict[str, Any]]:
             match_dict["time"] = match_dict.get("start_time", "")
             return match_dict
         return None
-    finally:
-        conn.close()
 
 
 def save_match_info(date: str, time: str, location: str, club_id: int) -> None:
@@ -74,8 +70,7 @@ def save_match_info(date: str, time: str, location: str, club_id: int) -> None:
         club_id: Club ID to associate with Friendly league
     """
     friendly_league_id = get_or_create_friendly_league(club_id)
-    conn = get_db()
-    try:
+    with db_transaction("save_match_info") as conn:
         # Delete old matches without league_id (if any)
         conn.execute("DELETE FROM matches WHERE league_id IS NULL")
         # Create new match
@@ -84,8 +79,6 @@ def save_match_info(date: str, time: str, location: str, club_id: int) -> None:
             (friendly_league_id, date, time, location),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def get_matches_by_league(league_id: int) -> List[Dict[str, Any]]:
@@ -97,15 +90,12 @@ def get_matches_by_league(league_id: int) -> List[Dict[str, Any]]:
     Returns:
         List[Dict[str, Any]]: List of match dictionaries
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         matches = conn.execute(
             "SELECT * FROM matches WHERE league_id = ? ORDER BY date DESC, start_time DESC",
             (league_id,),
         ).fetchall()
         return [dict(match) for match in matches]
-    finally:
-        conn.close()
 
 
 def get_all_matches(club_ids: Optional[List[int]] = None) -> List[Dict[str, Any]]:
@@ -117,9 +107,12 @@ def get_all_matches(club_ids: Optional[List[int]] = None) -> List[Dict[str, Any]
     Returns:
         List[Dict[str, Any]]: List of match dictionaries with league_name
     """
-    conn = get_db()
-    try:
-        if club_ids is not None and len(club_ids) > 0:
+    with db_read() as conn:
+        if club_ids is not None and len(club_ids) == 0:
+            # Reaches no clubs, so reaches no matches. Falling through to the
+            # unfiltered branch handed a clubless account every private match.
+            return []
+        if club_ids is not None:
             # Get leagues that the clubs participate in
             league_ids = get_league_ids_for_clubs(club_ids)
             if league_ids:
@@ -135,8 +128,6 @@ def get_all_matches(club_ids: Optional[List[int]] = None) -> List[Dict[str, Any]
             query, params = _build_match_query_with_league()
             matches = conn.execute(query, params).fetchall()
         return [dict(match) for match in matches]
-    finally:
-        conn.close()
 
 
 def get_next_match() -> Optional[Dict[str, Any]]:
@@ -145,13 +136,10 @@ def get_next_match() -> Optional[Dict[str, Any]]:
     Returns:
         Optional[Dict[str, Any]]: Match dictionary with league_name, or None if no matches exist
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         query, params = _build_match_query_with_league(limit=1)
         match = conn.execute(query, params).fetchone()
         return dict(match) if match else None
-    finally:
-        conn.close()
 
 
 def get_next_match_by_league(league_id: int) -> Optional[Dict[str, Any]]:
@@ -169,8 +157,7 @@ def get_next_match_by_league(league_id: int) -> Optional[Dict[str, Any]]:
         Optional[Dict[str, Any]]: Match dictionary with league_name, or None if
             the league has no upcoming match
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         # SQLite stores dates/times as ISO TEXT, so string comparison is correct.
         # Times go through time() on both sides: the pickers submit HH:MM while the
         # clock below is HH:MM:SS, and "10:00" < "10:00:00" as plain text.
@@ -186,8 +173,6 @@ def get_next_match_by_league(league_id: int) -> Optional[Dict[str, Any]]:
         query += " ORDER BY m.date ASC, m.start_time ASC LIMIT 1"
         match = conn.execute(query, (league_id, today, today, now)).fetchone()
         return dict(match) if match else None
-    finally:
-        conn.close()
 
 
 def get_next_matches_by_all_leagues(
@@ -220,8 +205,7 @@ def get_last_completed_match() -> Optional[Dict[str, Any]]:
     Returns:
         Optional[Dict[str, Any]]: Match dictionary with league_name, or None if no completed matches exist
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         # Use proper date/time comparison
         # SQLite stores dates as TEXT in ISO format (YYYY-MM-DD) and times as TEXT (HH:MM:SS)
         # String comparison works correctly for ISO format dates and times
@@ -235,8 +219,6 @@ def get_last_completed_match() -> Optional[Dict[str, Any]]:
         )
         match = conn.execute(query, params).fetchone()
         return dict(match) if match else None
-    finally:
-        conn.close()
 
 
 def get_last_created_match() -> Optional[Dict[str, Any]]:
@@ -245,8 +227,7 @@ def get_last_created_match() -> Optional[Dict[str, Any]]:
     Returns:
         Optional[Dict[str, Any]]: Match dictionary with league_name, or None if no matches exist
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         # Note: This query uses created_at for ordering, not date/start_time
         query = """SELECT m.*, l.name as league_name
                    FROM matches m
@@ -254,8 +235,6 @@ def get_last_created_match() -> Optional[Dict[str, Any]]:
                    ORDER BY m.created_at DESC LIMIT 1"""
         match = conn.execute(query).fetchone()
         return dict(match) if match else None
-    finally:
-        conn.close()
 
 
 def get_recent_matches_by_league(
@@ -291,8 +270,7 @@ def get_recent_matches_by_league(
     ]
     params: List[Any] = [today, today, now, cutoff]
 
-    conn = get_db()
-    try:
+    with db_read() as conn:
         if club_ids is not None and len(club_ids) > 0:
             league_ids = get_league_ids_for_clubs(club_ids)
             if not league_ids:
@@ -316,8 +294,6 @@ def get_recent_matches_by_league(
                     ORDER BY date DESC, start_time DESC"""
         rows = conn.execute(query, (*params, per_league)).fetchall()
         return [dict(row) for row in rows]
-    finally:
-        conn.close()
 
 
 def get_recent_matches(
@@ -347,9 +323,10 @@ def get_recent_matches(
     past_clause = "((m.date < ?) OR (m.date = ? AND time(m.start_time) < time(?)))"
     past_params = (today, today, now)
 
-    conn = get_db()
-    try:
-        if club_ids is not None and len(club_ids) > 0:
+    with db_read() as conn:
+        if club_ids is not None and len(club_ids) == 0:
+            return []  # reaches no clubs -- see get_all_matches
+        if club_ids is not None:
             # Limit to leagues that the clubs participate in.
             league_ids = get_league_ids_for_clubs(club_ids)
             if not league_ids:
@@ -368,8 +345,6 @@ def get_recent_matches(
                    ORDER BY m.date DESC, m.start_time DESC LIMIT ?"""
         matches = conn.execute(query, params).fetchall()
         return [dict(match) for match in matches]
-    finally:
-        conn.close()
 
 
 def get_match(
@@ -385,8 +360,7 @@ def get_match(
         Optional[Dict[str, Any]]: Match dictionary with league_name if found and
             accessible, None otherwise
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         # Joined for league_name, which the detail page shows. Without it the
         # page fell back to "Friendly" for every match, whatever league it was
         # actually in.
@@ -403,16 +377,15 @@ def get_match(
 
         match_dict = dict(match)
 
-        # If club_ids provided, check if any of the clubs participate in this league
-        if club_ids is not None and len(club_ids) > 0 and match_dict.get("league_id"):
+        # If club_ids provided, check if any of the clubs participate in this
+        # league. An empty list reaches nothing, so the check must still run.
+        if club_ids is not None and match_dict.get("league_id"):
             league_id = match_dict["league_id"]
             has_access = any(is_club_in_league(cid, league_id) for cid in club_ids)
             if not has_access:
                 return None
 
         return match_dict
-    finally:
-        conn.close()
 
 
 def create_match(
@@ -443,17 +416,20 @@ def create_match(
     """
     # Input validation
     if not league_id:
-        raise ValueError("league_id is required")
+        raise ValidationError("league_id", "league_id is required")
     if not date:
-        raise ValueError("date is required")
+        raise ValidationError("date", "date is required")
     if not start_time:
-        raise ValueError("start_time is required")
+        raise ValidationError("start_time", "start_time is required")
     if not location:
-        raise ValueError("location is required")
+        raise ValidationError("location", "location is required")
     if num_teams < 1:
-        raise ValueError("num_teams must be at least 1")
+        raise ValidationError("num_teams", "num_teams must be at least 1")
     if max_players_per_team is not None and max_players_per_team < 1:
-        raise ValueError("max_players_per_team must be at least 1 if provided")
+        raise ValidationError(
+            "max_players_per_team",
+            "max_players_per_team must be at least 1 if provided",
+        )
 
     try:
         with db_transaction("create_match") as conn:
@@ -474,10 +450,10 @@ def create_match(
             logger.info(f"Match created successfully with ID: {match_id}")
             return match_id
     except IntegrityError as e:
-        raise ValueError(f"Failed to create match: {e.details}")
+        raise DatabaseError(f"Failed to create match: {e.details}")
     except DatabaseError as e:
         # Convert to ValueError for backward compatibility
-        raise ValueError(f"Failed to create match: {str(e)}")
+        raise DatabaseError(f"Failed to create match: {str(e)}")
 
 
 def update_match(
@@ -507,19 +483,22 @@ def update_match(
     """
     # Input validation
     if not match_id:
-        raise ValueError("match_id is required")
+        raise ValidationError("match_id", "match_id is required")
     if not league_id:
-        raise ValueError("league_id is required")
+        raise ValidationError("league_id", "league_id is required")
     if not date:
-        raise ValueError("date is required")
+        raise ValidationError("date", "date is required")
     if not start_time:
-        raise ValueError("start_time is required")
+        raise ValidationError("start_time", "start_time is required")
     if not location:
-        raise ValueError("location is required")
+        raise ValidationError("location", "location is required")
     if num_teams < 1:
-        raise ValueError("num_teams must be at least 1")
+        raise ValidationError("num_teams", "num_teams must be at least 1")
     if max_players_per_team is not None and max_players_per_team < 1:
-        raise ValueError("max_players_per_team must be at least 1 if provided")
+        raise ValidationError(
+            "max_players_per_team",
+            "max_players_per_team must be at least 1 if provided",
+        )
 
     try:
         with db_transaction("update_match") as conn:
@@ -559,15 +538,12 @@ def get_last_match_by_league(league_id: int) -> Optional[Dict[str, Any]]:
     Returns:
         Optional[Dict[str, Any]]: Match dictionary, or None if no matches exist
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         match = conn.execute(
             "SELECT * FROM matches WHERE league_id = ? ORDER BY date DESC, start_time DESC LIMIT 1",
             (league_id,),
         ).fetchone()
         return dict(match) if match else None
-    finally:
-        conn.close()
 
 
 def delete_match(match_id: int) -> bool:
@@ -591,3 +567,22 @@ def delete_match(match_id: int) -> bool:
     except DatabaseError:
         logger.error(f"Failed to delete match {match_id}", exc_info=True)
         return False
+
+
+def count_matches_by_league() -> dict[int, int]:
+    """How many matches each league has, keyed by league id.
+
+    One grouped query rather than a count per league -- the leagues list would
+    otherwise issue a round trip per row it renders. Mirrors
+    :func:`db.club_leagues.count_clubs_by_league`.
+
+    Returns:
+        dict[int, int]: league id -> match count. Leagues with no matches are
+            absent, so callers should read it with a default of 0.
+    """
+    with db_read() as conn:
+        rows = conn.execute(
+            "SELECT league_id, COUNT(*) AS n FROM matches "
+            "WHERE league_id IS NOT NULL GROUP BY league_id"
+        ).fetchall()
+    return {row["league_id"]: row["n"] for row in rows}

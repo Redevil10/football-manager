@@ -1,11 +1,25 @@
-# error_handling.py - Error handling utilities for route handlers
+# error_responses.py - Turning exceptions into HTTP redirect responses
 
 """Error handling utilities for converting exceptions to HTTP responses."""
 
 import logging
 from typing import Optional
 
-from fasthtml.common import RedirectResponse
+from fasthtml.common import (
+    H2,
+    A,
+    Body,
+    Div,
+    Head,
+    Html,
+    Meta,
+    P,
+    RedirectResponse,
+    Style,
+    Title,
+    to_xml,
+)
+from starlette.responses import HTMLResponse
 
 from core.exceptions import (
     DatabaseError,
@@ -14,6 +28,7 @@ from core.exceptions import (
     PermissionError,
     ValidationError,
 )
+from core.styles import STYLE
 
 logger = logging.getLogger(__name__)
 
@@ -133,3 +148,104 @@ def handle_db_result(
 
     # Success
     return RedirectResponse(success_redirect, status_code=303)
+
+
+async def unexpected_error_page(request, exc):
+    """Last resort for an exception no route expected.
+
+    Registered on the app so a bug still shows the reader something civil
+    instead of a stack trace. Route handlers deliberately do *not* catch
+    Exception themselves any more: a broad catch there turned every
+    programming error -- a TypeError from a bad call, a typo'd attribute --
+    into a friendly message that no test could fail on.
+
+    Starlette re-raises after this returns, so the exception still reaches the
+    server log, and TestClient still surfaces it. A bug therefore fails the
+    test suite while a user in production sees this page.
+    """
+    logger.error("Unhandled error at %s", request.url.path, exc_info=exc)
+    return HTMLResponse(
+        to_xml(
+            Html(
+                Head(
+                    Meta(charset="UTF-8"),
+                    Meta(
+                        name="viewport",
+                        content="width=device-width, initial-scale=1",
+                    ),
+                    Title("Something went wrong - Football Manager"),
+                    Style(STYLE),
+                ),
+                Body(
+                    Div(cls="container")(
+                        Div(cls="container-white", style="text-align: center;")(
+                            H2("Something went wrong"),
+                            P(
+                                "The page could not be loaded. This has been "
+                                "logged; please try again.",
+                                style="color: var(--muted);",
+                            ),
+                            A("Back to the app", href="/", cls="btn-outline"),
+                        )
+                    )
+                ),
+            )
+        ),
+        status_code=500,
+    )
+
+
+# An expected error that a route did not catch itself still deserves the right
+# status and a readable message -- several handlers raise NotFoundError before
+# their try block even opens, and those used to surface as a 500.
+_EXPECTED_STATUS = {
+    NotFoundError: (404, "Not found"),
+    PermissionError: (403, "Not allowed"),
+    ValidationError: (400, "That does not look right"),
+    IntegrityError: (409, "That conflicts with something already there"),
+    DatabaseError: (503, "The database is not available"),
+}
+
+
+def _status_for(exc):
+    for cls, pair in _EXPECTED_STATUS.items():
+        if isinstance(exc, cls):
+            return pair
+    return 500, "Something went wrong"
+
+
+async def expected_error_page(request, exc):
+    """Render an expected error a route let through, with a real status code.
+
+    Routes still catch these where they have somewhere better to send the
+    reader; this is the backstop for the ones that raise before their own
+    try block opens.
+    """
+    status, heading = _status_for(exc)
+    detail = getattr(exc, "message", None) or str(exc)
+    logger.info("%s at %s: %s", type(exc).__name__, request.url.path, detail)
+    return HTMLResponse(
+        to_xml(
+            Html(
+                Head(
+                    Meta(charset="UTF-8"),
+                    Meta(
+                        name="viewport",
+                        content="width=device-width, initial-scale=1",
+                    ),
+                    Title(f"{heading} - Football Manager"),
+                    Style(STYLE),
+                ),
+                Body(
+                    Div(cls="container")(
+                        Div(cls="container-white", style="text-align: center;")(
+                            H2(heading),
+                            P(detail, style="color: var(--muted);"),
+                            A("Back to the app", href="/", cls="btn-outline"),
+                        )
+                    )
+                ),
+            )
+        ),
+        status_code=status,
+    )

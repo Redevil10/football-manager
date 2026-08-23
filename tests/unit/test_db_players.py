@@ -2,6 +2,7 @@
 
 import json
 
+from core.text import split_aliases
 from db.clubs import create_club
 from db.connection import get_db
 from db.players import (
@@ -15,8 +16,6 @@ from db.players import (
     get_all_players,
     parse_player_attributes,
     reset_teams,
-    split_aliases,
-    swap_players,
     update_player_attrs,
     update_player_height_weight,
     update_player_name,
@@ -207,12 +206,13 @@ class TestGetAllPlayers:
         conn.commit()
         conn.close()
 
-        result = get_all_players(club_ids=[])
+        # An empty club list means the caller reaches no clubs, so no players.
+        # This used to assert the opposite -- describing the leak as if it were
+        # the design -- which is how a clubless account could read every squad.
+        assert get_all_players(club_ids=[]) == []
 
-        # Empty club_ids list is treated the same as None - returns all players
-        # (The implementation checks len(club_ids) > 0, so empty list falls through to else branch)
-        assert len(result) >= 1
-        assert any(p["name"] == "Player 1" for p in result)
+        # None still means "no filter", for a superuser.
+        assert any(p["name"] == "Player 1" for p in get_all_players(club_ids=None))
 
 
 class TestFindPlayerByNameOrAlias:
@@ -483,50 +483,6 @@ class TestUpdatePlayerHeightWeight:
         assert result["weight"] is None
 
 
-class TestSwapPlayers:
-    """Tests for swap_players function"""
-
-    def test_swap_players(self, temp_db):
-        """Test swapping two players' teams and positions"""
-        # Create club first
-        club_id = create_club("Test Club")
-
-        # Add two players
-        conn = get_db()
-        cursor1 = conn.execute(
-            """INSERT INTO players (name, club_id, team, position, technical_attrs, mental_attrs, physical_attrs, gk_attrs)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            ("Player 1", club_id, "Team A", "Forward", "{}", "{}", "{}", "{}"),
-        )
-        player1_id = cursor1.lastrowid
-        cursor2 = conn.execute(
-            """INSERT INTO players (name, club_id, team, position, technical_attrs, mental_attrs, physical_attrs, gk_attrs)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            ("Player 2", club_id, "Team B", "Defender", "{}", "{}", "{}", "{}"),
-        )
-        player2_id = cursor2.lastrowid
-        conn.commit()
-        conn.close()
-
-        # Swap players
-        swap_players(player1_id, player2_id)
-
-        # Verify swap
-        conn = get_db()
-        p1 = conn.execute(
-            "SELECT team, position FROM players WHERE id = ?", (player1_id,)
-        ).fetchone()
-        p2 = conn.execute(
-            "SELECT team, position FROM players WHERE id = ?", (player2_id,)
-        ).fetchone()
-        conn.close()
-
-        assert p1["team"] == "Team B"
-        assert p1["position"] == "Defender"
-        assert p2["team"] == "Team A"
-        assert p2["position"] == "Forward"
-
-
 class TestResetTeams:
     """Tests for reset_teams function"""
 
@@ -614,8 +570,8 @@ class TestPlayerAuditColumns:
     """Who added a player, and when it last changed."""
 
     def test_records_who_added_the_player(self, temp_db):
-        from core.auth import hash_password
         from db.users import create_user
+        from services.auth import hash_password
 
         password_hash, salt = hash_password("x")
         adder = create_user("admin", password_hash, salt, is_superuser=True)

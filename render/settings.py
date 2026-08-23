@@ -7,7 +7,7 @@ from fasthtml.common import *
 from render.common import render_csrf_input, render_head, render_navbar
 
 
-def render_settings_page(user, sess, smart_import_enabled, STYLE="", backup_info=None):
+def render_settings_page(user, sess, smart_import_enabled, backup_info=None):
     """Render the settings page."""
     has_api_key = bool(os.environ.get("GEMINI_API_KEY"))
 
@@ -35,7 +35,7 @@ def render_settings_page(user, sess, smart_import_enabled, STYLE="", backup_info
     sections.append(render_migration_section(sess))
 
     return Html(
-        render_head("Settings - Football Manager", STYLE),
+        render_head("Settings - Football Manager"),
         Body(
             render_navbar(user, sess),
             Div(cls="container")(H2("Settings"), *sections),
@@ -82,7 +82,7 @@ def render_migration_section(sess):
             style="color: #666; margin-bottom: 15px;",
         ),
         Form(
-            render_csrf_input(sess),
+            render_csrf_input(),
             Button(
                 "Run Migration",
                 type="submit",
@@ -106,7 +106,7 @@ def render_smart_import_toggle(sess, enabled, has_api_key=True):
         )
 
     return Form(
-        render_csrf_input(sess),
+        render_csrf_input(),
         Div(style="display: flex; align-items: center; gap: 10px; margin-top: 10px;")(
             Label(
                 cls="switch",

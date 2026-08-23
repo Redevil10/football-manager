@@ -3,8 +3,7 @@
 import logging
 
 from core.exceptions import DatabaseError, IntegrityError
-from db.connection import get_db
-from db.error_handling import db_transaction
+from db.transactions import db_read, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -81,15 +80,14 @@ def get_clubs_in_league(league_id: int) -> list[dict]:
     Returns:
         list[dict]: List of club dictionaries
     """
-    conn = get_db()
-    clubs = conn.execute(
-        """SELECT c.* FROM clubs c
-           JOIN club_leagues cl ON c.id = cl.club_id
-           WHERE cl.league_id = ?
-           ORDER BY c.name""",
-        (league_id,),
-    ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        clubs = conn.execute(
+            """SELECT c.* FROM clubs c
+               JOIN club_leagues cl ON c.id = cl.club_id
+               WHERE cl.league_id = ?
+               ORDER BY c.name""",
+            (league_id,),
+        ).fetchall()
     return [dict(club) for club in clubs]
 
 
@@ -102,15 +100,14 @@ def get_leagues_for_club(club_id: int) -> list[dict]:
     Returns:
         list[dict]: List of league dictionaries
     """
-    conn = get_db()
-    leagues = conn.execute(
-        """SELECT l.* FROM leagues l
-           JOIN club_leagues cl ON l.id = cl.league_id
-           WHERE cl.club_id = ?
-           ORDER BY l.name""",
-        (club_id,),
-    ).fetchall()
-    conn.close()
+    with db_read() as conn:
+        leagues = conn.execute(
+            """SELECT l.* FROM leagues l
+               JOIN club_leagues cl ON l.id = cl.league_id
+               WHERE cl.club_id = ?
+               ORDER BY l.name""",
+            (club_id,),
+        ).fetchall()
     return [dict(league) for league in leagues]
 
 
@@ -125,12 +122,11 @@ def get_league_ids_for_clubs(club_ids: list[int]) -> list[int]:
     """
     if not club_ids:
         return []
-    conn = get_db()
-    placeholders = ",".join("?" * len(club_ids))
-    query = f"""SELECT DISTINCT league_id FROM club_leagues
-                WHERE club_id IN ({placeholders})"""
-    league_ids = conn.execute(query, tuple(club_ids)).fetchall()
-    conn.close()
+    with db_read() as conn:
+        placeholders = ",".join("?" * len(club_ids))
+        query = f"""SELECT DISTINCT league_id FROM club_leagues
+                    WHERE club_id IN ({placeholders})"""
+        league_ids = conn.execute(query, tuple(club_ids)).fetchall()
     return [row["league_id"] for row in league_ids]
 
 
@@ -144,12 +140,11 @@ def is_club_in_league(club_id: int, league_id: int) -> bool:
     Returns:
         bool: True if club is in league, False otherwise
     """
-    conn = get_db()
-    result = conn.execute(
-        "SELECT 1 FROM club_leagues WHERE club_id = ? AND league_id = ?",
-        (club_id, league_id),
-    ).fetchone()
-    conn.close()
+    with db_read() as conn:
+        result = conn.execute(
+            "SELECT 1 FROM club_leagues WHERE club_id = ? AND league_id = ?",
+            (club_id, league_id),
+        ).fetchone()
     return result is not None
 
 
@@ -163,11 +158,8 @@ def count_clubs_by_league() -> dict[int, int]:
         dict[int, int]: league id -> club count. Leagues with no clubs are
             absent, so callers should read it with a default of 0.
     """
-    conn = get_db()
-    try:
+    with db_read() as conn:
         rows = conn.execute(
             "SELECT league_id, COUNT(*) AS n FROM club_leagues GROUP BY league_id"
         ).fetchall()
-    finally:
-        conn.close()
     return {row["league_id"]: row["n"] for row in rows}

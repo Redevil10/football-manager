@@ -3,7 +3,6 @@
 # Import from sub-modules
 from render.common import (
     format_match_name,
-    get_match_score_display,
     is_match_completed,
     render_attr_input,
     render_match_info,
@@ -16,6 +15,8 @@ from render.leagues import (
 from render.matches import (
     render_all_matches,
     render_captain_selection,
+    render_create_match_page,
+    render_edit_match_page,
     render_import_confirmation,
     render_match_detail,
     render_match_recordings,
@@ -38,7 +39,6 @@ __all__ = [
     "render_navbar",
     "format_match_name",
     "is_match_completed",
-    "get_match_score_display",
     "render_match_info",
     "render_attr_input",
     # Players
@@ -48,6 +48,8 @@ __all__ = [
     "render_add_player_form",
     "render_match_available_players",
     # Matches
+    "render_create_match_page",
+    "render_edit_match_page",
     "render_match_detail",
     "render_match_recordings",
     "render_match_teams",

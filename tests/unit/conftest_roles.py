@@ -6,9 +6,7 @@ app itself issued, and every check between it and the handler.
 """
 
 import pytest
-from starlette.testclient import TestClient
 
-from core.auth import hash_password
 from core.config import USER_ROLES
 from db.club_leagues import add_club_to_league
 from db.clubs import create_club
@@ -18,6 +16,8 @@ from db.match_teams import create_match_team
 from db.matches import create_match
 from db.players import add_player
 from db.users import add_user_to_club, create_user
+from services.auth import hash_password
+from tests.unit.csrf_client import CSRFClient
 
 PASSWORD = "correct-horse-battery-staple"
 
@@ -72,7 +72,7 @@ def sign_in(username):
     """A TestClient carrying a session for this user, via the real login form."""
     from routes import app
 
-    client = TestClient(app)
+    client = CSRFClient(app)
     resp = client.post(
         "/login",
         data={"username": username, "password": PASSWORD},

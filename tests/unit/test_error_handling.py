@@ -76,11 +76,11 @@ class TestCustomExceptions:
 class TestStandardizedErrorHandling:
     """Test standardized error handling patterns in database functions"""
 
-    @patch("db.error_handling.logger")
-    @patch("db.error_handling.get_db")
+    @patch("db.transactions.logger")
+    @patch("db.transactions.get_db")
     def test_create_user_integrity_error(self, mock_get_db, mock_logger):
         """Test that create_user handles IntegrityError correctly"""
-        # Mock database connection - patch db.error_handling.get_db (the imported reference)
+        # Mock database connection - patch db.transactions.get_db (the imported reference)
         # Note: patch decorators are applied in reverse order, so mock_get_db is first parameter
         mock_conn = Mock()
         mock_get_db.return_value = mock_conn
@@ -98,12 +98,12 @@ class TestStandardizedErrorHandling:
         # is what we're testing here. For testing rollback() specifically,
         # see tests/test_db_error_handling.py::TestDbTransaction
 
-    @patch("db.error_handling.logger")
-    @patch("db.error_handling.get_db")
+    @patch("db.transactions.logger")
+    @patch("db.transactions.get_db")
     def test_create_user_success(self, mock_get_db, mock_logger):
         """Test that create_user returns user_id on success"""
         # Note: patch decorators are applied in reverse order, so mock_get_db is first parameter
-        # Mock database connection - patch db.error_handling.get_db (the imported reference)
+        # Mock database connection - patch db.transactions.get_db (the imported reference)
         # This is the reference that db_transaction actually uses
         # Create cursor mock with lastrowid set directly as an integer
         mock_cursor = Mock()
@@ -124,11 +124,11 @@ class TestStandardizedErrorHandling:
         # Should have closed connection (handled by context manager)
         mock_conn.close.assert_called_once()
 
-    @patch("db.error_handling.logger")
-    @patch("db.error_handling.get_db")
+    @patch("db.transactions.logger")
+    @patch("db.transactions.get_db")
     def test_create_club_integrity_error(self, mock_get_db, mock_logger):
         """Test that create_club handles IntegrityError correctly"""
-        # Mock database connection - patch db.error_handling.get_db (the imported reference)
+        # Mock database connection - patch db.transactions.get_db (the imported reference)
         # Note: patch decorators are applied in reverse order, so mock_get_db is first parameter
         mock_conn = Mock()
         mock_get_db.return_value = mock_conn
@@ -143,11 +143,11 @@ class TestStandardizedErrorHandling:
         assert result is None
         # Note: rollback() is an internal implementation detail handled by db_transaction
 
-    @patch("db.error_handling.logger")
-    @patch("db.error_handling.get_db")
+    @patch("db.transactions.logger")
+    @patch("db.transactions.get_db")
     def test_update_club_success(self, mock_get_db, mock_logger):
         """Test that update_club returns True on success"""
-        # Mock database connection - patch db.error_handling.get_db (the imported reference)
+        # Mock database connection - patch db.transactions.get_db (the imported reference)
         # Note: patch decorators are applied in reverse order, so mock_get_db is first parameter
         mock_conn = Mock()
         mock_get_db.return_value = mock_conn
@@ -178,11 +178,11 @@ class TestStandardizedErrorHandling:
         # Should return False when no rows updated
         assert result is False
 
-    @patch("db.error_handling.logger")
-    @patch("db.error_handling.get_db")
+    @patch("db.transactions.logger")
+    @patch("db.transactions.get_db")
     def test_delete_club_success(self, mock_get_db, mock_logger):
         """Test that delete_club returns True on success"""
-        # Mock database connection - patch db.error_handling.get_db (the imported reference)
+        # Mock database connection - patch db.transactions.get_db (the imported reference)
         # Note: patch decorators are applied in reverse order, so mock_get_db is first parameter
         mock_conn = Mock()
         mock_get_db.return_value = mock_conn
@@ -213,11 +213,11 @@ class TestStandardizedErrorHandling:
         # Should return False when no rows deleted
         assert result is False
 
-    @patch("db.error_handling.logger")
-    @patch("db.error_handling.get_db")
+    @patch("db.transactions.logger")
+    @patch("db.transactions.get_db")
     def test_add_user_to_club_integrity_error(self, mock_get_db, mock_logger):
         """Test that add_user_to_club handles IntegrityError correctly"""
-        # Mock database connection - patch db.error_handling.get_db (the imported reference)
+        # Mock database connection - patch db.transactions.get_db (the imported reference)
         # Note: patch decorators are applied in reverse order, so mock_get_db is first parameter
         mock_conn = Mock()
         mock_get_db.return_value = mock_conn
@@ -232,11 +232,11 @@ class TestStandardizedErrorHandling:
         assert result is False
         # Note: rollback() is an internal implementation detail handled by db_transaction
 
-    @patch("db.error_handling.logger")
-    @patch("db.error_handling.get_db")
+    @patch("db.transactions.logger")
+    @patch("db.transactions.get_db")
     def test_add_user_to_club_success(self, mock_get_db, mock_logger):
         """Test that add_user_to_club returns True on success"""
-        # Mock database connection - patch db.error_handling.get_db (the imported reference)
+        # Mock database connection - patch db.transactions.get_db (the imported reference)
         # Note: patch decorators are applied in reverse order, so mock_get_db is first parameter
         mock_conn = Mock()
         mock_get_db.return_value = mock_conn
@@ -250,11 +250,11 @@ class TestStandardizedErrorHandling:
         # Should have committed
         mock_conn.commit.assert_called_once()
 
-    @patch("db.error_handling.logger")
-    @patch("db.error_handling.get_db")
+    @patch("db.transactions.logger")
+    @patch("db.transactions.get_db")
     def test_update_user_club_role_not_found(self, mock_get_db, mock_logger):
         """Test that update_user_club_role returns False when record not found"""
-        # Mock database connection - patch db.error_handling.get_db (the imported reference)
+        # Mock database connection - patch db.transactions.get_db (the imported reference)
         # Note: patch decorators are applied in reverse order, so mock_get_db is first parameter
         mock_conn = Mock()
         mock_get_db.return_value = mock_conn

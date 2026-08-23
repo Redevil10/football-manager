@@ -26,7 +26,7 @@ from migrations.migrate_all import attribute_unknown_creators
 @pytest.fixture
 def sample_user(temp_db):
     """Create a sample user"""
-    from core.auth import hash_password
+    from services.auth import hash_password
 
     password_hash, password_salt = hash_password("testpass")
     user_id = create_user("testuser", password_hash, password_salt, "test@example.com")
@@ -52,7 +52,7 @@ class TestCreateUser:
 
     def test_create_user_success(self, temp_db):
         """Test successfully creating a user"""
-        from core.auth import hash_password
+        from services.auth import hash_password
 
         password_hash, password_salt = hash_password("password")
         user_id = create_user(
@@ -64,7 +64,7 @@ class TestCreateUser:
 
     def test_create_user_duplicate_username(self, temp_db):
         """Test creating user with duplicate username"""
-        from core.auth import hash_password
+        from services.auth import hash_password
 
         password_hash, password_salt = hash_password("password")
         create_user("duplicate", password_hash, password_salt)
@@ -76,7 +76,7 @@ class TestCreateUser:
 
     def test_create_user_superuser(self, temp_db):
         """Test creating superuser"""
-        from core.auth import hash_password
+        from services.auth import hash_password
 
         password_hash, password_salt = hash_password("password")
         user_id = create_user("admin", password_hash, password_salt, is_superuser=True)
@@ -248,7 +248,7 @@ class TestGetAllUsers:
     def test_get_all_users(self, temp_db, sample_user):
         """Test getting all users"""
         # Create another user
-        from core.auth import hash_password
+        from services.auth import hash_password
 
         password_hash, password_salt = hash_password("pass")
         create_user("user2", password_hash, password_salt)
@@ -266,7 +266,7 @@ class TestUpdateUserPassword:
 
     def test_update_user_password(self, temp_db, sample_user):
         """Test updating user password"""
-        from core.auth import hash_password
+        from services.auth import hash_password
 
         new_hash, new_salt = hash_password("newpassword")
 
@@ -348,7 +348,7 @@ class TestGetUsersByClubIds:
     def test_get_users_by_club_ids(self, temp_db, sample_user, sample_club):
         """Test getting users by club IDs"""
         # Create another user and add both to club
-        from core.auth import hash_password
+        from services.auth import hash_password
 
         password_hash, password_salt = hash_password("pass")
         user2_id = create_user("user2", password_hash, password_salt)
