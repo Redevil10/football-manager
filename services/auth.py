@@ -42,7 +42,11 @@ def _preprocess_long_password_for_bcrypt(password_bytes: bytes) -> bytes:
     Returns:
         bytes: SHA256 hash of password as bytes (32 bytes, safe for bcrypt)
     """
-    sha256_hash = hashlib.sha256(password_bytes).hexdigest()
+    # SHA-256 is only a length-reduction prehash; its output is immediately
+    # passed to bcrypt by the caller.
+    sha256_hash = hashlib.sha256(
+        password_bytes
+    ).hexdigest()  # codeql[py/weak-sensitive-data-hashing]
     return sha256_hash.encode("utf-8")
 
 
