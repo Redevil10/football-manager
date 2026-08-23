@@ -1,16 +1,16 @@
-"""Tests for club selector functionality in core/auth.py"""
+"""Tests for club selector functionality in services/auth.py"""
 
 import pytest
 
-from core.auth import (
+from db.clubs import create_club
+from db.users import add_user_to_club, create_user
+from services.auth import (
     get_current_club_info,
     get_user_accessible_club_ids,
     get_user_club_ids_from_request,
     initialize_current_club_id,
     logout_user,
 )
-from db.clubs import create_club
-from db.users import add_user_to_club, create_user
 
 
 @pytest.fixture

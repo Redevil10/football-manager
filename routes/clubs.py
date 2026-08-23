@@ -4,9 +4,7 @@ from urllib.parse import unquote
 
 from fasthtml.common import *  # noqa: F403, F405
 
-from core.auth import get_current_user
 from core.config import USER_ROLES, VALID_ROLES
-from core.csrf import csrf_protect
 from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import EXPECTED_ERRORS, ValidationError
 from core.validation import (
@@ -43,6 +41,8 @@ from render.common import (
     render_navbar,
 )
 from routes.delete_confirm import blocked_by_players
+from services.auth import get_current_user
+from services.csrf import csrf_protect
 
 
 def visible_clubs_for(user):

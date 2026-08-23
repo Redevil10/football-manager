@@ -16,14 +16,14 @@ from core.config import USER_ROLES
 class TestViewerCannotEditMatch:
     """Tests that viewer role cannot edit match-related data"""
 
-    @patch("core.auth.get_match")
-    @patch("core.auth.get_clubs_in_league")
-    @patch("core.auth.check_club_permission")
+    @patch("services.auth.get_match")
+    @patch("services.auth.get_clubs_in_league")
+    @patch("services.auth.check_club_permission")
     def test_viewer_cannot_edit_match(
         self, mock_check_permission, mock_get_clubs, mock_get_match
     ):
         """Test that viewer cannot edit match"""
-        from core.auth import can_user_edit_match
+        from services.auth import can_user_edit_match
 
         mock_get_match.return_value = {"id": 1, "league_id": 1}
         mock_get_clubs.return_value = [{"id": 1}]
@@ -35,14 +35,14 @@ class TestViewerCannotEditMatch:
 
         assert result is False
 
-    @patch("core.auth.get_match")
-    @patch("core.auth.get_clubs_in_league")
-    @patch("core.auth.check_club_permission")
+    @patch("services.auth.get_match")
+    @patch("services.auth.get_clubs_in_league")
+    @patch("services.auth.check_club_permission")
     def test_manager_can_edit_match(
         self, mock_check_permission, mock_get_clubs, mock_get_match
     ):
         """Test that manager can edit match"""
-        from core.auth import can_user_edit_match
+        from services.auth import can_user_edit_match
 
         mock_get_match.return_value = {"id": 1, "league_id": 1}
         mock_get_clubs.return_value = [{"id": 1}]
@@ -57,11 +57,11 @@ class TestViewerCannotEditMatch:
 class TestViewerCannotEditLeague:
     """Tests that viewer role cannot edit league-related data"""
 
-    @patch("core.auth.get_clubs_in_league")
-    @patch("core.auth.check_club_permission")
+    @patch("services.auth.get_clubs_in_league")
+    @patch("services.auth.check_club_permission")
     def test_viewer_cannot_edit_league(self, mock_check_permission, mock_get_clubs):
         """Test that viewer cannot edit league"""
-        from core.auth import can_user_edit_league
+        from services.auth import can_user_edit_league
 
         mock_get_clubs.return_value = [{"id": 1}]
         mock_check_permission.return_value = False
@@ -71,11 +71,11 @@ class TestViewerCannotEditLeague:
 
         assert result is False
 
-    @patch("core.auth.get_clubs_in_league")
-    @patch("core.auth.check_club_permission")
+    @patch("services.auth.get_clubs_in_league")
+    @patch("services.auth.check_club_permission")
     def test_manager_can_edit_league(self, mock_check_permission, mock_get_clubs):
         """Test that manager can edit league"""
-        from core.auth import can_user_edit_league
+        from services.auth import can_user_edit_league
 
         mock_get_clubs.return_value = [{"id": 1}]
         mock_check_permission.return_value = True
@@ -89,10 +89,10 @@ class TestViewerCannotEditLeague:
 class TestViewerPermissionCheck:
     """Tests for check_club_permission with viewer role"""
 
-    @patch("core.auth.get_user_club_role")
+    @patch("services.auth.get_user_club_role")
     def test_viewer_has_no_manager_permission(self, mock_get_role):
         """Test that viewer does not have manager permission"""
-        from core.auth import check_club_permission
+        from services.auth import check_club_permission
 
         mock_get_role.return_value = USER_ROLES["VIEWER"]
 
@@ -101,10 +101,10 @@ class TestViewerPermissionCheck:
 
         assert result is False
 
-    @patch("core.auth.get_user_club_role")
+    @patch("services.auth.get_user_club_role")
     def test_viewer_has_viewer_permission(self, mock_get_role):
         """Test that viewer has viewer permission (can view)"""
-        from core.auth import check_club_permission
+        from services.auth import check_club_permission
 
         mock_get_role.return_value = USER_ROLES["VIEWER"]
 
@@ -113,10 +113,10 @@ class TestViewerPermissionCheck:
 
         assert result is True
 
-    @patch("core.auth.get_user_club_role")
+    @patch("services.auth.get_user_club_role")
     def test_manager_has_both_permissions(self, mock_get_role):
         """Test that manager has both viewer and manager permissions"""
-        from core.auth import check_club_permission
+        from services.auth import check_club_permission
 
         mock_get_role.return_value = USER_ROLES["MANAGER"]
 
@@ -131,11 +131,11 @@ class TestViewerPermissionCheck:
 class TestViewerCannotAllocateTeams:
     """Tests that viewer cannot allocate or reset teams"""
 
-    @patch("core.auth.get_user_club_role")
-    @patch("core.auth.get_user_club_ids")
+    @patch("services.auth.get_user_club_role")
+    @patch("services.auth.get_user_club_ids")
     def test_viewer_has_no_manager_clubs(self, mock_get_club_ids, mock_get_role):
         """Test that viewer cannot perform manager actions"""
-        from core.auth import check_club_permission
+        from services.auth import check_club_permission
 
         mock_get_club_ids.return_value = [1]
         mock_get_role.return_value = USER_ROLES["VIEWER"]
@@ -343,7 +343,7 @@ class TestSuperuserOverridesAll:
 
     def test_superuser_can_edit_match(self):
         """Test that superuser can edit any match"""
-        from core.auth import can_user_edit_match
+        from services.auth import can_user_edit_match
 
         superuser = {"id": 1, "is_superuser": True}
         result = can_user_edit_match(superuser, 999)
@@ -351,7 +351,7 @@ class TestSuperuserOverridesAll:
 
     def test_superuser_can_edit_league(self):
         """Test that superuser can edit any league"""
-        from core.auth import can_user_edit_league
+        from services.auth import can_user_edit_league
 
         superuser = {"id": 1, "is_superuser": True}
         result = can_user_edit_league(superuser, 999)
@@ -359,7 +359,7 @@ class TestSuperuserOverridesAll:
 
     def test_superuser_has_manager_permission(self):
         """Test that superuser has manager permission in any club"""
-        from core.auth import check_club_permission
+        from services.auth import check_club_permission
 
         superuser = {"id": 1, "is_superuser": True}
         result = check_club_permission(superuser, 999, USER_ROLES["MANAGER"])

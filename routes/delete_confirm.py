@@ -19,11 +19,6 @@ from fasthtml.common import H2, A, Body, Button, Div, Form, Html, P
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
-from core.auth import (
-    can_user_edit_match,
-    get_current_user,
-    get_user_club_ids_from_request,
-)
 from core.exceptions import NotFoundError
 from db.club_leagues import get_clubs_in_league, get_leagues_for_club
 from db.clubs import get_club
@@ -41,6 +36,11 @@ from render.common import (
     render_csrf_input,
     render_head,
     render_navbar,
+)
+from services.auth import (
+    can_user_edit_match,
+    get_current_user,
+    get_user_club_ids_from_request,
 )
 
 

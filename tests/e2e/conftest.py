@@ -85,7 +85,6 @@ def seed_database(db_path):
     core.config.DB_PATH = db_path
     db.connection.DB_PATH = db_path
     try:
-        from core.auth import hash_password
         from db.club_leagues import add_club_to_league
         from db.clubs import create_club
         from db.connection import init_db
@@ -93,8 +92,9 @@ def seed_database(db_path):
         from db.match_players import add_match_player
         from db.match_teams import create_match_team
         from db.matches import create_match
-        from db.players import add_player_with_score
         from db.users import create_user
+        from logic.players import add_player_with_score
+        from services.auth import hash_password
 
         init_db()
 

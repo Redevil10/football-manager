@@ -201,8 +201,8 @@ def test_toggle_requires_login(client, seeded):
 
 
 def test_superuser_can_toggle_and_see_link(client, seeded):
-    from core.auth import hash_password
     from db.users import create_user
+    from services.auth import hash_password
 
     league_id = seeded["league_id"]
     pw_hash, pw_salt = hash_password("secret123")
@@ -237,8 +237,8 @@ def test_superuser_can_toggle_and_see_link(client, seeded):
 
 
 def test_non_superuser_cannot_toggle(client, seeded):
-    from core.auth import hash_password
     from db.users import add_user_to_club, create_user
+    from services.auth import hash_password
 
     league_id = seeded["league_id"]
     pw_hash, pw_salt = hash_password("secret123")

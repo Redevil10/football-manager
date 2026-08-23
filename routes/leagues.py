@@ -2,11 +2,6 @@
 
 from fasthtml.common import *
 
-from core.auth import (
-    get_current_user,
-    get_user_club_ids_from_request,
-)
-from core.csrf import csrf_protect
 from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import PermissionError, ValidationError
 from core.validation import validate_non_empty_string, validate_required_int
@@ -30,6 +25,11 @@ from render import render_league_header, render_leagues_list, render_navbar
 from render.common import confirm_delete_link, render_csrf_input, render_head
 from render.leagues import render_create_league_form, render_league_clubs
 from routes.delete_confirm import blocked_by_matches
+from services.auth import (
+    get_current_user,
+    get_user_club_ids_from_request,
+)
+from services.csrf import csrf_protect
 
 
 def _render_public_sharing(league, req=None, can_manage=False):

@@ -2,7 +2,8 @@
 
 from unittest.mock import Mock, patch
 
-from core.auth import (
+from core.config import USER_ROLES
+from services.auth import (
     can_user_edit_league,
     can_user_edit_match,
     check_club_access,
@@ -13,7 +14,6 @@ from core.auth import (
     login_user,
     logout_user,
 )
-from core.config import USER_ROLES
 
 
 class TestGetSessionFromRequest:
@@ -57,8 +57,8 @@ class TestGetSessionFromRequest:
 class TestLoginUser:
     """Tests for login_user function"""
 
-    @patch("core.auth.get_user_by_username")
-    @patch("core.auth.verify_password")
+    @patch("services.auth.get_user_by_username")
+    @patch("services.auth.verify_password")
     def test_login_success(self, mock_verify, mock_get_user):
         """Test successful login"""
         mock_get_user.return_value = {
@@ -77,7 +77,7 @@ class TestLoginUser:
         assert result is True
         assert sess["user_id"] == 1
 
-    @patch("core.auth.get_user_by_username")
+    @patch("services.auth.get_user_by_username")
     def test_login_user_not_found(self, mock_get_user):
         """Test login with non-existent user"""
         mock_get_user.return_value = None
@@ -90,8 +90,8 @@ class TestLoginUser:
         assert result is False
         assert "user_id" not in sess
 
-    @patch("core.auth.get_user_by_username")
-    @patch("core.auth.verify_password")
+    @patch("services.auth.get_user_by_username")
+    @patch("services.auth.verify_password")
     def test_login_wrong_password(self, mock_verify, mock_get_user):
         """Test login with wrong password"""
         mock_get_user.return_value = {
@@ -110,8 +110,8 @@ class TestLoginUser:
         assert result is False
         assert "user_id" not in sess
 
-    @patch("core.auth.get_user_by_username")
-    @patch("core.auth.verify_password")
+    @patch("services.auth.get_user_by_username")
+    @patch("services.auth.verify_password")
     def test_login_no_session(self, mock_verify, mock_get_user):
         """Test login without session"""
         mock_get_user.return_value = {
@@ -128,8 +128,8 @@ class TestLoginUser:
 
         assert result is False
 
-    @patch("core.auth.get_user_by_username")
-    @patch("core.auth.verify_password")
+    @patch("services.auth.get_user_by_username")
+    @patch("services.auth.verify_password")
     def test_login_session_exception(self, mock_verify, mock_get_user):
         """Test login when setting session raises exception"""
         mock_get_user.return_value = {
@@ -170,7 +170,7 @@ class TestLogoutUser:
 
         assert "user_id" not in sess
 
-    @patch("core.auth.get_session_from_request")
+    @patch("services.auth.get_session_from_request")
     def test_logout_fallback_to_request(self, mock_get_session):
         """Test logout using request fallback"""
         req = Mock()
@@ -185,7 +185,7 @@ class TestLogoutUser:
 class TestGetCurrentUser:
     """Tests for get_current_user function"""
 
-    @patch("core.auth.get_user_by_id")
+    @patch("services.auth.get_user_by_id")
     def test_get_current_user_from_session(self, mock_get_user):
         """Test getting user from session"""
         mock_get_user.return_value = {"id": 1, "username": "testuser"}
@@ -198,8 +198,8 @@ class TestGetCurrentUser:
         assert result == {"id": 1, "username": "testuser"}
         mock_get_user.assert_called_once_with(1)
 
-    @patch("core.auth.get_user_by_id")
-    @patch("core.auth.get_session_from_request")
+    @patch("services.auth.get_user_by_id")
+    @patch("services.auth.get_session_from_request")
     def test_get_current_user_from_request(self, mock_get_session, mock_get_user):
         """Test getting user from request when session not provided"""
         mock_get_session.return_value = {"user_id": 1}
@@ -232,7 +232,7 @@ class TestGetCurrentUser:
 class TestGetUserAccessibleClubIds:
     """Tests for get_user_accessible_club_ids function"""
 
-    @patch("core.auth.get_all_clubs")
+    @patch("services.auth.get_all_clubs")
     def test_superuser_gets_all_clubs(self, mock_get_clubs):
         """Test that superuser gets all clubs"""
         mock_get_clubs.return_value = [
@@ -246,7 +246,7 @@ class TestGetUserAccessibleClubIds:
 
         assert result == [1, 2]
 
-    @patch("core.auth.get_user_club_ids")
+    @patch("services.auth.get_user_club_ids")
     def test_regular_user_gets_own_clubs(self, mock_get_club_ids):
         """Test that regular user gets their own clubs"""
         mock_get_club_ids.return_value = [1, 3]
@@ -270,7 +270,7 @@ class TestCheckClubAccess:
 
         assert result is True
 
-    @patch("core.auth.get_user_club_ids")
+    @patch("services.auth.get_user_club_ids")
     def test_user_has_access(self, mock_get_club_ids):
         """Test user with access to club"""
         mock_get_club_ids.return_value = [1, 2, 3]
@@ -281,7 +281,7 @@ class TestCheckClubAccess:
 
         assert result is True
 
-    @patch("core.auth.get_user_club_ids")
+    @patch("services.auth.get_user_club_ids")
     def test_user_no_access(self, mock_get_club_ids):
         """Test user without access to club"""
         mock_get_club_ids.return_value = [1, 2, 3]
@@ -304,7 +304,7 @@ class TestCheckClubPermission:
 
         assert result is True
 
-    @patch("core.auth.get_user_club_role")
+    @patch("services.auth.get_user_club_role")
     def test_manager_has_manager_permission(self, mock_get_role):
         """Test that manager has manager permission"""
         mock_get_role.return_value = USER_ROLES["MANAGER"]
@@ -315,7 +315,7 @@ class TestCheckClubPermission:
 
         assert result is True
 
-    @patch("core.auth.get_user_club_role")
+    @patch("services.auth.get_user_club_role")
     def test_viewer_no_manager_permission(self, mock_get_role):
         """Test that viewer doesn't have manager permission"""
         mock_get_role.return_value = USER_ROLES["VIEWER"]
@@ -326,7 +326,7 @@ class TestCheckClubPermission:
 
         assert result is False
 
-    @patch("core.auth.get_user_club_role")
+    @patch("services.auth.get_user_club_role")
     def test_viewer_has_viewer_permission(self, mock_get_role):
         """Test that viewer has viewer permission"""
         mock_get_role.return_value = USER_ROLES["VIEWER"]
@@ -337,7 +337,7 @@ class TestCheckClubPermission:
 
         assert result is True
 
-    @patch("core.auth.get_user_club_role")
+    @patch("services.auth.get_user_club_role")
     def test_manager_has_viewer_permission(self, mock_get_role):
         """Test that manager has viewer permission"""
         mock_get_role.return_value = USER_ROLES["MANAGER"]
@@ -348,7 +348,7 @@ class TestCheckClubPermission:
 
         assert result is True
 
-    @patch("core.auth.get_user_club_role")
+    @patch("services.auth.get_user_club_role")
     def test_no_role_no_permission(self, mock_get_role):
         """Test that user with no role has no permission"""
         mock_get_role.return_value = None
@@ -376,7 +376,7 @@ class TestCanUserEditMatch:
 
         assert result is True
 
-    @patch("core.auth.get_match")
+    @patch("services.auth.get_match")
     def test_no_match_cannot_edit(self, mock_get_match):
         """Test that user cannot edit non-existent match"""
         mock_get_match.return_value = None
@@ -387,9 +387,9 @@ class TestCanUserEditMatch:
 
         assert result is False
 
-    @patch("core.auth.get_match")
-    @patch("core.auth.get_clubs_in_league")
-    @patch("core.auth.check_club_permission")
+    @patch("services.auth.get_match")
+    @patch("services.auth.get_clubs_in_league")
+    @patch("services.auth.check_club_permission")
     def test_manager_can_edit(
         self, mock_check_permission, mock_get_clubs, mock_get_match
     ):
@@ -404,7 +404,7 @@ class TestCanUserEditMatch:
 
         assert result is True
 
-    @patch("core.auth.get_match")
+    @patch("services.auth.get_match")
     def test_match_no_league_superuser_only(self, mock_get_match):
         """Test that match without league can only be edited by superuser"""
         mock_get_match.return_value = {"id": 1, "league_id": None}
@@ -432,8 +432,8 @@ class TestCanUserEditLeague:
 
         assert result is True
 
-    @patch("core.auth.get_clubs_in_league")
-    @patch("core.auth.check_club_permission")
+    @patch("services.auth.get_clubs_in_league")
+    @patch("services.auth.check_club_permission")
     def test_manager_can_edit(self, mock_check_permission, mock_get_clubs):
         """Test that manager of club in league can edit league"""
         mock_get_clubs.return_value = [{"id": 1}, {"id": 2}]
@@ -445,8 +445,8 @@ class TestCanUserEditLeague:
 
         assert result is True
 
-    @patch("core.auth.get_clubs_in_league")
-    @patch("core.auth.check_club_permission")
+    @patch("services.auth.get_clubs_in_league")
+    @patch("services.auth.check_club_permission")
     def test_non_manager_cannot_edit(self, mock_check_permission, mock_get_clubs):
         """Test that non-manager cannot edit league"""
         mock_get_clubs.return_value = [{"id": 1}, {"id": 2}]

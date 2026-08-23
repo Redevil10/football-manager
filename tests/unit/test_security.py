@@ -1,6 +1,6 @@
 """Unit tests for security functions (CSRF and XSS protection)"""
 
-from core.auth import (
+from services.auth import (
     escape_js_string,
     generate_csrf_token,
     get_csrf_token,

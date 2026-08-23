@@ -15,7 +15,7 @@ import re
 
 from starlette.testclient import TestClient
 
-from core.csrf import CSRF_HEADER, SAFE_METHODS
+from services.csrf import CSRF_HEADER, SAFE_METHODS
 
 _META = re.compile(r'<meta name="csrf-token" content="([^"]*)"')
 

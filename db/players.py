@@ -221,20 +221,26 @@ def add_player(
         return None
 
 
-def add_player_with_score(
+def add_player_with_attrs(
     name: str,
     club_id: int,
-    overall_score: int = 100,
+    attrs: dict,
     position_pref: str = "",
     alias: Optional[str] = None,
     created_by: Optional[int] = None,
 ) -> Optional[int]:
-    """Add player with attributes derived from an overall score.
+    """Add a player whose four attribute groups are already worked out.
+
+    Deriving those from a target overall score is scoring logic, so it happens
+    in ``logic.players.add_player_with_score`` and arrives here as data. This
+    module used to import logic.scoring to do it, which closed an import cycle
+    between the two layers.
 
     Args:
         name: Player name
         club_id: ID of the club the player belongs to
-        overall_score: Target overall score (10-200), default 100
+        attrs: {"technical": {...}, "mental": {...}, "physical": {...},
+            "gk": {...}} as produced by logic.scoring.set_overall_score
         position_pref: Preferred position (optional)
         alias: Player alias, semicolon-separated for more than one (optional)
         created_by: ID of the user adding this player (optional)
@@ -243,11 +249,8 @@ def add_player_with_score(
         int: Player ID on success
         None: On error (duplicate player, database error, etc.)
     """
-    from logic.scoring import set_overall_score
-
     try:
-        attrs = set_overall_score(overall_score)
-        with db_transaction("add_player_with_score") as conn:
+        with db_transaction("add_player_with_attrs") as conn:
             technical = json.dumps(attrs["technical"])
             mental = json.dumps(attrs["mental"])
             physical = json.dumps(attrs["physical"])
@@ -269,9 +272,7 @@ def add_player_with_score(
             )
             player_id = cursor.lastrowid
             conn.commit()
-            logger.info(
-                f"Player '{name}' created with score {overall_score}, ID: {player_id}"
-            )
+            logger.info(f"Player '{name}' created, ID: {player_id}")
             return player_id
     except IntegrityError:
         logger.warning(

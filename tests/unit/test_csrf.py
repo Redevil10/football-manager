@@ -11,8 +11,8 @@ import re
 import pytest
 from starlette.testclient import TestClient
 
-from core.csrf import CSRF_HEADER, current_csrf_token
 from db.players import get_all_players
+from services.csrf import CSRF_HEADER, current_csrf_token
 from tests.unit.conftest_roles import PASSWORD, make_user, world  # noqa: F401
 from tests.unit.csrf_client import CSRFClient
 

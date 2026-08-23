@@ -4,10 +4,10 @@ from datetime import date, datetime
 
 from fasthtml.common import *
 
-from core.auth import check_club_permission, get_current_club_info
-from core.csrf import CSRF_FIELD, CSRF_HEADER, current_csrf_token
 from core.styles import STYLE
 from db import get_match_teams
+from services.auth import check_club_permission, get_current_club_info
+from services.csrf import CSRF_FIELD, CSRF_HEADER, current_csrf_token
 
 # Clicking a button that HTMX then swaps away used to fling the page elsewhere.
 # The button still holds focus when the swap deletes it, so the browser goes

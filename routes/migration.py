@@ -4,11 +4,11 @@ import traceback
 
 from fasthtml.common import *
 
-from core.auth import get_current_user
-from core.csrf import csrf_protect
 from migrations.migrate_all import migrate_all
 from render import render_navbar
 from render.common import render_csrf_input, render_head
+from services.auth import get_current_user
+from services.csrf import csrf_protect
 
 
 def migration_page(req: Request = None, sess=None):

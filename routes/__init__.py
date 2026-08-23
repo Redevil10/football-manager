@@ -7,13 +7,13 @@ import secrets
 from fasthtml.common import fast_app
 from fasthtml_hf import setup_hf_backup
 
-from core.csrf import CSRFTokenMiddleware
 from core.error_responses import expected_error_page, unexpected_error_page
 from core.exceptions import EXPECTED_ERRORS
 
 # Importing db pulls in core.config, whose import creates the data/ directory
 # that init_db() below writes into.
 from db import init_db
+from services.csrf import CSRFTokenMiddleware
 
 logger = logging.getLogger(__name__)
 

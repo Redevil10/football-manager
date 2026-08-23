@@ -1,4 +1,4 @@
-# core/csrf.py - CSRF protection
+# services/csrf.py - CSRF protection
 
 """Cross-site request forgery protection.
 
@@ -28,7 +28,7 @@ from functools import wraps
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 
-from core.auth import get_csrf_token, validate_csrf_token
+from services.auth import get_csrf_token, validate_csrf_token
 
 # Methods that do not change state, and so need no token.
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})

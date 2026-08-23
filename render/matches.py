@@ -2,7 +2,6 @@
 
 from fasthtml.common import *
 
-from core.auth import can_user_edit_match
 from logic import calculate_overall_score
 from render.common import (
     confirm_delete_link,
@@ -16,6 +15,7 @@ from render.common import (
 )
 from render.interactive_pitch import render_interactive_pitch
 from render.players import render_match_available_players, render_player_table
+from services.auth import can_user_edit_match
 
 POSITION_ABBREVIATIONS = {
     "Goalkeeper": "GK",
@@ -310,8 +310,8 @@ def _time_range(match):
 
 def can_user_create_match(user):
     """Whether this user may create a match in any club they can reach."""
-    from core.auth import check_club_permission, get_user_accessible_club_ids
     from core.config import USER_ROLES
+    from services.auth import check_club_permission, get_user_accessible_club_ids
 
     if not user:
         return False

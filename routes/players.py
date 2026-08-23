@@ -5,12 +5,6 @@ from urllib.parse import quote
 
 from fasthtml.common import *
 
-from core.auth import (
-    check_club_permission,
-    get_current_user,
-    get_user_accessible_club_ids,
-    get_user_club_ids_from_request,
-)
 from core.config import (
     GK_ATTRS,
     MENTAL_ATTRS,
@@ -18,7 +12,6 @@ from core.config import (
     TECHNICAL_ATTRS,
     USER_ROLES,
 )
-from core.csrf import csrf_protect
 from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import (
     EXPECTED_ERRORS,
@@ -38,7 +31,7 @@ from db import (
     update_player_height_weight,
     update_player_name,
 )
-from db.players import add_player, add_player_with_score
+from db.players import add_player
 from logic import (
     adjust_category_attributes_by_single_attr,
     allocate_teams,
@@ -54,6 +47,7 @@ from logic import (
     set_physical_score,
     set_technical_score,
 )
+from logic.players import add_player_with_score
 from render import (
     render_add_player_form,
     render_archived_players,
@@ -63,6 +57,13 @@ from render import (
     render_teams,
 )
 from render.common import can_user_delete, can_user_edit, render_csrf_input, render_head
+from services.auth import (
+    check_club_permission,
+    get_current_user,
+    get_user_accessible_club_ids,
+    get_user_club_ids_from_request,
+)
+from services.csrf import csrf_protect
 
 logger = logging.getLogger(__name__)
 

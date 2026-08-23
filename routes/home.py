@@ -2,12 +2,12 @@
 
 from fasthtml.common import *
 
-from core.auth import get_current_user, get_user_club_ids_from_request
 from db import (
     get_next_matches_by_all_leagues,
 )
 from render import render_navbar, render_next_matches_by_league, render_recent_matches
 from render.common import render_head
+from services.auth import get_current_user, get_user_club_ids_from_request
 
 
 def home(req: Request = None, sess=None):

@@ -614,8 +614,8 @@ class TestPlayerAuditColumns:
     """Who added a player, and when it last changed."""
 
     def test_records_who_added_the_player(self, temp_db):
-        from core.auth import hash_password
         from db.users import create_user
+        from services.auth import hash_password
 
         password_hash, salt = hash_password("x")
         adder = create_user("admin", password_hash, salt, is_superuser=True)

@@ -18,8 +18,9 @@ from db.match_players import (
 )
 from db.match_teams import create_match_team, get_match_teams
 from db.matches import create_match
-from db.players import add_player, add_player_with_score
+from db.players import add_player
 from logic.allocation import allocate_match_teams
+from logic.players import add_player_with_score
 from logic.scoring import calculate_overall_score
 
 

@@ -8,6 +8,8 @@ from logic.allocation import (
     allocate_teams,
     assign_random_captain,
     build_teammate_weights,
+)
+from logic.balance import (
     pick_balanced_split,
     repeat_penalty,
     select_starters,

@@ -78,7 +78,7 @@ from db.matches import (
 from db.players import (
     add_player,
     add_player_alias,
-    add_player_with_score,
+    add_player_with_attrs,
     count_player_appearances,
     delete_player,
     find_player_by_name_or_alias,
@@ -117,7 +117,7 @@ __all__ = [
     "add_player_alias",
     "count_player_appearances",
     "set_player_active",
-    "add_player_with_score",
+    "add_player_with_attrs",
     "delete_player",
     "update_player_team",
     "update_player_attrs",

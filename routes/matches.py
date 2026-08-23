@@ -6,14 +6,7 @@ from urllib.parse import urlencode
 
 from fasthtml.common import *
 
-from core.auth import (
-    can_user_edit_match,
-    check_club_permission,
-    get_current_user,
-    get_user_club_ids_from_request,
-)
 from core.config import USER_ROLES
-from core.csrf import csrf_protect
 from core.error_responses import handle_route_error
 from core.exceptions import EXPECTED_ERRORS, DatabaseError
 from core.validation import parse_int, validate_non_empty_string, validate_url
@@ -74,6 +67,13 @@ from render import (
 )
 from render.common import is_match_completed, render_csrf_input, render_head
 from render.matches import can_user_create_match
+from services.auth import (
+    can_user_edit_match,
+    check_club_permission,
+    get_current_user,
+    get_user_club_ids_from_request,
+)
+from services.csrf import csrf_protect
 
 logger = logging.getLogger(__name__)
 
@@ -1684,7 +1684,7 @@ async def route_confirm_import(match_id: int, req: Request, sess=None):
 
         if match_selection == "new":
             # Create a new player with specified overall score
-            from db import add_player_with_score
+            from logic.players import add_player_with_score
 
             score = int(form.get(f"score_{i}", 100))
             player_id = add_player_with_score(

@@ -4,9 +4,7 @@ from urllib.parse import parse_qs
 
 from fasthtml.common import *
 
-from core.auth import get_current_user, get_user_accessible_club_ids
 from core.config import USER_ROLES, VALID_ROLES
-from core.csrf import csrf_protect
 from core.error_responses import handle_db_result, handle_route_error
 from core.exceptions import NotFoundError, PermissionError, ValidationError
 from core.validation import validate_in_list
@@ -27,6 +25,8 @@ from render.common import (
     render_head,
     render_navbar,
 )
+from services.auth import get_current_user, get_user_accessible_club_ids
+from services.csrf import csrf_protect
 
 logger = logging.getLogger(__name__)
 

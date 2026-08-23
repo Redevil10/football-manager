@@ -5,17 +5,7 @@ import sqlite3
 
 from fasthtml.common import *  # noqa: F403, F405
 
-from core.auth import (
-    check_club_access,
-    get_current_user,
-    hash_password,
-    initialize_current_club_id,
-    login_user,
-    logout_user,
-    verify_password,
-)
 from core.config import USER_ROLES, VALID_ROLES
-from core.csrf import csrf_protect
 from core.error_responses import handle_route_error
 from core.exceptions import (
     EXPECTED_ERRORS,
@@ -36,6 +26,16 @@ from db.users import (
     update_user_password,
 )
 from render.common import render_csrf_input, render_head
+from services.auth import (
+    check_club_access,
+    get_current_user,
+    hash_password,
+    initialize_current_club_id,
+    login_user,
+    logout_user,
+    verify_password,
+)
+from services.csrf import csrf_protect
 
 logger = logging.getLogger(__name__)
 
@@ -274,7 +274,7 @@ async def route_register(req: Request, sess=None):
 
         # For admins, verify they can assign users to this club
         if not current_user_is_superuser:
-            from core.auth import check_club_permission
+            from services.auth import check_club_permission
 
             if not check_club_permission(user, club_id, USER_ROLES["ADMIN"]):
                 raise PermissionError("create users", f"club {club_id}")

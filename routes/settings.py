@@ -6,10 +6,10 @@ from zoneinfo import ZoneInfo
 
 from fasthtml.common import *
 
-from core.auth import get_current_user, validate_csrf_token
-from core.csrf import csrf_protect
 from db.settings import get_setting, set_setting
 from render.settings import render_settings_page, render_smart_import_toggle
+from services.auth import get_current_user, validate_csrf_token
+from services.csrf import csrf_protect
 
 
 def _get_backup_info():

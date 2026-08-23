@@ -7,6 +7,7 @@ from logic.allocation import (
     assign_positions,
 )
 from logic.import_logic import import_players, parse_signup_text
+from logic.players import add_player_with_score
 from logic.scoring import (
     adjust_attributes_by_category_score,
     adjust_category_attributes_by_single_attr,
@@ -25,6 +26,8 @@ from logic.scoring import (
 from logic.smart_import import is_smart_import_available, smart_parse_signup
 
 __all__ = [
+    # Players
+    "add_player_with_score",
     # Import
     "import_players",
     "parse_signup_text",
