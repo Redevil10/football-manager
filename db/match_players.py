@@ -316,6 +316,10 @@ def remove_all_match_signup_players(match_id: int) -> bool:
 def swap_match_players(match_player1_id: int, match_player2_id: int) -> bool:
     """Swap two match players' teams and positions.
 
+    If either player is their team's captain and the swap crosses teams, the
+    player arriving in their place becomes captain instead, so no team is
+    left without one.
+
     Args:
         match_player1_id: ID of the first match player
         match_player2_id: ID of the second match player
@@ -355,6 +359,19 @@ def swap_match_players(match_player1_id: int, match_player2_id: int) -> bool:
                 "UPDATE match_players SET team_id = ?, position = ?, tactical_position = ?, is_starter = ? WHERE id = ?",
                 (p1[0], p1[1], p1[2], p1[3], match_player2_id),
             )
+
+            # Across teams, each side's captain_id would now point at a player
+            # on the other side. Give the armband to whoever took their spot.
+            if p1[0] != p2[0]:
+                conn.execute(
+                    "UPDATE match_teams SET captain_id = ? WHERE id = ? AND captain_id = ?",
+                    (match_player2_id, p1[0], match_player1_id),
+                )
+                conn.execute(
+                    "UPDATE match_teams SET captain_id = ? WHERE id = ? AND captain_id = ?",
+                    (match_player1_id, p2[0], match_player2_id),
+                )
+
             conn.commit()
             logger.debug(
                 f"Swapped teams/positions/tactical_positions for match players {match_player1_id} and {match_player2_id}"

@@ -16,7 +16,7 @@ from db.match_players import (
     swap_match_players,
     update_match_player,
 )
-from db.match_teams import create_match_team, get_match_teams
+from db.match_teams import create_match_team, get_match_teams, update_team_captain
 from db.matches import create_match
 from db.players import add_player
 from logic.allocation import allocate_match_teams
@@ -355,6 +355,87 @@ class TestSwapMatchPlayers:
         assert p2["team_id"] == sample_teams["team1_id"]
         assert p2["position"] == "Forward"
         assert p2["is_starter"] == 1
+
+    def _captains(self, match_id):
+        return {t["id"]: t["captain_id"] for t in get_match_teams(match_id)}
+
+    def test_swap_hands_captaincy_to_incoming_player(
+        self, temp_db, sample_match, sample_players, sample_teams
+    ):
+        """Swapping a captain to the other team makes their replacement captain"""
+        mp1_id = add_match_player(
+            sample_match,
+            sample_players["player1_id"],
+            sample_teams["team1_id"],
+            "Forward",
+            1,
+        )
+        mp2_id = add_match_player(
+            sample_match,
+            sample_players["player2_id"],
+            sample_teams["team2_id"],
+            "Defender",
+            1,
+        )
+        update_team_captain(sample_teams["team1_id"], mp1_id)
+
+        swap_match_players(mp1_id, mp2_id)
+
+        captains = self._captains(sample_match)
+        assert captains[sample_teams["team1_id"]] == mp2_id
+        assert captains[sample_teams["team2_id"]] is None
+
+    def test_swap_two_captains_swaps_captaincy(
+        self, temp_db, sample_match, sample_players, sample_teams
+    ):
+        """When both players are captains, each team keeps a captain"""
+        mp1_id = add_match_player(
+            sample_match,
+            sample_players["player1_id"],
+            sample_teams["team1_id"],
+            "Forward",
+            1,
+        )
+        mp2_id = add_match_player(
+            sample_match,
+            sample_players["player2_id"],
+            sample_teams["team2_id"],
+            "Defender",
+            1,
+        )
+        update_team_captain(sample_teams["team1_id"], mp1_id)
+        update_team_captain(sample_teams["team2_id"], mp2_id)
+
+        swap_match_players(mp1_id, mp2_id)
+
+        captains = self._captains(sample_match)
+        assert captains[sample_teams["team1_id"]] == mp2_id
+        assert captains[sample_teams["team2_id"]] == mp1_id
+
+    def test_swap_within_same_team_keeps_captain(
+        self, temp_db, sample_match, sample_players, sample_teams
+    ):
+        """A position swap inside one team must not move the armband"""
+        mp1_id = add_match_player(
+            sample_match,
+            sample_players["player1_id"],
+            sample_teams["team1_id"],
+            "Forward",
+            1,
+        )
+        mp2_id = add_match_player(
+            sample_match,
+            sample_players["player2_id"],
+            sample_teams["team1_id"],
+            "Defender",
+            1,
+        )
+        update_team_captain(sample_teams["team1_id"], mp1_id)
+
+        swap_match_players(mp1_id, mp2_id)
+
+        captains = self._captains(sample_match)
+        assert captains[sample_teams["team1_id"]] == mp1_id
 
 
 class TestUpdateMatchPlayerEdgeCases:
