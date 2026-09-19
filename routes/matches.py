@@ -1752,7 +1752,7 @@ async def route_confirm_import(match_id: int, req: Request, sess=None):
             # the same correction is not made by hand at every match. A name
             # the player already answers to is a no-op inside.
             if form.get(f"remember_{i}") and add_player_alias(
-                player_id, extracted_name
+                player_id, extracted_name, updated_by=user["id"]
             ):
                 remembered += 1
 

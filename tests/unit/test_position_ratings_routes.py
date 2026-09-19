@@ -218,3 +218,19 @@ def test_the_add_form_asks_for_a_main_position():
     assert 'name="main_position"' in html
     assert 'value="CB"' in html
     assert "position_pref" not in html
+
+
+@pytest.mark.unit
+def test_an_edit_records_who_made_it(client, world):  # noqa: F811
+    from db import get_all_players
+
+    player_id = world["newcomer"]
+    client.post(
+        f"/update_position_ratings/{player_id}",
+        data={"pos_0": "CB", "fit_0": "natural"},
+        follow_redirects=False,
+    )
+
+    player = next(p for p in get_all_players() if p["id"] == player_id)
+    assert player["updated_by"] == world["superuser"]
+    assert player["updated_by_username"] == "boss"

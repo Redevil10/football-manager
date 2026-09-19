@@ -90,10 +90,13 @@ def get_all_players(
     Returns:
         list[dict]: List of player dictionaries with parsed attributes
     """
-    # Joined for the creator's name, which the list shows next to the player.
-    select = """SELECT p.*, u.username AS created_by_username
+    # Joined for the creator's and last editor's names, which the list shows
+    # next to the player.
+    select = """SELECT p.*, u.username AS created_by_username,
+                       e.username AS updated_by_username
                   FROM players p
-                  LEFT JOIN users u ON p.created_by = u.id"""
+                  LEFT JOIN users u ON p.created_by = u.id
+                  LEFT JOIN users e ON p.updated_by = e.id"""
     if club_ids is not None and len(club_ids) == 0:
         # Reaches no clubs, so reaches no players. Without this the query ran
         # with no WHERE and handed a clubless account every club's squad.
@@ -206,7 +209,7 @@ def add_player(
             gk = json.dumps(generate_random_gk())
 
             cursor = conn.execute(
-                "INSERT INTO players (name, club_id, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO players (name, club_id, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     name,
                     club_id,
@@ -216,6 +219,9 @@ def add_player(
                     mental,
                     physical,
                     gk,
+                    created_by,
+                    # Creating is the first change: updated_at starts equal to
+                    # created_at, so the updater starts equal to the creator.
                     created_by,
                 ),
             )
@@ -271,7 +277,7 @@ def add_player_with_attrs(
             gk = json.dumps(attrs["gk"])
 
             cursor = conn.execute(
-                "INSERT INTO players (name, club_id, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO players (name, club_id, position_pref, alias, technical_attrs, mental_attrs, physical_attrs, gk_attrs, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     name,
                     club_id,
@@ -281,6 +287,9 @@ def add_player_with_attrs(
                     mental,
                     physical,
                     gk,
+                    created_by,
+                    # Creating is the first change: updated_at starts equal to
+                    # created_at, so the updater starts equal to the creator.
                     created_by,
                 ),
             )
@@ -364,6 +373,7 @@ def update_player_attrs(
     mental_attrs: dict,
     phys_attrs: dict,
     gk_attrs: dict,
+    updated_by: Optional[int] = None,
 ) -> bool:
     """Update player attributes.
 
@@ -373,6 +383,7 @@ def update_player_attrs(
         mental_attrs: Mental attributes dictionary
         phys_attrs: Physical attributes dictionary
         gk_attrs: Goalkeeper attributes dictionary
+        updated_by: ID of the user making the change (optional).
 
     Returns:
         bool: True on success, False on error
@@ -382,13 +393,14 @@ def update_player_attrs(
             cursor = conn.execute(
                 """UPDATE players SET technical_attrs = ?, mental_attrs = ?,
                           physical_attrs = ?, gk_attrs = ?,
-                          updated_at = CURRENT_TIMESTAMP
+                          updated_at = CURRENT_TIMESTAMP, updated_by = ?
                     WHERE id = ?""",
                 (
                     json.dumps(tech_attrs),
                     json.dumps(mental_attrs),
                     json.dumps(phys_attrs),
                     json.dumps(gk_attrs),
+                    updated_by,
                     player_id,
                 ),
             )
@@ -405,13 +417,19 @@ def update_player_attrs(
         return False
 
 
-def update_player_name(player_id: int, name: str, alias: Optional[str] = None) -> bool:
+def update_player_name(
+    player_id: int,
+    name: str,
+    alias: Optional[str] = None,
+    updated_by: Optional[int] = None,
+) -> bool:
     """Update player name and alias.
 
     Args:
         player_id: ID of the player
         name: New player name
         alias: New player alias (optional)
+        updated_by: ID of the user making the change (optional)
 
     Returns:
         bool: True on success, False on error
@@ -419,9 +437,10 @@ def update_player_name(player_id: int, name: str, alias: Optional[str] = None) -
     try:
         with db_transaction("update_player_name") as conn:
             cursor = conn.execute(
-                """UPDATE players SET name = ?, alias = ?, updated_at = CURRENT_TIMESTAMP
+                """UPDATE players SET name = ?, alias = ?,
+                          updated_at = CURRENT_TIMESTAMP, updated_by = ?
                     WHERE id = ?""",
-                (name, alias, player_id),
+                (name, alias, updated_by, player_id),
             )
             conn.commit()
             if cursor.rowcount == 0:
@@ -478,7 +497,9 @@ def count_players_in_club(club_id: int) -> int:
         ).fetchone()[0]
 
 
-def set_player_active(player_id: int, active: bool) -> bool:
+def set_player_active(
+    player_id: int, active: bool, updated_by: Optional[int] = None
+) -> bool:
     """Archive a player, or bring one back.
 
     Archiving takes someone out of the squad, the signup lookup and allocation
@@ -488,6 +509,7 @@ def set_player_active(player_id: int, active: bool) -> bool:
     Args:
         player_id: ID of the player.
         active: False to archive, True to restore.
+        updated_by: ID of the user making the change (optional).
 
     Returns:
         bool: True on success, False if there is no such player or on error.
@@ -495,9 +517,10 @@ def set_player_active(player_id: int, active: bool) -> bool:
     try:
         with db_transaction("set_player_active") as conn:
             cursor = conn.execute(
-                """UPDATE players SET active = ?, updated_at = CURRENT_TIMESTAMP
+                """UPDATE players SET active = ?,
+                          updated_at = CURRENT_TIMESTAMP, updated_by = ?
                     WHERE id = ?""",
-                (1 if active else 0, player_id),
+                (1 if active else 0, updated_by, player_id),
             )
             conn.commit()
             if cursor.rowcount == 0:
@@ -510,7 +533,9 @@ def set_player_active(player_id: int, active: bool) -> bool:
         return False
 
 
-def add_player_alias(player_id: int, alias: str) -> bool:
+def add_player_alias(
+    player_id: int, alias: str, updated_by: Optional[int] = None
+) -> bool:
     """Remember another name this player answers to.
 
     The import screen calls this when someone hand-matches a signup name the
@@ -524,6 +549,7 @@ def add_player_alias(player_id: int, alias: str) -> bool:
     Args:
         player_id: ID of the player.
         alias: The name to remember.
+        updated_by: ID of the user making the change (optional).
 
     Returns:
         bool: True if it was added, False if already known, the player does not
@@ -549,9 +575,10 @@ def add_player_alias(player_id: int, alias: str) -> bool:
                 return False
 
             conn.execute(
-                """UPDATE players SET alias = ?, updated_at = CURRENT_TIMESTAMP
+                """UPDATE players SET alias = ?,
+                          updated_at = CURRENT_TIMESTAMP, updated_by = ?
                     WHERE id = ?""",
-                ("; ".join([*existing, wanted]), player_id),
+                ("; ".join([*existing, wanted]), updated_by, player_id),
             )
             conn.commit()
             logger.info(f"Player {player_id} now also answers to '{wanted}'")
@@ -562,7 +589,10 @@ def add_player_alias(player_id: int, alias: str) -> bool:
 
 
 def update_player_height_weight(
-    player_id: int, height: Optional[int] = None, weight: Optional[int] = None
+    player_id: int,
+    height: Optional[int] = None,
+    weight: Optional[int] = None,
+    updated_by: Optional[int] = None,
 ) -> bool:
     """Update player height and weight.
 
@@ -570,6 +600,7 @@ def update_player_height_weight(
         player_id: ID of the player
         height: Height in cm (optional)
         weight: Weight in kg (optional)
+        updated_by: ID of the user making the change (optional).
 
     Returns:
         bool: True on success, False on error
@@ -580,9 +611,10 @@ def update_player_height_weight(
             height = int(height) if height and str(height).strip() else None
             weight = int(weight) if weight and str(weight).strip() else None
             cursor = conn.execute(
-                """UPDATE players SET height = ?, weight = ?, updated_at = CURRENT_TIMESTAMP
+                """UPDATE players SET height = ?, weight = ?,
+                          updated_at = CURRENT_TIMESTAMP, updated_by = ?
                     WHERE id = ?""",
-                (height, weight, player_id),
+                (height, weight, updated_by, player_id),
             )
             conn.commit()
             if cursor.rowcount == 0:
@@ -604,12 +636,15 @@ def update_player_height_weight(
         return False
 
 
-def update_player_position_ratings(player_id: int, ratings: list) -> bool:
+def update_player_position_ratings(
+    player_id: int, ratings: list, updated_by: Optional[int] = None
+) -> bool:
     """Save a player's position_ratings list.
 
     Args:
         player_id: ID of the player.
         ratings: List of {"pos": str, "fit": str} dicts.
+        updated_by: ID of the user making the change (optional).
 
     Returns:
         bool: True on success, False if the player was not found or on error.
@@ -617,9 +652,10 @@ def update_player_position_ratings(player_id: int, ratings: list) -> bool:
     try:
         with db_transaction("update_player_position_ratings") as conn:
             cursor = conn.execute(
-                """UPDATE players SET position_ratings = ?, updated_at = CURRENT_TIMESTAMP
+                """UPDATE players SET position_ratings = ?,
+                          updated_at = CURRENT_TIMESTAMP, updated_by = ?
                     WHERE id = ?""",
-                (json.dumps(ratings), player_id),
+                (json.dumps(ratings), updated_by, player_id),
             )
             conn.commit()
             if cursor.rowcount == 0:

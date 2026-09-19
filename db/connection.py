@@ -77,6 +77,9 @@ def init_db():
                   -- Who added this player. NULL for rows that predate the
                   -- column and for anything created outside the app.
                   created_by INTEGER REFERENCES users(id),
+                  -- Who made the change updated_at records. Starts as the
+                  -- creator; NULL where nobody is on record.
+                  updated_by INTEGER REFERENCES users(id),
                   -- 0 once a player is archived. Deleting a player who has
                   -- played would take them out of every past line-up too --
                   -- match_players only stores an id, so the name is gone with

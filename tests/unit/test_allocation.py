@@ -725,3 +725,15 @@ class TestKeepersSplit:
         for _ in range(self.RUNS):
             team1, _ = pick_balanced_split(squad, 2)
             assert len({1, 2} & {p["id"] for p in team1}) == 1
+
+    def test_legacy_goalkeeper_preferences_are_split_too(self):
+        squad = [
+            {**make_player(1, 100), "position_pref": "Goalkeeper"},
+            {**make_player(2, 100), "position_pref": "Goalkeeper"},
+            make_player(3, 150),
+            make_player(4, 50),
+        ]
+
+        for _ in range(self.RUNS):
+            team1, _ = pick_balanced_split(squad, 2)
+            assert len({1, 2} & {p["id"] for p in team1}) == 1

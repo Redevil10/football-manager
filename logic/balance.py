@@ -129,8 +129,10 @@ def keeper_indices(players):
     """Which players to keep on opposite sides, so each has someone in goal.
 
     The natural keepers when there are at least two of them -- a competent one
-    is no substitute for a natural on the other side. Otherwise everyone rated
-    in goal at all.
+    is no substitute for a natural on the other side. Otherwise everyone who
+    goes in goal at all: rated there, or -- for players entered before position
+    ratings -- with Goalkeeper as their broad preferred position, which
+    allocation also falls back to when it picks the keeper.
 
     Returns:
         set: Indices into ``players``
@@ -139,7 +141,11 @@ def keeper_indices(players):
     natural = {i for i, fit in enumerate(fits) if fit == "natural"}
     if len(natural) >= 2:
         return natural
-    return {i for i, fit in enumerate(fits) if fit}
+    return {
+        i
+        for i, (player, fit) in enumerate(zip(players, fits))
+        if fit or player.get("position_pref") == "Goalkeeper"
+    }
 
 
 def pick_balanced_split(players, size1, weights=None):

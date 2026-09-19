@@ -209,3 +209,85 @@ class TestRenderAddPlayerForm:
         result = render_add_player_form(error)
 
         assert result is not None
+
+
+class TestViewerSeesPositionRatings:
+    """Someone who can only view a player still sees their position ratings."""
+
+    @staticmethod
+    def _player(ratings):
+        from logic.scoring import set_overall_score
+
+        attrs = set_overall_score(100)
+        return {
+            "id": 7,
+            "name": "Viewer Target",
+            "club_id": 1,
+            "technical_attrs": attrs["technical"],
+            "mental_attrs": attrs["mental"],
+            "physical_attrs": attrs["physical"],
+            "gk_attrs": attrs["gk"],
+            "position_ratings": ratings,
+        }
+
+    def test_ratings_show_on_the_read_only_page(self):
+        player = self._player(
+            [{"pos": "CB", "fit": "natural"}, {"pos": "LB", "fit": "competent"}]
+        )
+        html = to_xml(render_player_detail_form(player, None))
+
+        assert "Position Ratings" in html
+        assert "CB – Center Back" in html
+        assert "Competent" in html
+        # Dark text: white on the green and amber fails contrast
+        assert "color:#fff" not in html
+        # No card of its own inside the viewer's card
+        assert html.count("container-white") == 1
+
+    def test_nothing_shows_without_ratings(self):
+        html = to_xml(render_player_detail_form(self._player([]), None))
+        assert "Position Ratings" not in html
+
+
+class TestPlayerListColumns:
+    """The squad list: positions, and who added and last changed each player."""
+
+    PLAYER = {
+        "id": 3,
+        "name": "Ken Xie",
+        "alias": "KX",
+        "technical_attrs": {"passing": 10},
+        "mental_attrs": {"vision": 10},
+        "physical_attrs": {"pace": 10},
+        "gk_attrs": {"handling": 10},
+        "position_ratings": [
+            {"pos": "CB", "fit": "natural"},
+            {"pos": "LB", "fit": "competent"},
+            {"pos": "CDM", "fit": "natural"},
+        ],
+        "created_at": "2026-08-14 10:00:00",
+        "created_by_username": "Redevil",
+        "updated_at": "2026-09-19 18:00:00",
+        "updated_by_username": "JerryW",
+    }
+
+    def test_lists_natural_positions_only(self):
+        html = to_xml(render_player_table([self.PLAYER]))
+        assert "<th>Positions</th>" in html
+        assert "CB, CDM" in html
+        assert "LB" not in html
+
+    def test_positions_are_searchable(self):
+        html = to_xml(render_player_table([self.PLAYER], searchable=True))
+        assert 'data-search="ken xie kx cb cdm"' in html
+
+    def test_who_sits_beside_when(self):
+        html = to_xml(render_player_table([self.PLAYER]))
+        assert "2026-08-14 · Redevil" in html
+        assert "2026-09-19 · JerryW" in html
+        assert "Added by" not in html
+
+    def test_unknown_updater_shows_just_the_date(self):
+        player = {**self.PLAYER, "updated_by_username": None}
+        html = to_xml(render_player_table([player]))
+        assert "2026-09-19<" in html

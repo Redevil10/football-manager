@@ -72,6 +72,12 @@ def _date_only(timestamp):
     return str(timestamp).split(" ")[0]
 
 
+def _stamp(timestamp, username):
+    """A date and, when known, who: "2026-08-14 · Redevil"."""
+    date = _date_only(timestamp)
+    return f"{date} · {username}" if username else date
+
+
 def render_player_table(players, match_id=None, searchable=False):
     """Render player list as table.
 
@@ -93,11 +99,17 @@ def render_player_table(players, match_id=None, searchable=False):
             view_href += f"?back=/match/{match_id}"
 
         aliases = split_aliases(p.get("alias"))
+        natural = [
+            r["pos"]
+            for r in p.get("position_ratings") or []
+            if r.get("fit") == "natural"
+        ]
 
         row = Tr(
-            # Name and aliases both go in the filter key: people search for
-            # whichever name they know someone by.
-            **{"data-search": " ".join([p["name"], *aliases]).casefold()},
+            # Name and aliases go in the filter key -- people search for
+            # whichever name they know someone by -- and so do the natural
+            # positions, so "cb" finds the centre backs.
+            **{"data-search": " ".join([p["name"], *aliases, *natural]).casefold()},
         )(
             Td(A(p["name"], href=view_href)),
             Td(
@@ -105,9 +117,18 @@ def render_player_table(players, match_id=None, searchable=False):
                 style="color: var(--muted);",
             ),
             Td(str(overall), style="font-weight: bold; color: var(--navy);"),
-            Td(p.get("created_by_username") or "—", style="color: var(--muted);"),
-            Td(_date_only(p.get("created_at")), style="color: var(--muted);"),
-            Td(_date_only(p.get("updated_at")), style="color: var(--muted);"),
+            Td(", ".join(natural) if natural else "—"),
+            # Who goes beside when rather than in columns of their own: most
+            # rows were added and last edited by the same person, and four
+            # columns spelt that out twice.
+            Td(
+                _stamp(p.get("created_at"), p.get("created_by_username")),
+                style="color: var(--muted);",
+            ),
+            Td(
+                _stamp(p.get("updated_at"), p.get("updated_by_username")),
+                style="color: var(--muted);",
+            ),
         )
         rows.append(row)
 
@@ -119,7 +140,7 @@ def render_player_table(players, match_id=None, searchable=False):
                 Th("Name"),
                 Th("Also known as"),
                 Th("Overall"),
-                Th("Added by"),
+                Th("Positions"),
                 Th("Added"),
                 Th("Updated"),
             )
@@ -135,7 +156,7 @@ def render_player_table(players, match_id=None, searchable=False):
             Input(
                 type="search",
                 id="player-search",
-                placeholder="Search players",
+                placeholder="Search name or position",
                 aria_label="Search players",
                 autocomplete="off",
             ),
@@ -239,6 +260,7 @@ def render_player_detail_form(player, user=None, back=None):
             P(
                 f"Technical: {tech_score} | Mental: {mental_score} | Physical: {phys_score} | GK: {gk_score}"
             ),
+            render_position_ratings_section(player, can_edit=False),
             P(
                 "(Viewer - Edit/Delete not available)",
                 style="color: #666; font-style: italic; margin-top: 20px;",
@@ -707,7 +729,7 @@ def render_position_ratings_section(player, can_edit, back=None, status=None):
             _FIT_LABELS.get(fit, fit),
             style=(
                 f"display:inline-block; padding:2px 8px; border-radius:10px;"
-                f" font-size:11px; font-weight:bold; color:#fff;"
+                f" font-size:11px; font-weight:bold; color:var(--ink);"
                 f" background:{_FIT_COLORS.get(fit, '#888')};"
                 f" margin-left:6px;"
             ),
@@ -726,7 +748,8 @@ def render_position_ratings_section(player, can_edit, back=None, status=None):
             )
             for r in existing
         ]
-        return Div(cls="container-white")(
+        # Inside the viewer's card, like the editor is inside the manager's
+        return Div(style="margin-top: 20px;")(
             H3("Position Ratings"),
             Div(style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;")(
                 *badges

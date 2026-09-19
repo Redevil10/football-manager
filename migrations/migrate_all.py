@@ -33,6 +33,32 @@ def add_position_ratings_column(conn):
     return True
 
 
+def add_player_updated_by_column(conn):
+    """Add players.updated_by, who made the change updated_at records.
+
+    Nobody recorded who edited a player before this, so only one case can be
+    filled in honestly: a player never edited since being added, where
+    updated_at still equals created_at and the last change was the creation.
+    Everyone else stays NULL -- unknown -- until their next edit.
+
+    Safe to re-run: the column is only added, and backfilled, when missing.
+
+    Returns:
+        bool: True if the column was added, False if it was already there
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(players)")}
+    if "updated_by" in columns:
+        return False
+
+    conn.execute(
+        "ALTER TABLE players ADD COLUMN updated_by INTEGER REFERENCES users(id)"
+    )
+    conn.execute(
+        "UPDATE players SET updated_by = created_by WHERE updated_at = created_at"
+    )
+    return True
+
+
 def migrate_all():
     """Run all migrations in the correct order
 
@@ -47,6 +73,13 @@ def migrate_all():
             "Added players.position_ratings for tactical position preferences."
             if add_position_ratings_column(conn)
             else "players.position_ratings already present."
+        )
+
+        all_messages.append(
+            "Added players.updated_by; players never edited since being added "
+            "are credited to whoever added them."
+            if add_player_updated_by_column(conn)
+            else "players.updated_by already present."
         )
 
         conn.commit()

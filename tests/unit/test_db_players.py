@@ -624,3 +624,94 @@ def _stamp(player_id):
         ).fetchone()[0]
     finally:
         conn.close()
+
+
+class TestUpdatedBy:
+    """Who made the change updated_at records."""
+
+    @staticmethod
+    def _user(name):
+        from db.users import create_user
+
+        return create_user(name, "hash", "salt")
+
+    @staticmethod
+    def _player(player_id):
+        return next(p for p in get_all_players() if p["id"] == player_id)
+
+    def test_the_creator_is_the_first_updater(self, temp_db):
+        adder = self._user("adder")
+        player_id = add_player("KEN-XIE", create_club("Test Club"), created_by=adder)
+
+        player = self._player(player_id)
+        assert player["updated_by"] == adder
+        assert player["updated_by_username"] == "adder"
+
+    def test_every_kind_of_edit_records_who_made_it(self, temp_db):
+        from db.players import (
+            add_player_alias,
+            set_player_active,
+            update_player_attrs,
+            update_player_height_weight,
+            update_player_position_ratings,
+        )
+
+        club = create_club("Test Club")
+        player_id = add_player("KEN-XIE", club, created_by=self._user("adder"))
+        attrs = self._player(player_id)
+
+        edits = {
+            "name": lambda by: update_player_name(player_id, "KEN", updated_by=by),
+            "height": lambda by: update_player_height_weight(
+                player_id, 180, 75, updated_by=by
+            ),
+            "attrs": lambda by: update_player_attrs(
+                player_id,
+                attrs["technical_attrs"],
+                attrs["mental_attrs"],
+                attrs["physical_attrs"],
+                attrs["gk_attrs"],
+                updated_by=by,
+            ),
+            "ratings": lambda by: update_player_position_ratings(
+                player_id, [{"pos": "CB", "fit": "natural"}], updated_by=by
+            ),
+            "alias": lambda by: add_player_alias(player_id, "Kenny", updated_by=by),
+            "archive": lambda by: set_player_active(player_id, False, updated_by=by),
+        }
+        for kind, edit in edits.items():
+            editor = self._user(f"editor-{kind}")
+            assert edit(editor), kind
+            row = next(
+                p
+                for p in get_all_players(include_archived=True)
+                if p["id"] == player_id
+            )
+            assert row["updated_by"] == editor, kind
+
+
+class TestUpdatedByMigration:
+    """Existing databases gain the column, filled in only where it is known."""
+
+    def test_only_never_edited_players_are_credited(self):
+        import sqlite3
+
+        from migrations.migrate_all import add_player_updated_by_column
+
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(
+            """
+            CREATE TABLE players (
+                id INTEGER PRIMARY KEY, name TEXT, created_by INTEGER,
+                created_at TIMESTAMP, updated_at TIMESTAMP);
+            INSERT INTO players VALUES
+                (1, 'Untouched', 7, '2026-01-01 10:00:00', '2026-01-01 10:00:00'),
+                (2, 'Edited',    7, '2026-01-01 10:00:00', '2026-03-01 09:00:00');
+            """
+        )
+
+        assert add_player_updated_by_column(conn) is True
+        assert add_player_updated_by_column(conn) is False
+
+        updated_by = dict(conn.execute("SELECT name, updated_by FROM players"))
+        assert updated_by == {"Untouched": 7, "Edited": None}
