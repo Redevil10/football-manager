@@ -168,3 +168,53 @@ def test_apply_keeps_the_overall_score_and_moves_the_categories(client, world): 
     assert resp.status_code == 303
     assert calculate_overall_score(after) == calculate_overall_score(before)
     assert calculate_gk_score(after) < calculate_gk_score(before)
+
+
+def _player_named(name):
+    from db import get_all_players
+
+    return next((p for p in get_all_players() if p["name"] == name), None)
+
+
+@pytest.mark.unit
+def test_a_new_players_main_position_is_saved_as_natural(client, world):  # noqa: F811
+    resp = client.post(
+        "/add_player",
+        data={"name": "Fresh Face", "main_position": "LW", "score_overall": "110"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert _player_named("Fresh Face")["position_ratings"] == [
+        {"pos": "LW", "fit": "natural"}
+    ]
+
+
+@pytest.mark.unit
+def test_a_new_player_without_a_main_position_has_no_ratings(client, world):  # noqa: F811
+    client.post("/add_player", data={"name": "No Position"}, follow_redirects=False)
+
+    assert _player_named("No Position")["position_ratings"] == []
+
+
+@pytest.mark.unit
+def test_an_unknown_main_position_is_refused(client, world):  # noqa: F811
+    client.post(
+        "/add_player",
+        data={"name": "Made Up", "main_position": "Sweeper-Keeper"},
+        follow_redirects=False,
+    )
+
+    assert _player_named("Made Up") is None
+
+
+@pytest.mark.unit
+def test_the_add_form_asks_for_a_main_position():
+    from fasthtml.common import to_xml
+
+    from render.players import render_add_player_form
+
+    html = to_xml(render_add_player_form())
+    assert 'name="main_position"' in html
+    assert 'value="CB"' in html
+    assert "position_pref" not in html

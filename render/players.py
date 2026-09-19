@@ -288,61 +288,71 @@ def render_player_detail_form(player, user=None, back=None):
                 method="post",
                 action=f"/update_player_name/{player['id']}",
             ),
-            # Height and Weight form
-            Form(
-                render_csrf_input(),
-                back_input(),
-                Div(
-                    cls="input-group",
-                    style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;",
-                )(
-                    Label("Height (cm): ", style="font-weight: bold;"),
-                    Input(
-                        type="number",
-                        name="height",
-                        value=str(player.get("height", "") or ""),
-                        min="100",
-                        max="250",
-                        style="width: 100px;",
+            # Overall score and height/weight share a line. The score is set
+            # nearly every time, so it comes first; height and weight are rarely
+            # touched. Still two forms -- they post to different routes -- side
+            # by side, and wrapping onto separate lines on a phone.
+            Div(
+                style="display: flex; flex-wrap: wrap; align-items: center; "
+                "gap: 12px 40px; margin-bottom: 20px;"
+            )(
+                Form(
+                    render_csrf_input(),
+                    back_input(),
+                    Div(
+                        style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;"
+                    )(
+                        Label(
+                            f"Overall Score ({SCORE_RANGES['overall'][0]}-{SCORE_RANGES['overall'][1]}): ",
+                            style="font-weight: bold;",
+                        ),
+                        Input(
+                            type="number",
+                            name="score_overall",
+                            value=str(round(overall)),
+                            min=str(SCORE_RANGES["overall"][0]),
+                            max=str(SCORE_RANGES["overall"][1]),
+                            style="width: 100px;",
+                            required=True,
+                        ),
+                        Button(
+                            "Update Overall Score", type="submit", cls="btn-success"
+                        ),
                     ),
-                    Label(
-                        "Weight (kg): ", style="font-weight: bold; margin-left: 15px;"
-                    ),
-                    Input(
-                        type="number",
-                        name="weight",
-                        value=str(player.get("weight", "") or ""),
-                        min="30",
-                        max="200",
-                        style="width: 100px;",
-                    ),
-                    Button("Update Height/Weight", type="submit", cls="btn-success"),
+                    method="post",
+                    action=f"/update_player_scores/{player['id']}",
                 ),
-                method="post",
-                action=f"/update_player_height_weight/{player['id']}",
-            ),
-            # Overall Score form
-            Form(
-                render_csrf_input(),
-                back_input(),
-                Div(cls="input-group", style="margin-bottom: 20px;")(
-                    Label(
-                        f"Overall Score ({SCORE_RANGES['overall'][0]}-{SCORE_RANGES['overall'][1]}): ",
-                        style="margin-right: 10px; font-weight: bold;",
+                Form(
+                    render_csrf_input(),
+                    back_input(),
+                    Div(
+                        style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;"
+                    )(
+                        Label("Height (cm): ", style="font-weight: bold;"),
+                        Input(
+                            type="number",
+                            name="height",
+                            value=str(player.get("height", "") or ""),
+                            min="100",
+                            max="250",
+                            style="width: 80px;",
+                        ),
+                        Label("Weight (kg): ", style="font-weight: bold;"),
+                        Input(
+                            type="number",
+                            name="weight",
+                            value=str(player.get("weight", "") or ""),
+                            min="30",
+                            max="200",
+                            style="width: 80px;",
+                        ),
+                        Button(
+                            "Update Height/Weight", type="submit", cls="btn-success"
+                        ),
                     ),
-                    Input(
-                        type="number",
-                        name="score_overall",
-                        value=str(round(overall)),
-                        min=str(SCORE_RANGES["overall"][0]),
-                        max=str(SCORE_RANGES["overall"][1]),
-                        style="width: 100px; margin-right: 10px;",
-                        required=True,
-                    ),
-                    Button("Update Overall Score", type="submit", cls="btn-success"),
+                    method="post",
+                    action=f"/update_player_height_weight/{player['id']}",
                 ),
-                method="post",
-                action=f"/update_player_scores/{player['id']}",
             ),
             # Near the top rather than after the attributes: it is edited far
             # more often than thirty individual numbers, and the Apply button
@@ -571,35 +581,40 @@ def render_add_player_form(error=None, values=None):
                     ),
                     "Separate several with a semicolon.",
                 ),
+                # One position, saved as a natural rating. It used to be a
+                # broad preferred position, which nothing after this form
+                # could show or change; more ratings belong on the player page.
                 field(
-                    "Preferred position:",
-                    Select(name="position_pref", style="width: 100%;")(
+                    "Main position:",
+                    Select(name="main_position", style="width: 100%;")(
+                        Option(
+                            "Not set",
+                            value="",
+                            selected=not values.get("main_position"),
+                        ),
                         *[
                             Option(
                                 label,
                                 value=value,
-                                selected=values.get("position_pref", "") == value,
+                                selected=values.get("main_position") == value,
                             )
-                            for label, value in (
-                                ("No preference", ""),
-                                ("Goalkeeper", "Goalkeeper"),
-                                ("Defender", "Defender"),
-                                ("Midfielder", "Midfielder"),
-                                ("Forward", "Forward"),
-                            )
-                        ]
+                            for value, label in ALL_TACTICAL_POSITIONS
+                        ],
                     ),
+                    "Saved as natural. Add more positions on the next screen.",
                 ),
             ),
             Hr(),
+            # Overall first, as on the player page: it is the one nearly always
+            # set, and height and weight rarely are.
             Div(cls="form-grid")(
-                field("Height (cm):", number("height", 100, 250)),
-                field("Weight (kg):", number("weight", 30, 200)),
                 field(
                     "Overall score:",
                     number("score_overall", overall_low, overall_high, 100),
                     f"{overall_low}-{overall_high}. Sets the starting attributes.",
                 ),
+                field("Height (cm):", number("height", 100, 250)),
+                field("Weight (kg):", number("weight", 30, 200)),
             ),
             Div(cls="btn-group", style="margin-top: 10px;")(
                 Button("Add Player", type="submit", cls="btn-success"),

@@ -306,7 +306,7 @@ async def route_add_player(req: Request, sess=None):
         form = await req.form()
         name = form.get("name", "").strip()
         alias = form.get("alias", "").strip()
-        position_pref = form.get("position_pref", "").strip()
+        main_position = form.get("main_position", "").strip()
 
         def whole_number(field):
             """A blank box means "not known", which is not the same as 0."""
@@ -326,6 +326,8 @@ async def route_add_player(req: Request, sess=None):
         is_valid, error_msg = validate_non_empty_string(name, "Player name")
         if not is_valid:
             raise ValidationError("name", error_msg)
+        if main_position and main_position not in _VALID_POSITIONS:
+            raise ValidationError("main_position", "Unknown position")
 
         # Scoped to the club being added to. Searching every club and then
         # comparing club_id afterwards looked equivalent but was not: the
@@ -346,7 +348,6 @@ async def route_add_player(req: Request, sess=None):
             player_id = add_player(
                 name,
                 club_id=target_club_id,
-                position_pref=position_pref,
                 alias=alias or None,
                 created_by=user["id"],
             )
@@ -355,13 +356,16 @@ async def route_add_player(req: Request, sess=None):
                 name,
                 club_id=target_club_id,
                 overall_score=overall,
-                position_pref=position_pref,
                 alias=alias or None,
                 created_by=user["id"],
             )
 
         if player_id and (height is not None or weight is not None):
             update_player_height_weight(player_id, height=height, weight=weight)
+        if player_id and main_position:
+            update_player_position_ratings(
+                player_id, [{"pos": main_position, "fit": "natural"}]
+            )
         # Land on the new player so their details can be filled in straight
         # away, which is the point of having come here to add them.
         return handle_db_result(
