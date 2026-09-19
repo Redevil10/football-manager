@@ -160,14 +160,31 @@ FIT_TIERS = [
     ("competent", "Competent"),
 ]
 
+# Most position ratings one player can hold -- the rows on the detail form.
+MAX_POSITION_RATINGS = 6
+
 # Tier weights for attribute profile blending
 FIT_TIER_WEIGHTS = {"natural": 1.0, "competent": 0.5}
+
+# Profile groups close enough to count as the same role when matching players
+# to slots: a natural winger is natural on the wing of a midfield four too. They
+# stay separate groups because their attribute profiles differ.
+ADJACENT_POSITION_GROUPS = {
+    "W": {"WM"},
+    "WM": {"W"},
+    "CDM": {"CM"},
+    "CM": {"CDM"},
+}
 
 # Tier scores for allocation preference matching
 FIT_TIER_SCORES = {"natural": 4, "competent": 2}
 
 # Broad position_pref fallback score during allocation
 POSITION_PREF_FALLBACK_SCORE = 1
+
+# The position tables from here to `fmt: on` are laid out as grids to be read,
+# not one entry a line, so the formatter is kept off them.
+# fmt: off
 
 # Tactical position → profile group key
 TACTICAL_POS_TO_GROUP = {
@@ -405,6 +422,27 @@ POSITION_PROFILES = {
         },
     },
 }
+
+# How each position weighs the four categories against one another. Applying a
+# profile keeps the overall score and moves the category averages in
+# proportion to these, then shapes each category with the profile above: a
+# centre back trades goalkeeping for physique, a keeper the reverse.
+#
+# A table of its own because the profiles cannot answer this -- they are only
+# comparable within a category, and technical's many rarely-used attributes
+# would drag its average down for every position, strikers included.
+POSITION_CATEGORY_EMPHASIS = {
+    "GK":  {"technical": 0.6, "mental": 1.0, "physical": 1.0, "gk": 1.8},
+    "CB":  {"technical": 0.9, "mental": 1.0, "physical": 1.2, "gk": 0.3},
+    "FB":  {"technical": 1.0, "mental": 1.0, "physical": 1.2, "gk": 0.3},
+    "CDM": {"technical": 1.0, "mental": 1.1, "physical": 1.1, "gk": 0.3},
+    "CM":  {"technical": 1.1, "mental": 1.1, "physical": 1.0, "gk": 0.3},
+    "WM":  {"technical": 1.1, "mental": 1.0, "physical": 1.1, "gk": 0.3},
+    "W":   {"technical": 1.2, "mental": 1.0, "physical": 1.1, "gk": 0.3},
+    "ST":  {"technical": 1.2, "mental": 1.0, "physical": 1.1, "gk": 0.3},
+}
+
+# fmt: on
 
 # User role constants
 USER_ROLES = {

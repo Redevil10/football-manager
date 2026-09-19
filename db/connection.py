@@ -84,6 +84,10 @@ def init_db():
                   -- drop out of the squad, the signup lookup and allocation,
                   -- and stay in the matches they played.
                   active INTEGER NOT NULL DEFAULT 1,
+                  -- JSON array of {pos, fit} objects, e.g.
+                  -- [{"pos": "CB", "fit": "natural"}]. Empty means no
+                  -- preference set; allocation falls back to position_pref.
+                  position_ratings TEXT DEFAULT '[]',
                   FOREIGN KEY (club_id) REFERENCES clubs(id),
                   UNIQUE(name, club_id))"""
     )

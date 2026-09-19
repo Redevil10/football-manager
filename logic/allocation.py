@@ -28,7 +28,7 @@ from logic.balance import (
     pick_balanced_split,
     select_starters,
 )
-from logic.scoring import calculate_overall_score
+from logic.scoring import calculate_overall_score, position_fit
 
 
 def build_teammate_weights(match_id, match):
@@ -288,9 +288,9 @@ def _position_fit_score(player, tactical_pos):
     if not group:
         return 0
 
-    for rating in player.get("position_ratings") or []:
-        if TACTICAL_POS_TO_GROUP.get(rating.get("pos")) == group:
-            return FIT_TIER_SCORES.get(rating.get("fit"), 0)
+    fit = position_fit(player, tactical_pos)
+    if fit:
+        return FIT_TIER_SCORES[fit]
 
     pref = player.get("position_pref", "")
     if pref and group in BROAD_PREF_TO_GROUPS.get(pref, set()):
@@ -303,8 +303,10 @@ def _assign_by_preference(players, position_tactical_pairs):
     """Match players to position slots using their position preferences.
 
     Uses a greedy algorithm: score every (player, slot) pair, then greedily
-    assign the highest-scoring pairs first. Players and slots with no preference
-    signal are filled randomly afterwards.
+    assign the highest-scoring pairs first. Among pairs that score the same, the
+    player with fewer slots they fit that well goes first, so someone who can
+    play anywhere leaves a specialist the one slot they fit. Players and slots
+    with no preference signal are filled randomly afterwards.
 
     Returns a list of (player, (position, tactical_position)) in slot order.
     """
@@ -314,15 +316,19 @@ def _assign_by_preference(players, position_tactical_pairs):
     # Build and sort all preference pairs (score > 0 only)
     scored = []
     for p in players:
-        for idx, pos_pair in enumerate(position_tactical_pairs):
-            score = _position_fit_score(p, pos_pair[1])
+        scores = [
+            _position_fit_score(p, tactical) for _, tactical in position_tactical_pairs
+        ]
+        for idx, score in enumerate(scores):
             if score > 0:
-                scored.append((score, p, idx))
-    scored.sort(key=lambda x: -x[0])
+                options = sum(1 for other in scores if other >= score)
+                scored.append((score, options, p, idx))
+    # Stable, so pairs tied on both keep the shuffled squad order
+    scored.sort(key=lambda x: (-x[0], x[1]))
 
     used_players = set()
     used_slots = set()
-    for score, player, slot_idx in scored:
+    for _, _, player, slot_idx in scored:
         pid = player["id"]
         if pid in used_players or slot_idx in used_slots:
             continue

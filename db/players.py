@@ -64,7 +64,11 @@ def parse_player_attributes(player_row: dict) -> dict:
     player_dict["mental_attrs"] = json.loads(player_row["mental_attrs"] or "{}")
     player_dict["physical_attrs"] = json.loads(player_row["physical_attrs"] or "{}")
     player_dict["gk_attrs"] = json.loads(player_row["gk_attrs"] or "{}")
-    raw_ratings = player_row["position_ratings"] if "position_ratings" in player_row.keys() else None
+    raw_ratings = (
+        player_row["position_ratings"]
+        if "position_ratings" in player_row.keys()
+        else None
+    )
     player_dict["position_ratings"] = json.loads(raw_ratings or "[]")
     return player_dict
 

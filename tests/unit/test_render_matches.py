@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from fasthtml.common import to_xml
 
+from render.interactive_pitch import render_interactive_pitch
 from render.matches import (
     render_all_matches,
     render_captain_selection,
@@ -329,6 +330,105 @@ class TestRenderTeamLineupTable:
         html = to_xml(render_team_lineup_table(starters, "Team A", "#0066cc"))
 
         assert "SUBSTITUTES" not in html
+
+
+class TestPositionFitDisplay:
+    """Each starter is marked natural/competent/unfamiliar for the slot they
+    were given. Like per-player scores, never shown on the public view."""
+
+    LINEUP = [
+        {
+            "id": 1,
+            "player_id": 7,
+            "name": "Keeper",
+            "position": "Goalkeeper",
+            "tactical_position": "GK",
+            "is_starter": 1,
+            "position_ratings": [{"pos": "GK", "fit": "natural"}],
+        },
+        {
+            "id": 2,
+            "player_id": 8,
+            "name": "Back",
+            "position": "Defender",
+            "tactical_position": "LB",
+            "is_starter": 1,
+            "position_ratings": [{"pos": "RB", "fit": "competent"}],
+        },
+        {
+            "id": 3,
+            "player_id": 9,
+            "name": "Striker",
+            "position": "Forward",
+            "tactical_position": "LST",
+            "is_starter": 1,
+            "position_ratings": [],
+        },
+        # On the bench, but still carrying the slot from an earlier allocation
+        {
+            "id": 4,
+            "player_id": 10,
+            "name": "Bench",
+            "position": "Midfielder",
+            "tactical_position": "LM",
+            "is_starter": 0,
+            "position_ratings": [{"pos": "LM", "fit": "natural"}],
+        },
+    ]
+
+    @patch("render.matches.calculate_overall_score")
+    def test_table_marks_starters_and_counts_them(self, mock_score):
+        mock_score.return_value = 50
+        html = to_xml(
+            render_team_lineup_table(self.LINEUP, "Team A", "#0066cc", show_scores=True)
+        )
+
+        assert 'title="GK · Natural"' in html
+        assert 'title="LB · Competent"' in html
+        assert 'title="LST · Unfamiliar"' in html
+        assert "LM · " not in html
+        assert "1 natural" in html
+        assert "1 competent" in html
+        assert "1 unfamiliar" in html
+
+    @patch("render.matches.calculate_overall_score")
+    def test_table_hides_fit_on_the_public_view(self, mock_score):
+        mock_score.return_value = 50
+        html = to_xml(
+            render_team_lineup_table(
+                self.LINEUP, "Team A", "#0066cc", show_scores=True, read_only=True
+            )
+        )
+
+        assert "fit-" not in html
+
+    def test_pitch_marks_each_slot(self):
+        team = {"id": 1, "team_name": "A"}
+        html = to_xml(
+            render_interactive_pitch(1, team, team, self.LINEUP, [], show_fit=True)
+        )
+
+        assert html.count('class="fit-mark') == 3
+        assert "fit-mark fit-natural" in html
+        assert "fit-mark fit-competent" in html
+        assert "fit-mark fit-unfamiliar" in html
+
+    def test_pitch_leaves_fit_off_by_default(self):
+        team = {"id": 1, "team_name": "A"}
+        html = to_xml(render_interactive_pitch(1, team, team, self.LINEUP, []))
+
+        assert "fit-mark" not in html
+
+    @patch("render.matches.calculate_overall_score")
+    def test_match_teams_hides_fit_when_read_only(self, mock_score):
+        mock_score.return_value = 50
+        teams = [{"id": 1, "team_name": "A"}]
+
+        shown = to_xml(render_match_teams(1, teams, {1: self.LINEUP}))
+        hidden = to_xml(render_match_teams(1, teams, {1: self.LINEUP}, read_only=True))
+
+        assert "fit-mark" in shown
+        assert "fit-" not in hidden
 
 
 class TestRenderCaptainSelection:

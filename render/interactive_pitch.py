@@ -5,6 +5,8 @@ Each team gets their own separate pitch in a 4-4-2 formation.
 
 from fasthtml.common import H3, Div, NotStr
 
+from logic.scoring import position_fit
+
 # Positions as (along%, across%) of the pitch, in pitch terms rather than
 # screen terms:
 #   along  -- 0 = own goal line, 100 = halfway line
@@ -183,6 +185,7 @@ def render_single_team_pitch(
     width: int = 390,
     height: int = 300,
     flip: bool = False,
+    show_fit: bool = False,
 ) -> Div:
     """
     Render a single team's half pitch with their formation.
@@ -204,6 +207,7 @@ def render_single_team_pitch(
         height: Half-pitch length in SVG units, goal line to halfway (default 300)
         flip: Turn the half around so this side defends the top edge, letting
             the two teams' halves join into one pitch
+        show_fit: Mark each player with how well they suit their slot
 
     Returns:
         Div with single team pitch
@@ -251,6 +255,7 @@ def render_single_team_pitch(
             team_id,
             match_id,
             is_completed,
+            fit=position_fit(player_in_slot, pos_code) if show_fit else False,
         )
         position_slots.append(slot_html)
 
@@ -377,6 +382,7 @@ def render_interactive_pitch(
     is_completed: bool = False,
     width: int = 390,
     height: int = 300,
+    show_fit: bool = False,
 ) -> Div:
     """
     Render interactive pitches for both teams side by side.
@@ -392,6 +398,7 @@ def render_interactive_pitch(
         is_completed: Whether match is completed (disables drag-drop)
         width: Pitch width in pixels (length of pitch, default 600px)
         height: Pitch height in pixels (width of pitch, default 390px for realistic ratio)
+        show_fit: Mark each player with how well they suit their slot
 
     Returns:
         Div with both team pitches side by side
@@ -403,10 +410,23 @@ def render_interactive_pitch(
         # with the away half below, the two halfway lines meet and the pair
         # reads as one pitch with the sides facing each other.
         render_single_team_pitch(
-            match_id, home_team, home_players, is_completed, width, height, flip=True
+            match_id,
+            home_team,
+            home_players,
+            is_completed,
+            width,
+            height,
+            flip=True,
+            show_fit=show_fit,
         ),
         render_single_team_pitch(
-            match_id, away_team, away_players, is_completed, width, height
+            match_id,
+            away_team,
+            away_players,
+            is_completed,
+            width,
+            height,
+            show_fit=show_fit,
         ),
     )
 
@@ -420,9 +440,14 @@ def render_position_slot(
     team_id: int = None,
     match_id: int = None,
     is_completed: bool = False,
+    fit=False,
 ) -> str:
     """
     Render a position slot with optional player.
+
+    ``fit`` is the player's fit tier for this slot from position_fit() --
+    "natural", "competent" or None (unfamiliar) -- or False to leave the mark
+    off altogether.
 
     ``x`` and ``y`` are the position's along-the-pitch and across-the-pitch
     percentages. They go out as CSS custom properties rather than left/top:
@@ -509,16 +534,29 @@ def render_position_slot(
         # to the marker's edge.
         captain_badge = '<div class="captain-mark">C</div>' if is_captain else ""
 
+        # Inside the marker, under the name -- it fits within the circle, so
+        # the clipping that pushes the captain's mark outside does not reach it.
+        fit_badge = ""
+        fit_title = ""
+        marker_class = "position-slot-marker"
+        if fit is not False:
+            marker_class += " with-fit"
+            tier = fit or "unfamiliar"
+            fit_badge = f'<div class="fit-mark fit-{tier}"></div>'
+            fit_title = f'title="{pos_code} · {tier.capitalize()}"'
+
         return f'''
             <div class="position-slot {draggable_class}"
                  {draggable_attr}
                  data-player-id="{player_id}"
                  data-position="{pos_code}"
+                 {fit_title}
                  style="--along: {x}; --across: {y};
                         cursor: {"move" if not is_completed else "default"};">
-                <div class="position-slot-marker"
+                <div class="{marker_class}"
                      style="background: {team_color}; color: {text_color};">
                     {display_name}
+                    {fit_badge}
                 </div>
                 {captain_badge}
             </div>

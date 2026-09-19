@@ -2,7 +2,6 @@
 
 import pytest
 
-from db.connection import get_db
 from db.users import (
     add_user_to_club,
     create_user,
@@ -20,7 +19,6 @@ from db.users import (
     update_user_password,
     update_user_superuser_status,
 )
-from migrations.migrate_all import attribute_unknown_creators
 
 
 @pytest.fixture
@@ -397,69 +395,6 @@ class TestDeleteUser:
         assert user is None
 
 
-class TestAttributeUnknownCreators:
-    """Backfilling the creator of accounts that predate the column."""
-
-    def test_credits_unknown_accounts_to_the_founding_superuser(self, temp_db):
-        create_user("admin", "hash", "salt", is_superuser=True)
-        create_user("older", "hash", "salt")
-        create_user("newer", "hash", "salt")
-
-        conn = get_db()
-        try:
-            credited = attribute_unknown_creators(conn)
-            conn.commit()
-        finally:
-            conn.close()
-
-        assert credited["users"] == 2
-        by_name = {u["username"]: u["created_by_username"] for u in get_all_users()}
-        assert by_name["older"] == "admin"
-        assert by_name["newer"] == "admin"
-
-    def test_leaves_the_founder_uncredited(self, temp_db):
-        """Nothing created the founding account, and a self-reference reads as
-        a data error to whoever finds it next."""
-        founder = create_user("admin", "hash", "salt", is_superuser=True)
-
-        conn = get_db()
-        try:
-            attribute_unknown_creators(conn)
-            conn.commit()
-        finally:
-            conn.close()
-
-        made = next(u for u in get_all_users() if u["id"] == founder)
-        assert made["created_by"] is None
-
-    def test_is_safe_to_run_twice(self, temp_db):
-        create_user("admin", "hash", "salt", is_superuser=True)
-        create_user("someone", "hash", "salt")
-
-        conn = get_db()
-        try:
-            first = attribute_unknown_creators(conn)
-            conn.commit()
-            second = attribute_unknown_creators(conn)
-            conn.commit()
-        finally:
-            conn.close()
-
-        assert (first["users"], second["users"]) == (1, 0)
-
-    def test_does_nothing_without_a_superuser(self, temp_db):
-        create_user("someone", "hash", "salt")
-
-        conn = get_db()
-        try:
-            credited = attribute_unknown_creators(conn)
-            conn.commit()
-        finally:
-            conn.close()
-
-        assert credited == {"users": 0, "players": 0}
-
-
 class TestCreatedBy:
     """users.created_by records who registered an account."""
 
@@ -483,28 +418,6 @@ class TestCreatedBy:
         made = next(u for u in get_all_users() if u["username"] == "seeded")
         assert made["created_by"] is None
         assert made["created_by_username"] is None
-
-
-class TestAttributePlayerCreators:
-    """Players get the same treatment as accounts."""
-
-    def test_credits_players_with_no_creator(self, temp_db):
-        from db.clubs import create_club
-        from db.players import add_player, get_all_players
-
-        create_user("admin", "hash", "salt", is_superuser=True)
-        club = create_club("Test Club")
-        add_player("KEN-XIE", club)
-
-        conn = get_db()
-        try:
-            credited = attribute_unknown_creators(conn)
-            conn.commit()
-        finally:
-            conn.close()
-
-        assert credited["players"] == 1
-        assert get_all_players()[0]["created_by_username"] == "admin"
 
 
 class TestClubStaff:

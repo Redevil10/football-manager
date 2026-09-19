@@ -7,6 +7,8 @@ import pytest
 
 from core.config import ALLOCATION_BALANCE_TOLERANCE, CAPTAIN_MIN_SCORE_RATIO
 from logic.allocation import (
+    _assign_by_preference,
+    _position_fit_score,
     allocate_teams,
     assign_random_captain,
     build_teammate_weights,
@@ -575,3 +577,151 @@ class TestOddSquadsReachTheBestSplit:
 
         assert len(candidates) == len(set(candidates)) == 3
         assert all(0 in c for c in candidates)
+
+
+class TestPositionFitScore:
+    def test_best_rating_in_the_group_scores(self):
+        player = {
+            "position_ratings": [
+                {"pos": "LCB", "fit": "competent"},
+                {"pos": "RCB", "fit": "natural"},
+            ]
+        }
+        assert _position_fit_score(player, "LCB") == 4
+
+    def test_broad_preference_is_the_fallback(self):
+        player = {"position_ratings": [], "position_pref": "Defender"}
+        assert _position_fit_score(player, "LB") == 1
+        assert _position_fit_score(player, "LST") == 0
+
+
+class TestAssignByPreference:
+    def test_rated_players_get_their_slots(self):
+        keeper = {"id": 1, "position_ratings": [{"pos": "GK", "fit": "natural"}]}
+        striker = {"id": 2, "position_ratings": [{"pos": "CF", "fit": "natural"}]}
+        slots = [("Forward", "LST"), ("Goalkeeper", "GK")]
+
+        # Order of the squad must not matter
+        for squad in ([keeper, striker], [striker, keeper]):
+            assigned = {
+                player["id"]: tactical
+                for player, (_, tactical) in _assign_by_preference(squad, slots)
+            }
+            assert assigned == {1: "GK", 2: "LST"}
+
+    def test_a_specialist_is_not_crowded_out_by_an_all_rounder(self):
+        all_rounder = {
+            "id": 1,
+            "position_ratings": [
+                {"pos": "CB", "fit": "natural"},
+                {"pos": "CF", "fit": "natural"},
+            ],
+        }
+        centre_back = {"id": 2, "position_ratings": [{"pos": "CB", "fit": "natural"}]}
+        slots = [("Defender", "CB"), ("Forward", "CF")]
+
+        # Whoever comes first in the squad, the all-rounder steps aside
+        for squad in ([all_rounder, centre_back], [centre_back, all_rounder]):
+            assigned = {
+                player["id"]: tactical
+                for player, (_, tactical) in _assign_by_preference(squad, slots)
+            }
+            assert assigned == {1: "CF", 2: "CB"}
+
+    def test_a_better_fit_still_beats_a_specialist(self):
+        # Stepping aside only breaks ties: a natural keeps the slot over a
+        # competent player, however few other slots that player has.
+        natural = {
+            "id": 1,
+            "position_ratings": [
+                {"pos": "CB", "fit": "natural"},
+                {"pos": "CF", "fit": "natural"},
+            ],
+        }
+        competent = {"id": 2, "position_ratings": [{"pos": "CB", "fit": "competent"}]}
+        slots = [("Defender", "CB"), ("Defender", "LB")]
+
+        assigned = {
+            player["id"]: tactical
+            for player, (_, tactical) in _assign_by_preference(
+                [competent, natural], slots
+            )
+        }
+        assert assigned == {1: "CB", 2: "LB"}
+
+    def test_every_player_gets_a_slot_without_ratings(self):
+        squad = [{"id": i} for i in range(4)]
+        slots = [
+            ("Defender", "LB"),
+            ("Defender", "RB"),
+            ("Midfielder", "LM"),
+            ("Forward", "CF"),
+        ]
+
+        assigned = _assign_by_preference(squad, slots)
+
+        assert sorted(p["id"] for p, _ in assigned) == [0, 1, 2, 3]
+        assert sorted(t for _, (_, t) in assigned) == ["CF", "LB", "LM", "RB"]
+
+
+def make_keeper(player_id, overall, fit="natural"):
+    return {
+        **make_player(player_id, overall),
+        "position_ratings": [{"pos": "GK", "fit": fit}],
+    }
+
+
+class TestKeepersSplit:
+    """Players rated in goal end up on opposite sides."""
+
+    RUNS = 50
+
+    def test_keepers_split_even_when_together_would_balance_better(self):
+        # Keepers together is a perfect 200-200; apart, the best is 250-150
+        squad = [
+            make_keeper(1, 100),
+            make_keeper(2, 100),
+            make_player(3, 150),
+            make_player(4, 50),
+        ]
+
+        for _ in range(self.RUNS):
+            team1, team2 = pick_balanced_split(squad, 2)
+            assert {1, 2} - {p["id"] for p in team1}
+            assert {1, 2} - {p["id"] for p in team2}
+
+    def test_a_single_keeper_changes_nothing(self):
+        squad = [
+            make_keeper(1, 100),
+            make_player(2, 100),
+            make_player(3, 150),
+            make_player(4, 50),
+        ]
+
+        for _ in range(self.RUNS):
+            team1, _ = pick_balanced_split(squad, 2)
+            assert team_score(team1) == 200
+
+    def test_two_naturals_are_split_ahead_of_a_competent_keeper(self):
+        squad = [
+            make_keeper(1, 100),
+            make_keeper(2, 100),
+            make_keeper(3, 100, fit="competent"),
+            make_player(4, 100),
+        ]
+
+        for _ in range(self.RUNS):
+            team1, _ = pick_balanced_split(squad, 2)
+            assert len({1, 2} & {p["id"] for p in team1}) == 1
+
+    def test_a_natural_and_a_competent_keeper_are_split(self):
+        squad = [
+            make_keeper(1, 100),
+            make_keeper(2, 100, fit="competent"),
+            make_player(3, 150),
+            make_player(4, 50),
+        ]
+
+        for _ in range(self.RUNS):
+            team1, _ = pick_balanced_split(squad, 2)
+            assert len({1, 2} & {p["id"] for p in team1}) == 1

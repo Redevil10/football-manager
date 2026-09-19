@@ -2,7 +2,7 @@
 
 from fasthtml.common import *
 
-from logic.scoring import calculate_overall_score
+from logic.scoring import calculate_overall_score, position_fit
 from render.common import (
     confirm_delete_link,
     format_match_meta,
@@ -26,6 +26,47 @@ POSITION_ABBREVIATIONS = {
 
 # Line-ups read in the order a team sheet does, not alphabetically.
 POSITION_ORDER = {"Goalkeeper": 0, "Defender": 1, "Midfielder": 2, "Forward": 3}
+
+FIT_ORDER = ("natural", "competent", "unfamiliar")
+
+
+def starter_fit(player):
+    """A starter's fit tier for the slot they were given: natural, competent or
+    unfamiliar. None for a player with no slot on the pitch.
+
+    A substitute is checked for explicitly: allocation leaves the old
+    tactical_position on a player it moves to the bench.
+    """
+    tactical_pos = player.get("tactical_position")
+    if not player.get("is_starter", 1) or not tactical_pos:
+        return None
+    return position_fit(player, tactical_pos) or "unfamiliar"
+
+
+def render_fit_dot(tier, tactical_pos):
+    return Span(
+        cls=f"fit-dot fit-{tier}", title=f"{tactical_pos} · {tier.capitalize()}"
+    )
+
+
+def render_fit_summary(starters):
+    """How many starters play in a natural, competent or unfamiliar slot.
+
+    Doubles as the legend for the dots on the pitch and in the table.
+    """
+    counts = {tier: 0 for tier in FIT_ORDER}
+    for player in starters:
+        tier = starter_fit(player)
+        if tier:
+            counts[tier] += 1
+    if not any(counts.values()):
+        return ""
+    return Span(cls="fit-summary")(
+        *[
+            Span(Span(cls=f"fit-dot fit-{tier}"), f"{counts[tier]} {tier}")
+            for tier in FIT_ORDER
+        ]
+    )
 
 
 def get_position_abbreviation(position: str) -> str:
@@ -344,6 +385,7 @@ def render_team_lineup_table(
     ``show_scores`` covers the team total in the header. Individual ratings are
     withheld additionally when ``read_only`` is set, which is what the anonymous
     public view passes -- it may see the team total but never a player's rating.
+    Position fit is a judgement on the player too, so it follows the same rule.
     """
     show_player_scores = show_scores and not read_only
 
@@ -379,10 +421,15 @@ def render_team_lineup_table(
         else:
             name_cell = name
 
+        fit = starter_fit(player) if show_player_scores else None
         cells = [
             Td(str(number), cls="player-number"),
             Td(name_cell, cls="player-name"),
-            Td(get_position_abbreviation(player["position"]), cls="player-position"),
+            Td(
+                get_position_abbreviation(player["position"]),
+                render_fit_dot(fit, player["tactical_position"]) if fit else "",
+                cls="player-position",
+            ),
         ]
         if show_player_scores:
             cells.append(Td(f"{calculate_overall_score(player)}", cls="player-score"))
@@ -420,6 +467,7 @@ def render_team_lineup_table(
         Span(f" (Overall: {int(team_score)})", style="color: #666; font-size: 0.9em;")
         if show_scores
         else "",
+        render_fit_summary(starters) if show_player_scores else "",
     )
 
     return Div(
@@ -626,6 +674,8 @@ def render_match_teams(
             team2_players,
             # read_only reuses the completed-match path, which disables drag
             is_completed or read_only,
+            # Same rule as the per-player scores in the tables below
+            show_fit=show_scores and not read_only,
         )
     )
 

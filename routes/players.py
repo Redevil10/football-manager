@@ -6,7 +6,10 @@ from urllib.parse import quote
 from fasthtml.common import *
 
 from core.config import (
+    ALL_TACTICAL_POSITIONS,
+    FIT_TIERS,
     GK_ATTRS,
+    MAX_POSITION_RATINGS,
     MENTAL_ATTRS,
     PHYSICAL_ATTRS,
     TECHNICAL_ATTRS,
@@ -20,7 +23,6 @@ from core.exceptions import (
     ValidationError,
 )
 from core.validation import validate_non_empty_string
-from core.config import ALL_TACTICAL_POSITIONS, FIT_TIERS
 from db import (
     count_player_appearances,
     delete_player,
@@ -38,8 +40,8 @@ from logic.allocation import allocate_teams
 from logic.import_logic import import_players
 from logic.players import add_player_with_score
 from logic.scoring import (
-    apply_position_profile,
     adjust_category_attributes_by_single_attr,
+    apply_position_profile,
     calculate_gk_score,
     calculate_mental_score,
     calculate_physical_score,
@@ -60,6 +62,7 @@ from render import (
     render_teams,
 )
 from render.common import can_user_delete, can_user_edit, render_csrf_input, render_head
+from render.players import render_position_ratings_section
 from services.auth import (
     check_club_permission,
     get_current_user,
@@ -836,7 +839,13 @@ _VALID_FITS = {v for v, _ in FIT_TIERS}
 
 @csrf_protect
 async def route_update_position_ratings(player_id: int, req: Request, sess=None):
-    """Save a player's position_ratings from the detail form."""
+    """Save a player's position_ratings from the detail form.
+
+    The form saves itself over HTMX on every change, and gets back the ratings
+    section redrawn. A plain form post (no HX-Request header) still redirects
+    to the player page.
+    """
+    is_htmx = bool(req.headers.get("HX-Request"))
     user = get_current_user(req, sess)
     if not user:
         return RedirectResponse("/login", status_code=303)
@@ -853,15 +862,26 @@ async def route_update_position_ratings(player_id: int, req: Request, sess=None)
     back = form.get("back")
     redirect_url = _player_url(player_id, back)
 
-    n_slots = int(form.get("n_slots", 6))
+    # The form shows fewer rows than this when there is room to add one; the
+    # rows it leaves out are simply absent from the submission.
     ratings = []
-    for i in range(n_slots):
+    seen = set()
+    for i in range(MAX_POSITION_RATINGS):
         pos = (form.get(f"pos_{i}") or "").strip()
         fit = (form.get(f"fit_{i}") or "natural").strip()
-        if pos in _VALID_POSITIONS and fit in _VALID_FITS:
+        # A position rated twice keeps its first row. The form already stops
+        # that; this is for a submission that did not come from it.
+        if pos in _VALID_POSITIONS and fit in _VALID_FITS and pos not in seen:
+            seen.add(pos)
             ratings.append({"pos": pos, "fit": fit})
 
     success = update_player_position_ratings(player_id, ratings)
+    if is_htmx:
+        if success:
+            player["position_ratings"] = ratings
+        return render_position_ratings_section(
+            player, True, back, status="saved" if success else "error"
+        )
     return handle_db_result(
         success,
         redirect_url,
@@ -923,5 +943,9 @@ def register_player_routes(rt):
     rt("/restore_player/{player_id}", methods=["POST"])(route_restore_player)
     rt("/allocate", methods=["POST"])(route_allocate)
     rt("/reset", methods=["POST"])(route_reset)
-    rt("/update_position_ratings/{player_id}", methods=["POST"])(route_update_position_ratings)
-    rt("/apply_position_profile/{player_id}", methods=["POST"])(route_apply_position_profile)
+    rt("/update_position_ratings/{player_id}", methods=["POST"])(
+        route_update_position_ratings
+    )
+    rt("/apply_position_profile/{player_id}", methods=["POST"])(
+        route_apply_position_profile
+    )

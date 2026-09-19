@@ -7,6 +7,7 @@ from core.config import (
     ALL_TACTICAL_POSITIONS,
     FIT_TIERS,
     GK_ATTRS,
+    MAX_POSITION_RATINGS,
     MENTAL_ATTRS,
     PHYSICAL_ATTRS,
     SCORE_RANGES,
@@ -343,6 +344,10 @@ def render_player_detail_form(player, user=None, back=None):
                 method="post",
                 action=f"/update_player_scores/{player['id']}",
             ),
+            # Near the top rather than after the attributes: it is edited far
+            # more often than thirty individual numbers, and the Apply button
+            # feeds the attributes below it.
+            render_position_ratings_section(player, can_edit, back),
             # Category Scores form
             Form(
                 render_csrf_input(),
@@ -479,7 +484,6 @@ def render_player_detail_form(player, user=None, back=None):
                 action=f"/update_player/{player['id']}",
             ),
         ),
-        render_position_ratings_section(player, can_edit, back),
         # Outside the form and below it: Save and Delete sitting side by side is
         # exactly the misfire this page had.
         (
@@ -611,12 +615,71 @@ def render_add_player_form(error=None, values=None):
 
 
 _FIT_LABELS = {"natural": "Natural", "competent": "Competent"}
-_FIT_COLORS = {"natural": "var(--green, #28a745)", "competent": "var(--amber, #e6a817)"}
-_MAX_RATINGS_SLOTS = 6
+_FIT_COLORS = {"natural": "var(--fit-natural)", "competent": "var(--fit-competent)"}
+
+# A position picked in one row is greyed out in the others, so the same
+# position cannot be rated twice. A row keeps its own choice selectable even
+# if another row shares it -- ratings saved before this check can still hold a
+# duplicate, and disabling the selected option would silently drop the row.
+#
+# The x on a row blanks its position and fires the change that a pick would,
+# so removing goes through the same save as everything else.
+#
+# Runs again after every save: the swap brings a fresh copy of this script
+# with the fresh form.
+POSITION_RATINGS_SCRIPT = """
+(function () {
+    var form = document.getElementById('position-ratings-form');
+    if (!form) return;
+    var selects = Array.prototype.slice.call(
+        form.querySelectorAll('select[name^="pos_"]')
+    );
+
+    function sync() {
+        selects.forEach(function (select) {
+            var taken = selects
+                .filter(function (other) { return other !== select; })
+                .map(function (other) { return other.value; });
+            Array.prototype.forEach.call(select.options, function (option) {
+                option.disabled = option.value !== ''
+                    && option.value !== select.value
+                    && taken.indexOf(option.value) !== -1;
+            });
+        });
+    }
+
+    selects.forEach(function (select) {
+        select.addEventListener('change', sync);
+    });
+
+    form.addEventListener('click', function (event) {
+        var button = event.target.closest && event.target.closest('.rating-remove');
+        if (!button) return;
+        var select = button.parentNode.querySelector('select[name^="pos_"]');
+        select.value = '';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    sync();
+})();
+"""
 
 
-def render_position_ratings_section(player, can_edit, back=None):
-    """Position ratings editor and Apply Profile button for the player detail page."""
+def render_position_ratings_section(player, can_edit, back=None, status=None):
+    """Position ratings editor and Apply Profile button for the player detail page.
+
+    The editor has no card of its own: it sits inside the page's main card,
+    between the overall score and the category scores, as one more section of
+    the same form stack.
+
+    There is no save button. Every change posts the form over HTMX and the
+    route answers with this section redrawn, which is also how a filled-in
+    blank row gets a fresh blank one after it. Apply stays a plain submit: it
+    rewrites the attributes further down the page, so that needs a full load.
+
+    Args:
+        status: "saved" or "error" after a save, to say how it went.
+    """
     player_id = player["id"]
     existing = player.get("position_ratings") or []
 
@@ -650,11 +713,13 @@ def render_position_ratings_section(player, can_edit, back=None):
         ]
         return Div(cls="container-white")(
             H3("Position Ratings"),
-            Div(style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;")(*badges),
+            Div(style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;")(
+                *badges
+            ),
         )
 
-    # Editable: slots for existing + blank add rows (up to _MAX_RATINGS_SLOTS total)
-    n_slots = min(_MAX_RATINGS_SLOTS, max(len(existing) + 1, 2))
+    # Editable: slots for existing + blank add rows (up to MAX_POSITION_RATINGS total)
+    n_slots = min(MAX_POSITION_RATINGS, max(len(existing) + 1, 2))
     slots = list(existing) + [{}] * (n_slots - len(existing))
 
     rows = []
@@ -662,7 +727,7 @@ def render_position_ratings_section(player, can_edit, back=None):
         cur_pos = slot.get("pos", "")
         cur_fit = slot.get("fit", "natural")
         rows.append(
-            Div(style="display:flex; gap:8px; align-items:center; margin-bottom:6px;")(
+            Div(cls="rating-row")(
                 Select(
                     Option("— Position —", value="", selected=(cur_pos == "")),
                     *[
@@ -670,7 +735,8 @@ def render_position_ratings_section(player, can_edit, back=None):
                         for v, lbl in ALL_TACTICAL_POSITIONS
                     ],
                     name=f"pos_{i}",
-                    style="flex:1;",
+                    cls="rating-pos",
+                    aria_label="Position",
                 ),
                 Select(
                     *[
@@ -678,44 +744,74 @@ def render_position_ratings_section(player, can_edit, back=None):
                         for v, lbl in FIT_TIERS
                     ],
                     name=f"fit_{i}",
-                    style="width:130px;",
+                    cls="rating-fit",
+                    aria_label="Tier",
+                ),
+                (
+                    Button(
+                        "×",
+                        type="button",
+                        cls="rating-remove",
+                        title=f"Remove {cur_pos}",
+                        aria_label=f"Remove {cur_pos}",
+                    )
+                    if cur_pos
+                    # Holds the x's place so the dropdowns line up down the grid
+                    else Span(cls="rating-remove-spacer")
                 ),
             )
         )
 
+    status_note = {
+        "saved": Span("Saved", cls="rating-status"),
+        "error": Span(
+            "Could not save, please try again", cls="rating-status rating-status-error"
+        ),
+    }.get(status, "")
+
     save_form = Form(
         render_csrf_input(),
         back_input(),
-        Input(type="hidden", name="n_slots", value=str(n_slots)),
-        H3("Position Ratings"),
+        H3("Position Ratings ", status_note),
         P(
             "Set which positions this player is natural or competent at. "
-            "Leave a row blank to skip it.",
+            "Changes save as you make them.",
             style="color:var(--muted); font-size:13px; margin:4px 0 12px;",
         ),
-        *rows,
-        Div(cls="btn-group", style="margin-top:8px;")(
-            Button("Save Position Ratings", type="submit", cls="btn-success"),
-        ),
+        # Boxed like the category scores just below it
+        Div(cls="attr-section rating-grid")(*rows),
+        Script(NotStr(POSITION_RATINGS_SCRIPT)),
         method="post",
         action=f"/update_position_ratings/{player_id}",
+        id="position-ratings-form",
+        hx_post=f"/update_position_ratings/{player_id}",
+        hx_trigger="change",
+        hx_target="#position-ratings",
+        hx_swap="outerHTML",
+        # A second change while the first save is in flight replaces it, so
+        # the redraw that lands is always the latest state, never an older one
+        # that would flip a dropdown back.
+        hx_sync="this:replace",
     )
 
     has_ratings = bool(existing)
     apply_form = Form(
         render_csrf_input(),
         back_input(),
-        Div(style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border, #ddd);")(
+        Div(
+            style="margin-top:12px; padding-top:12px; border-top:1px solid var(--line);"
+        )(
             Button(
                 "Apply Position Profile to Attributes",
                 type="submit",
                 cls="btn-success" if has_ratings else "btn-secondary",
                 disabled=not has_ratings,
-                title="" if has_ratings else "Save position ratings first",
+                title="" if has_ratings else "Pick a position first",
             ),
             P(
-                "Redistributes individual attributes to fit this player's positions. "
-                "Category averages and overall score stay the same.",
+                "Reshapes the individual attributes around this player's positions. "
+                "The overall score stays the same; category scores shift toward "
+                "what the positions need.",
                 style="color:var(--muted); font-size:12px; margin:6px 0 0;",
             ),
         ),
@@ -723,7 +819,9 @@ def render_position_ratings_section(player, can_edit, back=None):
         action=f"/apply_position_profile/{player_id}",
     )
 
-    return Div(cls="container-white")(save_form, apply_form)
+    return Div(id="position-ratings", style="margin-bottom: 20px;")(
+        save_form, apply_form
+    )
 
 
 def render_archived_players(players):
