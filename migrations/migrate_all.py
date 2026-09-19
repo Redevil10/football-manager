@@ -62,6 +62,27 @@ def add_created_by_to_users(conn):
     return True
 
 
+def add_position_ratings_column(conn):
+    """Add players.position_ratings for storing tactical position preferences.
+
+    Stored as a JSON array of {pos, fit} objects, e.g.
+    [{"pos": "CB", "fit": "natural"}, {"pos": "LB", "fit": "competent"}].
+
+    Existing rows get an empty array default, meaning no preference set.
+
+    Safe to re-run: the column is only added when it is missing.
+
+    Returns:
+        bool: True if the column was added, False if it was already there
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(players)")}
+    if "position_ratings" in columns:
+        return False
+
+    conn.execute("ALTER TABLE players ADD COLUMN position_ratings TEXT DEFAULT '[]'")
+    return True
+
+
 def add_player_active_column(conn):
     """Add players.active so players can be archived rather than deleted.
 
@@ -200,6 +221,12 @@ def migrate_all():
             "Added players.active; every existing player starts active."
             if add_player_active_column(conn)
             else "players.active already present."
+        )
+
+        all_messages.append(
+            "Added players.position_ratings for tactical position preferences."
+            if add_position_ratings_column(conn)
+            else "players.position_ratings already present."
         )
 
         conn.commit()

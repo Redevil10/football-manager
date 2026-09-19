@@ -64,6 +64,8 @@ def parse_player_attributes(player_row: dict) -> dict:
     player_dict["mental_attrs"] = json.loads(player_row["mental_attrs"] or "{}")
     player_dict["physical_attrs"] = json.loads(player_row["physical_attrs"] or "{}")
     player_dict["gk_attrs"] = json.loads(player_row["gk_attrs"] or "{}")
+    raw_ratings = player_row["position_ratings"] if "position_ratings" in player_row.keys() else None
+    player_dict["position_ratings"] = json.loads(raw_ratings or "[]")
     return player_dict
 
 
@@ -594,6 +596,38 @@ def update_player_height_weight(
     except DatabaseError:
         logger.error(
             f"Failed to update player {player_id} height/weight", exc_info=True
+        )
+        return False
+
+
+def update_player_position_ratings(player_id: int, ratings: list) -> bool:
+    """Save a player's position_ratings list.
+
+    Args:
+        player_id: ID of the player.
+        ratings: List of {"pos": str, "fit": str} dicts.
+
+    Returns:
+        bool: True on success, False if the player was not found or on error.
+    """
+    try:
+        with db_transaction("update_player_position_ratings") as conn:
+            cursor = conn.execute(
+                """UPDATE players SET position_ratings = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?""",
+                (json.dumps(ratings), player_id),
+            )
+            conn.commit()
+            if cursor.rowcount == 0:
+                logger.warning(
+                    f"Update position ratings: No player found with ID {player_id}"
+                )
+                return False
+            logger.debug(f"Player {player_id} position_ratings updated")
+            return True
+    except DatabaseError:
+        logger.error(
+            f"Failed to update position_ratings for player {player_id}", exc_info=True
         )
         return False
 

@@ -20,6 +20,7 @@ from core.exceptions import (
     ValidationError,
 )
 from core.validation import validate_non_empty_string
+from core.config import ALL_TACTICAL_POSITIONS, FIT_TIERS
 from db import (
     count_player_appearances,
     delete_player,
@@ -30,12 +31,14 @@ from db import (
     update_player_attrs,
     update_player_height_weight,
     update_player_name,
+    update_player_position_ratings,
 )
 from db.players import add_player
 from logic.allocation import allocate_teams
 from logic.import_logic import import_players
 from logic.players import add_player_with_score
 from logic.scoring import (
+    apply_position_profile,
     adjust_category_attributes_by_single_attr,
     calculate_gk_score,
     calculate_mental_score,
@@ -827,6 +830,77 @@ def route_reset(req: Request = None, sess=None):
     return render_teams(sorted_players)
 
 
+_VALID_POSITIONS = {v for v, _ in ALL_TACTICAL_POSITIONS}
+_VALID_FITS = {v for v, _ in FIT_TIERS}
+
+
+@csrf_protect
+async def route_update_position_ratings(player_id: int, req: Request, sess=None):
+    """Save a player's position_ratings from the detail form."""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    club_ids = get_user_club_ids_from_request(req, sess)
+    players = {p["id"]: p for p in get_all_players(club_ids)}
+    player = players.get(player_id)
+    if not player:
+        raise NotFoundError("player", resource_id=player_id)
+    if not can_user_edit(user, player.get("club_id")):
+        raise PermissionError("edit", resource=f"player {player_id}")
+
+    form = await req.form()
+    back = form.get("back")
+    redirect_url = _player_url(player_id, back)
+
+    n_slots = int(form.get("n_slots", 6))
+    ratings = []
+    for i in range(n_slots):
+        pos = (form.get(f"pos_{i}") or "").strip()
+        fit = (form.get(f"fit_{i}") or "natural").strip()
+        if pos in _VALID_POSITIONS and fit in _VALID_FITS:
+            ratings.append({"pos": pos, "fit": fit})
+
+    success = update_player_position_ratings(player_id, ratings)
+    return handle_db_result(
+        success,
+        redirect_url,
+        error_redirect=redirect_url,
+        error_message="Failed to save position ratings",
+        check_false=True,
+    )
+
+
+@csrf_protect
+async def route_apply_position_profile(player_id: int, req: Request, sess=None):
+    """Redistribute a player's attributes to match their position profile."""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    club_ids = get_user_club_ids_from_request(req, sess)
+    players = {p["id"]: p for p in get_all_players(club_ids)}
+    player = players.get(player_id)
+    if not player:
+        raise NotFoundError("player", resource_id=player_id)
+    if not can_user_edit(user, player.get("club_id")):
+        raise PermissionError("edit", resource=f"player {player_id}")
+
+    form = await req.form()
+    back = form.get("back")
+    redirect_url = _player_url(player_id, back)
+
+    tech, mental, phys, gk = apply_position_profile(player)
+    success = update_player_attrs(player_id, tech, mental, phys, gk)
+    return handle_db_result(
+        success,
+        redirect_url,
+        error_redirect=redirect_url,
+        error_message="Failed to apply position profile",
+        check_false=True,
+    )
+
+
 def register_player_routes(rt):
     """Register player-related routes"""
 
@@ -849,3 +923,5 @@ def register_player_routes(rt):
     rt("/restore_player/{player_id}", methods=["POST"])(route_restore_player)
     rt("/allocate", methods=["POST"])(route_allocate)
     rt("/reset", methods=["POST"])(route_reset)
+    rt("/update_position_ratings/{player_id}", methods=["POST"])(route_update_position_ratings)
+    rt("/apply_position_profile/{player_id}", methods=["POST"])(route_apply_position_profile)

@@ -23,7 +23,9 @@ def get_match_players(match_id: int, team_id: Optional[int] = None) -> list[dict
     with db_read() as conn:
         if team_id:
             players = conn.execute(
-                """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs, p.physical_attrs, p.gk_attrs
+                """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs,
+                          p.physical_attrs, p.gk_attrs,
+                          p.position_ratings, p.position_pref
                    FROM match_players mp
                    JOIN players p ON mp.player_id = p.id
                    WHERE mp.match_id = ? AND mp.team_id = ?
@@ -32,7 +34,9 @@ def get_match_players(match_id: int, team_id: Optional[int] = None) -> list[dict
             ).fetchall()
         else:
             players = conn.execute(
-                """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs, p.physical_attrs, p.gk_attrs
+                """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs,
+                          p.physical_attrs, p.gk_attrs,
+                          p.position_ratings, p.position_pref
                    FROM match_players mp
                    JOIN players p ON mp.player_id = p.id
                    WHERE mp.match_id = ?
@@ -57,7 +61,9 @@ def get_match_signup_players(match_id: int) -> list[dict]:
     """
     with db_read() as conn:
         players = conn.execute(
-            """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs, p.physical_attrs, p.gk_attrs
+            """SELECT mp.*, p.name, p.technical_attrs, p.mental_attrs,
+                      p.physical_attrs, p.gk_attrs,
+                      p.position_ratings, p.position_pref
                FROM match_players mp
                JOIN players p ON mp.player_id = p.id
                WHERE mp.match_id = ? AND mp.team_id IS NULL

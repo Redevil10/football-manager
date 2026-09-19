@@ -5,8 +5,12 @@ import random
 from core.config import (
     ALLOCATION_HISTORY_DECAY,
     ALLOCATION_HISTORY_LOOKBACK,
+    BROAD_PREF_TO_GROUPS,
     CAPTAIN_MIN_SCORE_RATIO,
+    FIT_TIER_SCORES,
     POSITION_DISTRIBUTION,
+    POSITION_PREF_FALLBACK_SCORE,
+    TACTICAL_POS_TO_GROUP,
 )
 from db import (
     add_match_player,
@@ -158,6 +162,8 @@ def allocate_match_teams(match_id):
                 "mental_attrs": mp["mental_attrs"],
                 "physical_attrs": mp["physical_attrs"],
                 "gk_attrs": mp["gk_attrs"],
+                "position_ratings": mp.get("position_ratings") or [],
+                "position_pref": mp.get("position_pref") or "",
             }
         )
 
@@ -272,6 +278,71 @@ def allocate_two_teams(match_id, players, match, allocated_teams):
     return True, "Teams allocated"
 
 
+def _position_fit_score(player, tactical_pos):
+    """Return how well a player fits a tactical position slot.
+
+    Checks position_ratings first (natural=4, competent=2), then falls back to
+    the broad position_pref field (match=1). Returns 0 when there is no signal.
+    """
+    group = TACTICAL_POS_TO_GROUP.get(tactical_pos)
+    if not group:
+        return 0
+
+    for rating in player.get("position_ratings") or []:
+        if TACTICAL_POS_TO_GROUP.get(rating.get("pos")) == group:
+            return FIT_TIER_SCORES.get(rating.get("fit"), 0)
+
+    pref = player.get("position_pref", "")
+    if pref and group in BROAD_PREF_TO_GROUPS.get(pref, set()):
+        return POSITION_PREF_FALLBACK_SCORE
+
+    return 0
+
+
+def _assign_by_preference(players, position_tactical_pairs):
+    """Match players to position slots using their position preferences.
+
+    Uses a greedy algorithm: score every (player, slot) pair, then greedily
+    assign the highest-scoring pairs first. Players and slots with no preference
+    signal are filled randomly afterwards.
+
+    Returns a list of (player, (position, tactical_position)) in slot order.
+    """
+    n = len(position_tactical_pairs)
+    assignments = [None] * n
+
+    # Build and sort all preference pairs (score > 0 only)
+    scored = []
+    for p in players:
+        for idx, pos_pair in enumerate(position_tactical_pairs):
+            score = _position_fit_score(p, pos_pair[1])
+            if score > 0:
+                scored.append((score, p, idx))
+    scored.sort(key=lambda x: -x[0])
+
+    used_players = set()
+    used_slots = set()
+    for score, player, slot_idx in scored:
+        pid = player["id"]
+        if pid in used_players or slot_idx in used_slots:
+            continue
+        assignments[slot_idx] = (player, position_tactical_pairs[slot_idx])
+        used_players.add(pid)
+        used_slots.add(slot_idx)
+
+    # Fill remaining slots with unassigned players in random order
+    remaining_players = [p for p in players if p["id"] not in used_players]
+    random.shuffle(remaining_players)
+    rem_iter = iter(remaining_players)
+    for i in range(n):
+        if assignments[i] is None:
+            p = next(rem_iter, None)
+            if p:
+                assignments[i] = (p, position_tactical_pairs[i])
+
+    return [a for a in assignments if a is not None]
+
+
 def assign_match_positions_with_subs(starters, substitutes, team_id, match_id):
     """Assign positions to team members (starters and substitutes) for a match"""
     # Get all players in this match to find existing match_player records
@@ -369,8 +440,11 @@ def assign_match_positions_with_subs(starters, substitutes, team_id, match_id):
 
     position_tactical_pairs = position_tactical_pairs[:starter_size]
 
+    # Assign players to slots using position preferences; fall back to random.
+    assigned_pairs = _assign_by_preference(starters, position_tactical_pairs)
+
     # Add/update starters to match
-    for player, (position, tactical_position) in zip(starters, position_tactical_pairs):
+    for player, (position, tactical_position) in assigned_pairs:
         player_id = player["id"]
         # Check if player already has a match_player record
         if player_id in player_to_match_player_id:

@@ -4,6 +4,8 @@ from urllib.parse import unquote
 from fasthtml.common import *
 
 from core.config import (
+    ALL_TACTICAL_POSITIONS,
+    FIT_TIERS,
     GK_ATTRS,
     MENTAL_ATTRS,
     PHYSICAL_ATTRS,
@@ -477,6 +479,7 @@ def render_player_detail_form(player, user=None, back=None):
                 action=f"/update_player/{player['id']}",
             ),
         ),
+        render_position_ratings_section(player, can_edit, back),
         # Outside the form and below it: Save and Delete sitting side by side is
         # exactly the misfire this page had.
         (
@@ -605,6 +608,122 @@ def render_add_player_form(error=None, values=None):
             style="color: var(--muted); font-size: 13px; margin: 15px 0 0;",
         ),
     )
+
+
+_FIT_LABELS = {"natural": "Natural", "competent": "Competent"}
+_FIT_COLORS = {"natural": "var(--green, #28a745)", "competent": "var(--amber, #e6a817)"}
+_MAX_RATINGS_SLOTS = 6
+
+
+def render_position_ratings_section(player, can_edit, back=None):
+    """Position ratings editor and Apply Profile button for the player detail page."""
+    player_id = player["id"]
+    existing = player.get("position_ratings") or []
+
+    def back_input():
+        return Input(type="hidden", name="back", value=back) if back else ""
+
+    # Build display of current ratings (always shown, even read-only)
+    def fit_badge(fit):
+        return Span(
+            _FIT_LABELS.get(fit, fit),
+            style=(
+                f"display:inline-block; padding:2px 8px; border-radius:10px;"
+                f" font-size:11px; font-weight:bold; color:#fff;"
+                f" background:{_FIT_COLORS.get(fit, '#888')};"
+                f" margin-left:6px;"
+            ),
+        )
+
+    pos_label_map = {v: lbl for v, lbl in ALL_TACTICAL_POSITIONS}
+
+    if not can_edit:
+        if not existing:
+            return ""
+        badges = [
+            Span(
+                pos_label_map.get(r["pos"], r["pos"]),
+                fit_badge(r["fit"]),
+                style="margin-right:12px; white-space:nowrap;",
+            )
+            for r in existing
+        ]
+        return Div(cls="container-white")(
+            H3("Position Ratings"),
+            Div(style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;")(*badges),
+        )
+
+    # Editable: slots for existing + blank add rows (up to _MAX_RATINGS_SLOTS total)
+    n_slots = min(_MAX_RATINGS_SLOTS, max(len(existing) + 1, 2))
+    slots = list(existing) + [{}] * (n_slots - len(existing))
+
+    rows = []
+    for i, slot in enumerate(slots[:n_slots]):
+        cur_pos = slot.get("pos", "")
+        cur_fit = slot.get("fit", "natural")
+        rows.append(
+            Div(style="display:flex; gap:8px; align-items:center; margin-bottom:6px;")(
+                Select(
+                    Option("— Position —", value="", selected=(cur_pos == "")),
+                    *[
+                        Option(lbl, value=v, selected=(v == cur_pos))
+                        for v, lbl in ALL_TACTICAL_POSITIONS
+                    ],
+                    name=f"pos_{i}",
+                    style="flex:1;",
+                ),
+                Select(
+                    *[
+                        Option(lbl, value=v, selected=(v == cur_fit))
+                        for v, lbl in FIT_TIERS
+                    ],
+                    name=f"fit_{i}",
+                    style="width:130px;",
+                ),
+            )
+        )
+
+    save_form = Form(
+        render_csrf_input(),
+        back_input(),
+        Input(type="hidden", name="n_slots", value=str(n_slots)),
+        H3("Position Ratings"),
+        P(
+            "Set which positions this player is natural or competent at. "
+            "Leave a row blank to skip it.",
+            style="color:var(--muted); font-size:13px; margin:4px 0 12px;",
+        ),
+        *rows,
+        Div(cls="btn-group", style="margin-top:8px;")(
+            Button("Save Position Ratings", type="submit", cls="btn-success"),
+        ),
+        method="post",
+        action=f"/update_position_ratings/{player_id}",
+    )
+
+    has_ratings = bool(existing)
+    apply_form = Form(
+        render_csrf_input(),
+        back_input(),
+        Div(style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border, #ddd);")(
+            Button(
+                "Apply Position Profile to Attributes",
+                type="submit",
+                cls="btn-success" if has_ratings else "btn-secondary",
+                disabled=not has_ratings,
+                title="" if has_ratings else "Save position ratings first",
+            ),
+            P(
+                "Redistributes individual attributes to fit this player's positions. "
+                "Category averages and overall score stay the same.",
+                style="color:var(--muted); font-size:12px; margin:6px 0 0;",
+            ),
+        ),
+        method="post",
+        action=f"/apply_position_profile/{player_id}",
+    )
+
+    return Div(cls="container-white")(save_form, apply_form)
 
 
 def render_archived_players(players):

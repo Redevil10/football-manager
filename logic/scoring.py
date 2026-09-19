@@ -3,12 +3,15 @@
 from core.config import (
     ATTRIBUTE_TO_CATEGORY_SCALE,
     CATEGORY_TO_ATTRIBUTE_SCALE,
+    FIT_TIER_WEIGHTS,
     GK_ATTRS,
     MENTAL_ATTRS,
     OVERALL_SCORE_DIVISOR,
     OVERALL_SCORE_WEIGHTS,
     PHYSICAL_ATTRS,
+    POSITION_PROFILES,
     SCORE_RANGES,
+    TACTICAL_POS_TO_GROUP,
     TECHNICAL_ATTRS,
 )
 
@@ -268,6 +271,93 @@ def set_overall_score(overall_score):
 def calculate_player_overall(player):
     """Legacy function for backwards compatibility"""
     return calculate_overall_score(player)
+
+
+def apply_position_profile(player):
+    """Redistribute attributes to reflect the player's position_ratings.
+
+    Keeps each category's mean unchanged so overall score is preserved.
+    Natural positions contribute fully; competent positions contribute at half
+    weight. Unfamiliar positions are ignored.
+
+    When ratings from opposing profiles cancel out (e.g. CB + ST), the weights
+    average toward neutral and the redistribution has little effect — which is
+    the correct result for an all-round player.
+
+    Args:
+        player: Player dict with technical_attrs, mental_attrs, physical_attrs,
+                gk_attrs and position_ratings fields.
+
+    Returns:
+        tuple: (tech_attrs, mental_attrs, phys_attrs, gk_attrs) — new dicts.
+               Returns the original dicts unchanged if no position_ratings are set.
+    """
+    ratings = player.get("position_ratings") or []
+    active = [r for r in ratings if r.get("fit") in FIT_TIER_WEIGHTS]
+    if not active:
+        return (
+            player["technical_attrs"],
+            player["mental_attrs"],
+            player["physical_attrs"],
+            player["gk_attrs"],
+        )
+
+    cats = {
+        "technical": list(TECHNICAL_ATTRS),
+        "mental": list(MENTAL_ATTRS),
+        "physical": list(PHYSICAL_ATTRS),
+        "gk": list(GK_ATTRS),
+    }
+
+    # Accumulate weighted profile vectors
+    total_w = 0.0
+    blended = {cat: {k: 0.0 for k in keys} for cat, keys in cats.items()}
+
+    for rating in active:
+        group = TACTICAL_POS_TO_GROUP.get(rating.get("pos", ""))
+        if not group or group not in POSITION_PROFILES:
+            continue
+        tier_w = FIT_TIER_WEIGHTS[rating["fit"]]
+        profile = POSITION_PROFILES[group]
+        total_w += tier_w
+        for cat, keys in cats.items():
+            for k in keys:
+                blended[cat][k] += profile[cat][k] * tier_w
+
+    if total_w == 0.0:
+        return (
+            player["technical_attrs"],
+            player["mental_attrs"],
+            player["physical_attrs"],
+            player["gk_attrs"],
+        )
+
+    for cat, keys in cats.items():
+        for k in keys:
+            blended[cat][k] /= total_w
+
+    def redistribute(current_attrs, weight_map):
+        if not current_attrs:
+            return current_attrs
+        current_avg = sum(current_attrs.values()) / len(current_attrs)
+        mean_w = sum(weight_map[k] for k in current_attrs) / len(current_attrs)
+        if mean_w == 0:
+            return dict(current_attrs)
+        result = {}
+        for k in current_attrs:
+            raw = current_avg * (weight_map[k] / mean_w)
+            result[k] = max(
+                SCORE_RANGES["attribute"][0],
+                min(SCORE_RANGES["attribute"][1], round(raw)),
+            )
+        return result
+
+    return (
+        redistribute(dict(player["technical_attrs"]), blended["technical"]),
+        redistribute(dict(player["mental_attrs"]), blended["mental"]),
+        redistribute(dict(player["physical_attrs"]), blended["physical"]),
+        redistribute(dict(player["gk_attrs"]), blended["gk"]),
+    )
 
 
 def adjust_attributes_by_category_score(category_attrs, target_score, category_type):
