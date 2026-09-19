@@ -27,7 +27,8 @@ def db():
             id INTEGER PRIMARY KEY, name TEXT, alias TEXT, club_id INTEGER,
             technical_attrs TEXT, mental_attrs TEXT, physical_attrs TEXT,
             gk_attrs TEXT, created_at TIMESTAMP, updated_at TIMESTAMP,
-            created_by INTEGER, active INTEGER NOT NULL DEFAULT 1);
+            created_by INTEGER, updated_by INTEGER,
+            active INTEGER NOT NULL DEFAULT 1);
         INSERT INTO players (id, name, alias, club_id, active)
              VALUES (1, 'Alex Moreno', 'A. Moreno', 3, 1),
                     (2, 'Sam Okafor',  NULL,        3, 1);

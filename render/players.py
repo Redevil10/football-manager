@@ -4,7 +4,10 @@ from urllib.parse import unquote
 from fasthtml.common import *
 
 from core.config import (
+    ALL_TACTICAL_POSITIONS,
+    FIT_TIERS,
     GK_ATTRS,
+    MAX_POSITION_RATINGS,
     MENTAL_ATTRS,
     PHYSICAL_ATTRS,
     SCORE_RANGES,
@@ -69,6 +72,12 @@ def _date_only(timestamp):
     return str(timestamp).split(" ")[0]
 
 
+def _stamp(timestamp, username):
+    """A date and, when known, who: "2026-08-14 · Redevil"."""
+    date = _date_only(timestamp)
+    return f"{date} · {username}" if username else date
+
+
 def render_player_table(players, match_id=None, searchable=False):
     """Render player list as table.
 
@@ -90,11 +99,17 @@ def render_player_table(players, match_id=None, searchable=False):
             view_href += f"?back=/match/{match_id}"
 
         aliases = split_aliases(p.get("alias"))
+        natural = [
+            r["pos"]
+            for r in p.get("position_ratings") or []
+            if r.get("fit") == "natural"
+        ]
 
         row = Tr(
-            # Name and aliases both go in the filter key: people search for
-            # whichever name they know someone by.
-            **{"data-search": " ".join([p["name"], *aliases]).casefold()},
+            # Name and aliases go in the filter key -- people search for
+            # whichever name they know someone by -- and so do the natural
+            # positions, so "cb" finds the centre backs.
+            **{"data-search": " ".join([p["name"], *aliases, *natural]).casefold()},
         )(
             Td(A(p["name"], href=view_href)),
             Td(
@@ -102,9 +117,18 @@ def render_player_table(players, match_id=None, searchable=False):
                 style="color: var(--muted);",
             ),
             Td(str(overall), style="font-weight: bold; color: var(--navy);"),
-            Td(p.get("created_by_username") or "—", style="color: var(--muted);"),
-            Td(_date_only(p.get("created_at")), style="color: var(--muted);"),
-            Td(_date_only(p.get("updated_at")), style="color: var(--muted);"),
+            Td(", ".join(natural) if natural else "—"),
+            # Who goes beside when rather than in columns of their own: most
+            # rows were added and last edited by the same person, and four
+            # columns spelt that out twice.
+            Td(
+                _stamp(p.get("created_at"), p.get("created_by_username")),
+                style="color: var(--muted);",
+            ),
+            Td(
+                _stamp(p.get("updated_at"), p.get("updated_by_username")),
+                style="color: var(--muted);",
+            ),
         )
         rows.append(row)
 
@@ -116,7 +140,7 @@ def render_player_table(players, match_id=None, searchable=False):
                 Th("Name"),
                 Th("Also known as"),
                 Th("Overall"),
-                Th("Added by"),
+                Th("Positions"),
                 Th("Added"),
                 Th("Updated"),
             )
@@ -132,7 +156,7 @@ def render_player_table(players, match_id=None, searchable=False):
             Input(
                 type="search",
                 id="player-search",
-                placeholder="Search players",
+                placeholder="Search name or position",
                 aria_label="Search players",
                 autocomplete="off",
             ),
@@ -236,6 +260,7 @@ def render_player_detail_form(player, user=None, back=None):
             P(
                 f"Technical: {tech_score} | Mental: {mental_score} | Physical: {phys_score} | GK: {gk_score}"
             ),
+            render_position_ratings_section(player, can_edit=False),
             P(
                 "(Viewer - Edit/Delete not available)",
                 style="color: #666; font-style: italic; margin-top: 20px;",
@@ -285,62 +310,76 @@ def render_player_detail_form(player, user=None, back=None):
                 method="post",
                 action=f"/update_player_name/{player['id']}",
             ),
-            # Height and Weight form
-            Form(
-                render_csrf_input(),
-                back_input(),
-                Div(
-                    cls="input-group",
-                    style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;",
-                )(
-                    Label("Height (cm): ", style="font-weight: bold;"),
-                    Input(
-                        type="number",
-                        name="height",
-                        value=str(player.get("height", "") or ""),
-                        min="100",
-                        max="250",
-                        style="width: 100px;",
+            # Overall score and height/weight share a line. The score is set
+            # nearly every time, so it comes first; height and weight are rarely
+            # touched. Still two forms -- they post to different routes -- side
+            # by side, and wrapping onto separate lines on a phone.
+            Div(
+                style="display: flex; flex-wrap: wrap; align-items: center; "
+                "gap: 12px 40px; margin-bottom: 20px;"
+            )(
+                Form(
+                    render_csrf_input(),
+                    back_input(),
+                    Div(
+                        style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;"
+                    )(
+                        Label(
+                            f"Overall Score ({SCORE_RANGES['overall'][0]}-{SCORE_RANGES['overall'][1]}): ",
+                            style="font-weight: bold;",
+                        ),
+                        Input(
+                            type="number",
+                            name="score_overall",
+                            value=str(round(overall)),
+                            min=str(SCORE_RANGES["overall"][0]),
+                            max=str(SCORE_RANGES["overall"][1]),
+                            style="width: 100px;",
+                            required=True,
+                        ),
+                        Button(
+                            "Update Overall Score", type="submit", cls="btn-success"
+                        ),
                     ),
-                    Label(
-                        "Weight (kg): ", style="font-weight: bold; margin-left: 15px;"
-                    ),
-                    Input(
-                        type="number",
-                        name="weight",
-                        value=str(player.get("weight", "") or ""),
-                        min="30",
-                        max="200",
-                        style="width: 100px;",
-                    ),
-                    Button("Update Height/Weight", type="submit", cls="btn-success"),
+                    method="post",
+                    action=f"/update_player_scores/{player['id']}",
                 ),
-                method="post",
-                action=f"/update_player_height_weight/{player['id']}",
-            ),
-            # Overall Score form
-            Form(
-                render_csrf_input(),
-                back_input(),
-                Div(cls="input-group", style="margin-bottom: 20px;")(
-                    Label(
-                        f"Overall Score ({SCORE_RANGES['overall'][0]}-{SCORE_RANGES['overall'][1]}): ",
-                        style="margin-right: 10px; font-weight: bold;",
+                Form(
+                    render_csrf_input(),
+                    back_input(),
+                    Div(
+                        style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;"
+                    )(
+                        Label("Height (cm): ", style="font-weight: bold;"),
+                        Input(
+                            type="number",
+                            name="height",
+                            value=str(player.get("height", "") or ""),
+                            min="100",
+                            max="250",
+                            style="width: 80px;",
+                        ),
+                        Label("Weight (kg): ", style="font-weight: bold;"),
+                        Input(
+                            type="number",
+                            name="weight",
+                            value=str(player.get("weight", "") or ""),
+                            min="30",
+                            max="200",
+                            style="width: 80px;",
+                        ),
+                        Button(
+                            "Update Height/Weight", type="submit", cls="btn-success"
+                        ),
                     ),
-                    Input(
-                        type="number",
-                        name="score_overall",
-                        value=str(round(overall)),
-                        min=str(SCORE_RANGES["overall"][0]),
-                        max=str(SCORE_RANGES["overall"][1]),
-                        style="width: 100px; margin-right: 10px;",
-                        required=True,
-                    ),
-                    Button("Update Overall Score", type="submit", cls="btn-success"),
+                    method="post",
+                    action=f"/update_player_height_weight/{player['id']}",
                 ),
-                method="post",
-                action=f"/update_player_scores/{player['id']}",
             ),
+            # Near the top rather than after the attributes: it is edited far
+            # more often than thirty individual numbers, and the Apply button
+            # feeds the attributes below it.
+            render_position_ratings_section(player, can_edit, back),
             # Category Scores form
             Form(
                 render_csrf_input(),
@@ -564,35 +603,40 @@ def render_add_player_form(error=None, values=None):
                     ),
                     "Separate several with a semicolon.",
                 ),
+                # One position, saved as a natural rating. It used to be a
+                # broad preferred position, which nothing after this form
+                # could show or change; more ratings belong on the player page.
                 field(
-                    "Preferred position:",
-                    Select(name="position_pref", style="width: 100%;")(
+                    "Main position:",
+                    Select(name="main_position", style="width: 100%;")(
+                        Option(
+                            "Not set",
+                            value="",
+                            selected=not values.get("main_position"),
+                        ),
                         *[
                             Option(
                                 label,
                                 value=value,
-                                selected=values.get("position_pref", "") == value,
+                                selected=values.get("main_position") == value,
                             )
-                            for label, value in (
-                                ("No preference", ""),
-                                ("Goalkeeper", "Goalkeeper"),
-                                ("Defender", "Defender"),
-                                ("Midfielder", "Midfielder"),
-                                ("Forward", "Forward"),
-                            )
-                        ]
+                            for value, label in ALL_TACTICAL_POSITIONS
+                        ],
                     ),
+                    "Saved as natural. Add more positions on the next screen.",
                 ),
             ),
             Hr(),
+            # Overall first, as on the player page: it is the one nearly always
+            # set, and height and weight rarely are.
             Div(cls="form-grid")(
-                field("Height (cm):", number("height", 100, 250)),
-                field("Weight (kg):", number("weight", 30, 200)),
                 field(
                     "Overall score:",
                     number("score_overall", overall_low, overall_high, 100),
                     f"{overall_low}-{overall_high}. Sets the starting attributes.",
                 ),
+                field("Height (cm):", number("height", 100, 250)),
+                field("Weight (kg):", number("weight", 30, 200)),
             ),
             Div(cls="btn-group", style="margin-top: 10px;")(
                 Button("Add Player", type="submit", cls="btn-success"),
@@ -604,6 +648,217 @@ def render_add_player_form(error=None, values=None):
             "tuned on the next screen.",
             style="color: var(--muted); font-size: 13px; margin: 15px 0 0;",
         ),
+    )
+
+
+_FIT_LABELS = {"natural": "Natural", "competent": "Competent"}
+_FIT_COLORS = {"natural": "var(--fit-natural)", "competent": "var(--fit-competent)"}
+
+# A position picked in one row is greyed out in the others, so the same
+# position cannot be rated twice. A row keeps its own choice selectable even
+# if another row shares it -- ratings saved before this check can still hold a
+# duplicate, and disabling the selected option would silently drop the row.
+#
+# The x on a row blanks its position and fires the change that a pick would,
+# so removing goes through the same save as everything else.
+#
+# Runs again after every save: the swap brings a fresh copy of this script
+# with the fresh form.
+POSITION_RATINGS_SCRIPT = """
+(function () {
+    var form = document.getElementById('position-ratings-form');
+    if (!form) return;
+    var selects = Array.prototype.slice.call(
+        form.querySelectorAll('select[name^="pos_"]')
+    );
+
+    function sync() {
+        selects.forEach(function (select) {
+            var taken = selects
+                .filter(function (other) { return other !== select; })
+                .map(function (other) { return other.value; });
+            Array.prototype.forEach.call(select.options, function (option) {
+                option.disabled = option.value !== ''
+                    && option.value !== select.value
+                    && taken.indexOf(option.value) !== -1;
+            });
+        });
+    }
+
+    selects.forEach(function (select) {
+        select.addEventListener('change', sync);
+    });
+
+    form.addEventListener('click', function (event) {
+        var button = event.target.closest && event.target.closest('.rating-remove');
+        if (!button) return;
+        var select = button.parentNode.querySelector('select[name^="pos_"]');
+        select.value = '';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    sync();
+})();
+"""
+
+
+def render_position_ratings_section(player, can_edit, back=None, status=None):
+    """Position ratings editor and Apply Profile button for the player detail page.
+
+    The editor has no card of its own: it sits inside the page's main card,
+    between the overall score and the category scores, as one more section of
+    the same form stack.
+
+    There is no save button. Every change posts the form over HTMX and the
+    route answers with this section redrawn, which is also how a filled-in
+    blank row gets a fresh blank one after it. Apply stays a plain submit: it
+    rewrites the attributes further down the page, so that needs a full load.
+
+    Args:
+        status: "saved" or "error" after a save, to say how it went.
+    """
+    player_id = player["id"]
+    existing = player.get("position_ratings") or []
+
+    def back_input():
+        return Input(type="hidden", name="back", value=back) if back else ""
+
+    # Build display of current ratings (always shown, even read-only)
+    def fit_badge(fit):
+        return Span(
+            _FIT_LABELS.get(fit, fit),
+            style=(
+                f"display:inline-block; padding:2px 8px; border-radius:10px;"
+                f" font-size:11px; font-weight:bold; color:var(--ink);"
+                f" background:{_FIT_COLORS.get(fit, '#888')};"
+                f" margin-left:6px;"
+            ),
+        )
+
+    pos_label_map = {v: lbl for v, lbl in ALL_TACTICAL_POSITIONS}
+
+    if not can_edit:
+        if not existing:
+            return ""
+        badges = [
+            Span(
+                pos_label_map.get(r["pos"], r["pos"]),
+                fit_badge(r["fit"]),
+                style="margin-right:12px; white-space:nowrap;",
+            )
+            for r in existing
+        ]
+        # Inside the viewer's card, like the editor is inside the manager's
+        return Div(style="margin-top: 20px;")(
+            H3("Position Ratings"),
+            Div(style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;")(
+                *badges
+            ),
+        )
+
+    # Editable: slots for existing + blank add rows (up to MAX_POSITION_RATINGS total)
+    n_slots = min(MAX_POSITION_RATINGS, max(len(existing) + 1, 2))
+    slots = list(existing) + [{}] * (n_slots - len(existing))
+
+    rows = []
+    for i, slot in enumerate(slots[:n_slots]):
+        cur_pos = slot.get("pos", "")
+        cur_fit = slot.get("fit", "natural")
+        rows.append(
+            Div(cls="rating-row")(
+                Select(
+                    Option("— Position —", value="", selected=(cur_pos == "")),
+                    *[
+                        Option(lbl, value=v, selected=(v == cur_pos))
+                        for v, lbl in ALL_TACTICAL_POSITIONS
+                    ],
+                    name=f"pos_{i}",
+                    cls="rating-pos",
+                    aria_label="Position",
+                ),
+                Select(
+                    *[
+                        Option(lbl, value=v, selected=(v == cur_fit))
+                        for v, lbl in FIT_TIERS
+                    ],
+                    name=f"fit_{i}",
+                    cls="rating-fit",
+                    aria_label="Tier",
+                ),
+                (
+                    Button(
+                        "×",
+                        type="button",
+                        cls="rating-remove",
+                        title=f"Remove {cur_pos}",
+                        aria_label=f"Remove {cur_pos}",
+                    )
+                    if cur_pos
+                    # Holds the x's place so the dropdowns line up down the grid
+                    else Span(cls="rating-remove-spacer")
+                ),
+            )
+        )
+
+    status_note = {
+        "saved": Span("Saved", cls="rating-status"),
+        "error": Span(
+            "Could not save, please try again", cls="rating-status rating-status-error"
+        ),
+    }.get(status, "")
+
+    save_form = Form(
+        render_csrf_input(),
+        back_input(),
+        H3("Position Ratings ", status_note),
+        P(
+            "Set which positions this player is natural or competent at. "
+            "Changes save as you make them.",
+            style="color:var(--muted); font-size:13px; margin:4px 0 12px;",
+        ),
+        # Boxed like the category scores just below it
+        Div(cls="attr-section rating-grid")(*rows),
+        Script(NotStr(POSITION_RATINGS_SCRIPT)),
+        method="post",
+        action=f"/update_position_ratings/{player_id}",
+        id="position-ratings-form",
+        hx_post=f"/update_position_ratings/{player_id}",
+        hx_trigger="change",
+        hx_target="#position-ratings",
+        hx_swap="outerHTML",
+        # A second change while the first save is in flight replaces it, so
+        # the redraw that lands is always the latest state, never an older one
+        # that would flip a dropdown back.
+        hx_sync="this:replace",
+    )
+
+    has_ratings = bool(existing)
+    apply_form = Form(
+        render_csrf_input(),
+        back_input(),
+        Div(
+            style="margin-top:12px; padding-top:12px; border-top:1px solid var(--line);"
+        )(
+            Button(
+                "Apply Position Profile to Attributes",
+                type="submit",
+                cls="btn-success" if has_ratings else "btn-secondary",
+                disabled=not has_ratings,
+                title="" if has_ratings else "Pick a position first",
+            ),
+            P(
+                "Reshapes the individual attributes around this player's positions. "
+                "The overall score stays the same; category scores shift toward "
+                "what the positions need.",
+                style="color:var(--muted); font-size:12px; margin:6px 0 0;",
+            ),
+        ),
+        method="post",
+        action=f"/apply_position_profile/{player_id}",
+    )
+
+    return Div(id="position-ratings", style="margin-bottom: 20px;")(
+        save_form, apply_form
     )
 
 

@@ -10,6 +10,12 @@ STYLE = """
     /* Captain's mark only. The amber accent turns brown against the green
        pitch; an armband reads as gold, so this stays a plain yellow. */
     --captain: #F5C518;
+    /* Position fit. These have to read on the pitch as well as on white, so
+       the green is well clear of the grass and the amber is brighter than the
+       accent, which goes brown on green. */
+    --fit-natural: #3CC46E;
+    --fit-competent: #F08C2E;
+    --fit-unfamiliar: #9AA0AA;
     --success: #2E7D57;
     --success-dark: #246344;
     --danger: #9B2C2C;
@@ -596,6 +602,65 @@ button.link-delete:hover {
     border-left: 4px solid var(--navy);
 }
 
+/* Position ratings editor on the player page: two to a line, one below the
+   breakpoint the pitch uses, where a pair no longer fits side by side. */
+.rating-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px 24px;
+    margin-bottom: 12px;
+}
+
+@media (min-width: 760px) {
+    .rating-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.rating-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* min-width lets the position shrink below its longest option, which would
+   otherwise push the tier out of the box on a phone. */
+.rating-row .rating-pos { flex: 1; min-width: 0; }
+.rating-row .rating-fit { width: 125px; flex-shrink: 0; }
+
+/* The shared button rule makes every button a solid uppercase block; this one
+   is a quiet x at the end of its row. */
+button.rating-remove,
+.rating-remove-spacer {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+}
+
+button.rating-remove {
+    padding: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    font-size: 20px;
+    font-weight: normal;
+    line-height: 1;
+    letter-spacing: 0;
+}
+
+button.rating-remove:hover {
+    background: var(--line);
+    color: var(--danger);
+}
+
+.rating-status {
+    margin-left: 8px;
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: normal;
+    color: var(--success);
+}
+
+.rating-status-error { color: var(--danger); }
+
 .attr-section-title {
     font-weight: 600;
     font-size: 13px;
@@ -1009,6 +1074,37 @@ button.link-delete:hover {
     pointer-events: none;
 }
 
+/* Position fit, a dot inside the marker under the name. Out of the flex flow,
+   so the name stays centred. The white ring keeps it readable on any shirt --
+   the amber would otherwise all but vanish into a red one. Bigger and
+   finer-edged here than on desktop, where the marker is larger -- a 2px ring
+   left a phone only a speck of colour. */
+.fit-mark {
+    position: absolute;
+    bottom: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 22%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 1.5px solid white;
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+/* Lifts the name so the name and the dot sit centred as a pair, and a
+   two-line name clears the dot on a phone. Padding and height trade off so
+   the circle stays the size of the ones without a dot; the slot is square,
+   so the two percentages measure the same thing. */
+.position-slot-marker.with-fit {
+    height: 84%;
+    padding-bottom: 16%;
+}
+
+.fit-natural { background: var(--fit-natural); }
+.fit-competent { background: var(--fit-competent); }
+.fit-unfamiliar { background: var(--fit-unfamiliar); }
+
 .position-slot.drag-over {
     background: rgba(200, 135, 60, 0.35) !important;
     /* Keeps the centring translate above -- a bare scale() would drop it and
@@ -1056,6 +1152,7 @@ button.link-delete:hover {
        grow by the same factor to keep the same proportion inside the circle. */
     .position-slot-marker { font-size: clamp(8px, 2.4cqw, 13px); }
     .captain-mark { font-size: clamp(7px, 1.7cqw, 12px); }
+    .fit-mark { width: 18%; border-width: 2px; }
 }
 
 .draggable-player {
@@ -1093,6 +1190,37 @@ button.link-delete:hover {
     color: var(--ink);
     border-bottom: 2px dashed var(--line);
 }
+
+/* Starters by position fit; also the key to the dots. The header above is set
+   in the display face and upper case, which this opts back out of. */
+.fit-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin-top: 6px;
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: normal;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--muted);
+}
+
+.fit-summary > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.fit-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    vertical-align: middle;
+}
+
+.player-position .fit-dot { margin-left: 5px; }
 
 .player-table {
     width: 100%;

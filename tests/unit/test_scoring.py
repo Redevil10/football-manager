@@ -6,12 +6,14 @@ from core.config import (
 from logic.scoring import (
     adjust_attributes_by_category_score,
     adjust_category_attributes_by_single_attr,
+    apply_position_profile,
     calculate_category_score,
     calculate_gk_score,
     calculate_mental_score,
     calculate_overall_score,
     calculate_physical_score,
     calculate_technical_score,
+    position_fit,
     set_gk_score,
     set_mental_score,
     set_overall_score,
@@ -386,3 +388,143 @@ class TestCalculateGkScore:
         score = calculate_gk_score(player)
         # Average = 18, scaled = 18 * 5 = 90
         assert score == 90
+
+
+class TestPositionFit:
+    """position_fit reads a player's tier for a slot from position_ratings"""
+
+    def test_ratings_cover_the_whole_group(self):
+        player = {"position_ratings": [{"pos": "LCB", "fit": "natural"}]}
+        assert position_fit(player, "RCB") == "natural"
+
+    def test_best_tier_wins_within_a_group(self):
+        player = {
+            "position_ratings": [
+                {"pos": "LCB", "fit": "competent"},
+                {"pos": "CB", "fit": "natural"},
+            ]
+        }
+        assert position_fit(player, "RCB") == "natural"
+
+    def test_none_when_no_rating_covers_the_slot(self):
+        player = {"position_ratings": [{"pos": "ST", "fit": "natural"}]}
+        assert position_fit(player, "LB") is None
+
+    def test_none_without_ratings(self):
+        assert position_fit({}, "GK") is None
+        assert position_fit({"position_ratings": None}, "GK") is None
+
+    def test_none_for_a_slot_outside_the_profile_groups(self):
+        # The fallback formations can hand out "DF"/"MF"/"FW"
+        player = {"position_ratings": [{"pos": "CB", "fit": "natural"}]}
+        assert position_fit(player, "DF") is None
+
+    def test_unknown_tier_is_ignored(self):
+        player = {"position_ratings": [{"pos": "GK", "fit": "unfamiliar"}]}
+        assert position_fit(player, "GK") is None
+
+    def test_a_rating_covers_a_similar_role_at_the_same_tier(self):
+        winger = {"position_ratings": [{"pos": "LW", "fit": "natural"}]}
+        wide_mid = {"position_ratings": [{"pos": "RM", "fit": "competent"}]}
+        holder = {"position_ratings": [{"pos": "CDM", "fit": "natural"}]}
+        playmaker = {"position_ratings": [{"pos": "CM", "fit": "competent"}]}
+
+        assert position_fit(winger, "RM") == "natural"
+        assert position_fit(wide_mid, "LW") == "competent"
+        assert position_fit(holder, "LCM") == "natural"
+        assert position_fit(playmaker, "CDM") == "competent"
+
+    def test_similar_roles_do_not_chain_or_reach_unrelated_ones(self):
+        winger = {"position_ratings": [{"pos": "LW", "fit": "natural"}]}
+        assert position_fit(winger, "CM") is None
+        assert position_fit(winger, "LST") is None
+
+    def test_best_tier_wins_across_exact_and_similar_roles(self):
+        player = {
+            "position_ratings": [
+                {"pos": "LM", "fit": "competent"},
+                {"pos": "LW", "fit": "natural"},
+            ]
+        }
+        assert position_fit(player, "RM") == "natural"
+
+
+def _player_at(overall, *ratings):
+    attrs = set_overall_score(overall)
+    return {
+        "technical_attrs": attrs["technical"],
+        "mental_attrs": attrs["mental"],
+        "physical_attrs": attrs["physical"],
+        "gk_attrs": attrs["gk"],
+        "position_ratings": [{"pos": pos, "fit": fit} for pos, fit in ratings],
+    }
+
+
+def _applied(player):
+    tech, mental, phys, gk = apply_position_profile(player)
+    return {
+        "technical_attrs": tech,
+        "mental_attrs": mental,
+        "physical_attrs": phys,
+        "gk_attrs": gk,
+        "position_ratings": player["position_ratings"],
+    }
+
+
+class TestApplyPositionProfile:
+    """Applying a profile keeps the overall score and moves the categories."""
+
+    POSITIONS = ["GK", "CB", "LB", "CDM", "CM", "LM", "LW", "CF"]
+
+    def test_keeps_the_overall_score(self):
+        for overall in (40, 80, 120, 160, 190):
+            for pos in self.POSITIONS:
+                player = _player_at(overall, (pos, "natural"))
+                after = _applied(player)
+                assert calculate_overall_score(after) == overall, (overall, pos)
+
+    def test_attributes_stay_in_range(self):
+        low, high = SCORE_RANGES["attribute"]
+        for overall in (15, 120, 195):
+            for pos in self.POSITIONS:
+                after = _applied(_player_at(overall, (pos, "natural")))
+                for field in (
+                    "technical_attrs",
+                    "mental_attrs",
+                    "physical_attrs",
+                    "gk_attrs",
+                ):
+                    assert all(low <= v <= high for v in after[field].values())
+
+    def test_outfield_players_trade_goalkeeping_for_their_own_game(self):
+        before = _player_at(120, ("CB", "natural"))
+        after = _applied(before)
+
+        assert calculate_gk_score(after) < calculate_gk_score(before)
+        assert calculate_physical_score(after) > calculate_physical_score(before)
+
+    def test_a_keeper_trades_the_other_way(self):
+        before = _player_at(120, ("GK", "natural"))
+        after = _applied(before)
+
+        assert calculate_gk_score(after) > calculate_gk_score(before)
+        assert calculate_technical_score(after) < calculate_technical_score(before)
+
+    def test_a_striker_leans_technical(self):
+        after = _applied(_player_at(120, ("CF", "natural")))
+        assert calculate_technical_score(after) > calculate_mental_score(after)
+
+    def test_applying_twice_changes_nothing_more(self):
+        player = _player_at(120, ("CB", "natural"), ("CDM", "competent"))
+        once = _applied(player)
+        twice = _applied(once)
+        assert once == twice
+
+    def test_no_ratings_leaves_the_attributes_alone(self):
+        player = _player_at(120)
+        assert apply_position_profile(player) == (
+            player["technical_attrs"],
+            player["mental_attrs"],
+            player["physical_attrs"],
+            player["gk_attrs"],
+        )

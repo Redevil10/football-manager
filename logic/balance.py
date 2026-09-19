@@ -23,7 +23,7 @@ from core.config import (
     ALLOCATION_RANDOM_RESTARTS,
     ALLOCATION_SUB_BAND,
 )
-from logic.scoring import calculate_overall_score
+from logic.scoring import calculate_overall_score, position_fit
 
 
 def repeat_penalty(player_ids, weights):
@@ -125,8 +125,36 @@ def generate_split_candidates(scores, size1):
             yield random_balanced_split(scores, size1)
 
 
+def keeper_indices(players):
+    """Which players to keep on opposite sides, so each has someone in goal.
+
+    The natural keepers when there are at least two of them -- a competent one
+    is no substitute for a natural on the other side. Otherwise everyone who
+    goes in goal at all: rated there, or -- for players entered before position
+    ratings -- with Goalkeeper as their broad preferred position, which
+    allocation also falls back to when it picks the keeper.
+
+    Returns:
+        set: Indices into ``players``
+    """
+    fits = [position_fit(p, "GK") for p in players]
+    natural = {i for i, fit in enumerate(fits) if fit == "natural"}
+    if len(natural) >= 2:
+        return natural
+    return {
+        i
+        for i, (player, fit) in enumerate(zip(players, fits))
+        if fit or player.get("position_pref") == "Goalkeeper"
+    }
+
+
 def pick_balanced_split(players, size1, weights=None):
-    """Split players into two teams: balanced first, then varied.
+    """Split players into two teams: keepers apart, then balanced, then varied.
+
+    With two or more players rated in goal (see keeper_indices), only splits
+    that give each side at least one of them are considered. That comes ahead
+    of balance, so it can cost a little of it; with fewer than two there is
+    nothing to split and it costs nothing.
 
     Balance is a hard constraint -- only splits within ALLOCATION_BALANCE_TOLERANCE
     of the best achievable score difference are eligible. The choice among those
@@ -157,6 +185,17 @@ def pick_balanced_split(players, size1, weights=None):
 
     if not candidates:
         return list(players), []
+
+    keepers = keeper_indices(players)
+    if len(keepers) >= 2:
+        # Falls back to every candidate if none keeps them apart, which only
+        # the randomized search on a large squad could produce.
+        apart = [
+            (diff, combo)
+            for diff, combo in candidates
+            if 0 < len(keepers & combo) < len(keepers)
+        ]
+        candidates = apart or candidates
 
     cutoff = min(diff for diff, _ in candidates) + tolerance
     eligible = [combo for diff, combo in candidates if diff <= cutoff]

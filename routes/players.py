@@ -6,7 +6,10 @@ from urllib.parse import quote
 from fasthtml.common import *
 
 from core.config import (
+    ALL_TACTICAL_POSITIONS,
+    FIT_TIERS,
     GK_ATTRS,
+    MAX_POSITION_RATINGS,
     MENTAL_ATTRS,
     PHYSICAL_ATTRS,
     TECHNICAL_ATTRS,
@@ -30,6 +33,7 @@ from db import (
     update_player_attrs,
     update_player_height_weight,
     update_player_name,
+    update_player_position_ratings,
 )
 from db.players import add_player
 from logic.allocation import allocate_teams
@@ -37,6 +41,7 @@ from logic.import_logic import import_players
 from logic.players import add_player_with_score
 from logic.scoring import (
     adjust_category_attributes_by_single_attr,
+    apply_position_profile,
     calculate_gk_score,
     calculate_mental_score,
     calculate_physical_score,
@@ -57,6 +62,7 @@ from render import (
     render_teams,
 )
 from render.common import can_user_delete, can_user_edit, render_csrf_input, render_head
+from render.players import render_position_ratings_section
 from services.auth import (
     check_club_permission,
     get_current_user,
@@ -300,7 +306,7 @@ async def route_add_player(req: Request, sess=None):
         form = await req.form()
         name = form.get("name", "").strip()
         alias = form.get("alias", "").strip()
-        position_pref = form.get("position_pref", "").strip()
+        main_position = form.get("main_position", "").strip()
 
         def whole_number(field):
             """A blank box means "not known", which is not the same as 0."""
@@ -320,6 +326,8 @@ async def route_add_player(req: Request, sess=None):
         is_valid, error_msg = validate_non_empty_string(name, "Player name")
         if not is_valid:
             raise ValidationError("name", error_msg)
+        if main_position and main_position not in _VALID_POSITIONS:
+            raise ValidationError("main_position", "Unknown position")
 
         # Scoped to the club being added to. Searching every club and then
         # comparing club_id afterwards looked equivalent but was not: the
@@ -340,7 +348,6 @@ async def route_add_player(req: Request, sess=None):
             player_id = add_player(
                 name,
                 club_id=target_club_id,
-                position_pref=position_pref,
                 alias=alias or None,
                 created_by=user["id"],
             )
@@ -349,13 +356,20 @@ async def route_add_player(req: Request, sess=None):
                 name,
                 club_id=target_club_id,
                 overall_score=overall,
-                position_pref=position_pref,
                 alias=alias or None,
                 created_by=user["id"],
             )
 
         if player_id and (height is not None or weight is not None):
-            update_player_height_weight(player_id, height=height, weight=weight)
+            update_player_height_weight(
+                player_id, height=height, weight=weight, updated_by=user["id"]
+            )
+        if player_id and main_position:
+            update_player_position_ratings(
+                player_id,
+                [{"pos": main_position, "fit": "natural"}],
+                updated_by=user["id"],
+            )
         # Land on the new player so their details can be filled in straight
         # away, which is the point of having come here to add them.
         return handle_db_result(
@@ -399,7 +413,7 @@ async def route_update_player_name(player_id: int, req: Request, sess=None):
         if not is_valid:
             raise ValidationError("name", error_msg)
 
-        success = update_player_name(player_id, name, alias)
+        success = update_player_name(player_id, name, alias, updated_by=user["id"])
         return handle_db_result(
             success,
             redirect_url,
@@ -435,7 +449,10 @@ async def route_update_player_height_weight(player_id: int, req: Request, sess=N
         back = form.get("back")
         redirect_url = _player_url(player_id, back)
         success = update_player_height_weight(
-            player_id, height if height else None, weight if weight else None
+            player_id,
+            height if height else None,
+            weight if weight else None,
+            updated_by=user["id"],
         )
         return handle_db_result(
             success,
@@ -484,6 +501,7 @@ async def route_update_player_scores(player_id: int, req: Request, sess=None):
                 scores["mental"],
                 scores["physical"],
                 scores["gk"],
+                updated_by=user["id"],
             )
         elif any(k.startswith("score_") for k in form_data.keys()):
             # Category scores form - set attributes based on category scores
@@ -505,7 +523,12 @@ async def route_update_player_scores(player_id: int, req: Request, sess=None):
             gk_attrs = set_gk_score(gk_score)
 
             update_player_attrs(
-                player_id, tech_attrs, mental_attrs, phys_attrs, gk_attrs
+                player_id,
+                tech_attrs,
+                mental_attrs,
+                phys_attrs,
+                gk_attrs,
+                updated_by=user["id"],
             )
     except (ValueError, TypeError, KeyError) as e:
         logger.error(f"Error updating player scores: {e}", exc_info=True)
@@ -673,7 +696,12 @@ async def route_update_player(player_id: int, req: Request, sess=None):
         )
 
     success = update_player_attrs(
-        player_id, tech_attrs, mental_attrs, phys_attrs, gk_attrs
+        player_id,
+        tech_attrs,
+        mental_attrs,
+        phys_attrs,
+        gk_attrs,
+        updated_by=user["id"],
     )
     return handle_db_result(
         success,
@@ -719,7 +747,7 @@ def route_delete_player(player_id: int, req: Request = None, sess=None):
         )
 
     if count_player_appearances(player_id):
-        success = set_player_active(player_id, False)
+        success = set_player_active(player_id, False, updated_by=user["id"])
         message, failure = "Player+archived", "Failed to archive player"
     else:
         success = delete_player(player_id)
@@ -757,7 +785,7 @@ def route_restore_player(player_id: int, req: Request = None, sess=None):
         )
 
     return handle_db_result(
-        set_player_active(player_id, True),
+        set_player_active(player_id, True, updated_by=user["id"]),
         "/players?success=Player+restored",
         error_redirect="/players",
         error_message="Failed to restore player",
@@ -827,6 +855,96 @@ def route_reset(req: Request = None, sess=None):
     return render_teams(sorted_players)
 
 
+_VALID_POSITIONS = {v for v, _ in ALL_TACTICAL_POSITIONS}
+_VALID_FITS = {v for v, _ in FIT_TIERS}
+
+
+@csrf_protect
+async def route_update_position_ratings(player_id: int, req: Request, sess=None):
+    """Save a player's position_ratings from the detail form.
+
+    The form saves itself over HTMX on every change, and gets back the ratings
+    section redrawn. A plain form post (no HX-Request header) still redirects
+    to the player page.
+    """
+    is_htmx = bool(req.headers.get("HX-Request"))
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    club_ids = get_user_club_ids_from_request(req, sess)
+    players = {p["id"]: p for p in get_all_players(club_ids)}
+    player = players.get(player_id)
+    if not player:
+        raise NotFoundError("player", resource_id=player_id)
+    if not can_user_edit(user, player.get("club_id")):
+        raise PermissionError("edit", resource=f"player {player_id}")
+
+    form = await req.form()
+    back = form.get("back")
+    redirect_url = _player_url(player_id, back)
+
+    # The form shows fewer rows than this when there is room to add one; the
+    # rows it leaves out are simply absent from the submission.
+    ratings = []
+    seen = set()
+    for i in range(MAX_POSITION_RATINGS):
+        pos = (form.get(f"pos_{i}") or "").strip()
+        fit = (form.get(f"fit_{i}") or "natural").strip()
+        # A position rated twice keeps its first row. The form already stops
+        # that; this is for a submission that did not come from it.
+        if pos in _VALID_POSITIONS and fit in _VALID_FITS and pos not in seen:
+            seen.add(pos)
+            ratings.append({"pos": pos, "fit": fit})
+
+    success = update_player_position_ratings(player_id, ratings, updated_by=user["id"])
+    if is_htmx:
+        if success:
+            player["position_ratings"] = ratings
+        return render_position_ratings_section(
+            player, True, back, status="saved" if success else "error"
+        )
+    return handle_db_result(
+        success,
+        redirect_url,
+        error_redirect=redirect_url,
+        error_message="Failed to save position ratings",
+        check_false=True,
+    )
+
+
+@csrf_protect
+async def route_apply_position_profile(player_id: int, req: Request, sess=None):
+    """Redistribute a player's attributes to match their position profile."""
+    user = get_current_user(req, sess)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    club_ids = get_user_club_ids_from_request(req, sess)
+    players = {p["id"]: p for p in get_all_players(club_ids)}
+    player = players.get(player_id)
+    if not player:
+        raise NotFoundError("player", resource_id=player_id)
+    if not can_user_edit(user, player.get("club_id")):
+        raise PermissionError("edit", resource=f"player {player_id}")
+
+    form = await req.form()
+    back = form.get("back")
+    redirect_url = _player_url(player_id, back)
+
+    tech, mental, phys, gk = apply_position_profile(player)
+    success = update_player_attrs(
+        player_id, tech, mental, phys, gk, updated_by=user["id"]
+    )
+    return handle_db_result(
+        success,
+        redirect_url,
+        error_redirect=redirect_url,
+        error_message="Failed to apply position profile",
+        check_false=True,
+    )
+
+
 def register_player_routes(rt):
     """Register player-related routes"""
 
@@ -849,3 +967,9 @@ def register_player_routes(rt):
     rt("/restore_player/{player_id}", methods=["POST"])(route_restore_player)
     rt("/allocate", methods=["POST"])(route_allocate)
     rt("/reset", methods=["POST"])(route_reset)
+    rt("/update_position_ratings/{player_id}", methods=["POST"])(
+        route_update_position_ratings
+    )
+    rt("/apply_position_profile/{player_id}", methods=["POST"])(
+        route_apply_position_profile
+    )

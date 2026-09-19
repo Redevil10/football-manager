@@ -32,6 +32,7 @@ def db():
             physical_attrs TEXT,
             gk_attrs TEXT,
             updated_at TIMESTAMP,
+            updated_by INTEGER,
             active INTEGER NOT NULL DEFAULT 1
         )"""
     )

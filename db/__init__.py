@@ -88,6 +88,7 @@ from db.players import (
     update_player_attrs,
     update_player_height_weight,
     update_player_name,
+    update_player_position_ratings,
     update_player_team,
 )
 from db.settings import get_setting, set_setting
@@ -122,6 +123,7 @@ __all__ = [
     "update_player_attrs",
     "update_player_name",
     "update_player_height_weight",
+    "update_player_position_ratings",
     "reset_teams",
     # Leagues
     "get_all_leagues",

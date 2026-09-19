@@ -77,6 +77,9 @@ def init_db():
                   -- Who added this player. NULL for rows that predate the
                   -- column and for anything created outside the app.
                   created_by INTEGER REFERENCES users(id),
+                  -- Who made the change updated_at records. Starts as the
+                  -- creator; NULL where nobody is on record.
+                  updated_by INTEGER REFERENCES users(id),
                   -- 0 once a player is archived. Deleting a player who has
                   -- played would take them out of every past line-up too --
                   -- match_players only stores an id, so the name is gone with
@@ -84,6 +87,10 @@ def init_db():
                   -- drop out of the squad, the signup lookup and allocation,
                   -- and stay in the matches they played.
                   active INTEGER NOT NULL DEFAULT 1,
+                  -- JSON array of {pos, fit} objects, e.g.
+                  -- [{"pos": "CB", "fit": "natural"}]. Empty means no
+                  -- preference set; allocation falls back to position_pref.
+                  position_ratings TEXT DEFAULT '[]',
                   FOREIGN KEY (club_id) REFERENCES clubs(id),
                   UNIQUE(name, club_id))"""
     )

@@ -1,14 +1,19 @@
 # logic/scoring.py - Scoring calculation logic
 
 from core.config import (
+    ADJACENT_POSITION_GROUPS,
     ATTRIBUTE_TO_CATEGORY_SCALE,
     CATEGORY_TO_ATTRIBUTE_SCALE,
+    FIT_TIER_WEIGHTS,
     GK_ATTRS,
     MENTAL_ATTRS,
     OVERALL_SCORE_DIVISOR,
     OVERALL_SCORE_WEIGHTS,
     PHYSICAL_ATTRS,
+    POSITION_CATEGORY_EMPHASIS,
+    POSITION_PROFILES,
     SCORE_RANGES,
+    TACTICAL_POS_TO_GROUP,
     TECHNICAL_ATTRS,
 )
 
@@ -268,6 +273,160 @@ def set_overall_score(overall_score):
 def calculate_player_overall(player):
     """Legacy function for backwards compatibility"""
     return calculate_overall_score(player)
+
+
+def position_fit(player, tactical_pos):
+    """The player's fit tier for a tactical position, from position_ratings.
+
+    Ratings are matched by profile group, so a natural LCB is natural at RCB
+    too, and a rating covers the groups in ADJACENT_POSITION_GROUPS at the same
+    tier, so a natural LW is natural at LM. The best tier found wins.
+
+    Returns:
+        "natural", "competent", or None when no rating covers the position.
+    """
+    group = TACTICAL_POS_TO_GROUP.get(tactical_pos)
+    if not group:
+        return None
+
+    best = None
+    for rating in player.get("position_ratings") or []:
+        fit = rating.get("fit")
+        if fit not in FIT_TIER_WEIGHTS:
+            continue
+        rated_group = TACTICAL_POS_TO_GROUP.get(rating.get("pos"))
+        if rated_group != group and group not in ADJACENT_POSITION_GROUPS.get(
+            rated_group, ()
+        ):
+            continue
+        if best is None or FIT_TIER_WEIGHTS[fit] > FIT_TIER_WEIGHTS[best]:
+            best = fit
+    return best
+
+
+_CATEGORY_FIELDS = {
+    "technical": "technical_attrs",
+    "mental": "mental_attrs",
+    "physical": "physical_attrs",
+    "gk": "gk_attrs",
+}
+
+
+def _fill(weights, coefs, target):
+    """Values in proportion to ``weights`` whose coefficient-weighted sum is
+    ``target``, each kept within the attribute range.
+
+    Anything scaled past a bound is pinned to it and the rest are rescaled to
+    make up the difference, until nothing more needs pinning.
+    """
+    low, high = SCORE_RANGES["attribute"]
+    pinned = {}
+    while True:
+        free = [key for key in weights if key not in pinned]
+        if not free:
+            return pinned
+        budget = target - sum(coefs[key] * value for key, value in pinned.items())
+        scale = budget / sum(weights[key] * coefs[key] for key in free)
+        values = {key: scale * weights[key] for key in free}
+        out_of_range = {
+            key: high if value > high else low
+            for key, value in values.items()
+            if not low <= value <= high
+        }
+        if not out_of_range:
+            return {**pinned, **values}
+        pinned.update(out_of_range)
+
+
+def apply_position_profile(player):
+    """Reshape a player's attributes around their position_ratings.
+
+    Keeps the overall score and lets the categories move. First the category
+    averages are set in proportion to POSITION_CATEGORY_EMPHASIS, scaled so the
+    overall score comes out where it was; then each category's attributes are
+    shaped by POSITION_PROFILES around its new average. A last pass nudges
+    single attributes by one where rounding left the overall a step off.
+
+    Natural positions count fully and competent ones at half weight; several
+    positions blend. The result depends only on the ratings and the overall
+    score, not on the attributes it replaces, so applying it twice changes
+    nothing the second time.
+
+    Args:
+        player: Player dict with technical_attrs, mental_attrs, physical_attrs,
+                gk_attrs and position_ratings fields.
+
+    Returns:
+        tuple: (tech_attrs, mental_attrs, phys_attrs, gk_attrs) -- new dicts.
+               Returns the original dicts unchanged if no position_ratings are set.
+    """
+    rated = []
+    for rating in player.get("position_ratings") or []:
+        group = TACTICAL_POS_TO_GROUP.get(rating.get("pos", ""))
+        if group in POSITION_PROFILES and rating.get("fit") in FIT_TIER_WEIGHTS:
+            rated.append((group, FIT_TIER_WEIGHTS[rating["fit"]]))
+
+    if not rated:
+        return tuple(player[field] for field in _CATEGORY_FIELDS.values())
+
+    total_weight = sum(weight for _, weight in rated)
+
+    def blend(weight_of):
+        return sum(weight_of(group) * weight for group, weight in rated) / total_weight
+
+    cats = [cat for cat, field in _CATEGORY_FIELDS.items() if player[field]]
+
+    # Category averages: in proportion to the emphasis, same overall score
+    weighted_sum = sum(
+        OVERALL_SCORE_WEIGHTS[cat]
+        * calculate_category_score(player[_CATEGORY_FIELDS[cat]])
+        for cat in cats
+    )
+    means = _fill(
+        {
+            cat: blend(lambda g, cat=cat: POSITION_CATEGORY_EMPHASIS[g][cat])
+            for cat in cats
+        },
+        {cat: OVERALL_SCORE_WEIGHTS[cat] for cat in cats},
+        weighted_sum,
+    )
+
+    # Attributes: each category shaped by the profile around its new average
+    exact = {}
+    for cat in cats:
+        attrs = player[_CATEGORY_FIELDS[cat]]
+        shape = {
+            key: blend(lambda g, key=key: POSITION_PROFILES[g][cat].get(key, 1.0))
+            for key in attrs
+        }
+        values = _fill(shape, {key: 1 / len(attrs) for key in attrs}, means[cat])
+        exact.update({(cat, key): value for key, value in values.items()})
+
+    low, high = SCORE_RANGES["attribute"]
+    result = {field: dict(player[field]) for field in _CATEGORY_FIELDS.values()}
+    for (cat, key), value in exact.items():
+        result[_CATEGORY_FIELDS[cat]][key] = max(low, min(high, round(value)))
+
+    # Rounding each attribute can leave the overall score a step off. Nudge the
+    # attribute that rounding moved furthest from its exact value, one at a
+    # time, until it is back.
+    goal = calculate_overall_score(player)
+    for _ in range(len(exact)):
+        current = calculate_overall_score(result)
+        if current == goal:
+            break
+        step = 1 if current < goal else -1
+        candidates = [
+            (step * (value - result[_CATEGORY_FIELDS[cat]][key]), cat, key)
+            for (cat, key), value in exact.items()
+            if low <= result[_CATEGORY_FIELDS[cat]][key] + step <= high
+        ]
+        if not candidates:
+            break
+        _, cat, key = max(candidates)
+        result[_CATEGORY_FIELDS[cat]][key] += step
+
+    return tuple(result[field] for field in _CATEGORY_FIELDS.values())
 
 
 def adjust_attributes_by_category_score(category_attrs, target_score, category_type):
